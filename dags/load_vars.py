@@ -18,10 +18,13 @@ default_args = {
 
 
 def _set_vars():
-    print("setting DB_URL")
     Variable.set(
-        "DB_URL",
-        os.getenv("DB_URL", "postgresql://postgres:postgres@127.0.0.1:5432/AMS"),
+        "AMS_DB_URL",
+        os.getenv("AMS_DB_URL", "postgresql://postgres:postgres@127.0.0.1:5432/AMS"),
+    )
+    Variable.set(
+        "AMS_AUX_DB_URL",
+        os.getenv("AMS_AUX_DB_URL", "postgresql://postgres:postgres@127.0.0.1:5432/auxiliary"),
     )
 
 
