@@ -96,6 +96,31 @@ class DatabaseFacade(BaseModel):
 
         self.execute(sql)
 
+    def create_index(
+        self,
+        schema: str,
+        name: str,
+        table: str,
+        method: str,
+        column: str,
+        force_recreate: bool = False,
+    ):
+        """Create an index."""
+        sql = ""
+
+        index = f"{schema}.{name}"
+        table = f"{schema}.{table}"
+
+        if force_recreate:
+            sql += f"DROP INDEX IF EXISTS {index};"
+
+        sql += f"""
+            CREATE INDEX IF NOT EXISTS {name}
+            ON {table} USING {method}
+            ({column});
+        """
+        self.execute(sql)
+
     def fetchall(self, query):
         logger.debug(query)
 
