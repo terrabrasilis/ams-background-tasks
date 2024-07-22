@@ -65,7 +65,7 @@ class DatabaseFacade(BaseModel):
         sql = ""
 
         if force_recreate:
-            sql += "DROP SCHEMA IF EXISTS {name};"
+            sql += f"DROP SCHEMA IF EXISTS {name};"
 
         sql += f"CREATE SCHEMA IF NOT EXISTS {name} AUTHORIZATION {self.user};"
 
