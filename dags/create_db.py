@@ -1,5 +1,6 @@
 """A DAG to create the AMS database."""
 
+import os
 import random
 from datetime import datetime
 from time import sleep
@@ -9,27 +10,9 @@ from airflow.decorators import task
 from airflow.models import Variable
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from common import default_args, get_variable
-
-AMS__DB_URL = get_variable("AMS__DB_URL")
-AMS__AUX_DB_URL = get_variable("AMS__AUX_DB_URL")
-AMS__FORCE_RECREATE_DB = get_variable("AMS__FORCE_RECREATE_DB")
+from common import default_args, get_secrets_env, get_variable
 
 DAG_KEY = "ams-create-db"
-
-
-@task
-def create_db():
-    bash_command = f"ams-create-db {AMS__DB_URL} {('--force-recreate' if AMS__FORCE_RECREATE_DB else '')}"
-    return BashOperator(task_id="ams-create-db", bash_command=bash_command).execute({})
-
-
-@task
-def update_municipalities():
-    bash_command = f"ams-update-municipalities {AMS__DB_URL} {AMS__AUX_DB_URL}"
-    return BashOperator(
-        task_id="update-municipalities", bash_command=bash_command
-    ).execute({})
 
 
 def _sleep():
@@ -37,9 +20,33 @@ def _sleep():
 
 
 @task
+def create_db():
+    bash_command = f"ams-create-db {('--force-recreate' if get_variable('AMS_FORCE_RECREATE_DB') else '')}"
+    return BashOperator(
+        task_id="ams-create-db",
+        bash_command=bash_command,
+        env=get_secrets_env(["AMS_DB_URL"]),
+        append_env=True,
+    ).execute({})
+
+
+@task
+def update_municipalities():
+    return BashOperator(
+        task_id="ams-update-municipalities",
+        bash_command="ams-update-municipalities",
+        env=get_secrets_env(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
+        append_env=True,
+    ).execute({})
+
+
+@task
 def update_active_fires():
-    return PythonOperator(
-        task_id="update-active-fires", python_callable=_sleep
+    return BashOperator(
+        task_id="ams-update-active-fires",
+        bash_command="ams-update-active-fires",
+        env=get_secrets_env(["AMS_DB_URL", "AMS_AF_DB_URL"]),
+        append_env=True,
     ).execute({})
 
 

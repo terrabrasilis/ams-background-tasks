@@ -12,10 +12,17 @@ default_args = {
 
 
 def get_variable(name: str):
-    """Load the environment variable."""
+    """Return the variable value."""
     assert name in os.environ
-    value = os.environ[name]
-    if "/run/secrets/" in value:
-        with open(value, "r") as src:
+    if "_secret" in name:
+        with open(os.environ[name], "r") as src:
             return src.read().strip()
-    return value
+    return os.environ[name]
+
+
+def get_secrets_env(names: list):
+    """Return a dict with secrets variables."""
+    env = {}
+    for name in names:
+        env[name] = get_variable(f"{name}_secret")
+    return env
