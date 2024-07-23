@@ -1,4 +1,4 @@
-"""Create AMS database."""
+"""Create the AMS database."""
 
 from __future__ import annotations
 
@@ -61,31 +61,23 @@ def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False
         "geom geometry(MultiPolygon, 4674)",
     ]
 
+    schema = "public"
+    name = "municipalities"
+
     db.create_table(
-        schema="public",
-        name="municipalities",
+        schema=schema,
+        name="name",
         columns=columns,
         force_recreate=force_recreate,
     )
 
-    # index municipalities_geocode_idx
-    db.create_index(
-        schema="public",
-        name="municipalities_geocode_idx",
-        table="municipalities",
-        method="btree",
-        column="geocode",
-        force_recreate=force_recreate,
-    )
+    columns = [
+        "geocode:btree",
+        "geom:gist",
+    ]
 
-    # index municipalities_geom_idx
-    db.create_index(
-        schema="public",
-        name="municipalities_geom_idx",
-        table="municipalities",
-        method="gist",
-        column="geom",
-        force_recreate=force_recreate,
+    db.create_indexes(
+        schema=schema, name=name, columns=columns, force_recreate=force_recreate
     )
 
 
@@ -94,7 +86,6 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     columns = [
         "id integer PRIMARY KEY",
         "view_date date",
-        "bioma character varying(254) COLLATE pg_catalog.default",
         "satelite character varying(254) COLLATE pg_catalog.default",
         "estado character varying(254) COLLATE pg_catalog.default",
         "municipio character varying(254) COLLATE pg_catalog.default",
@@ -103,53 +94,28 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         "riscofogo double precision",
         "geom geometry(Point, 4674)",
         "geocode character varying(80) COLLATE pg_catalog.default",
+        "biome character varying(254) COLLATE pg_catalog.default",
     ]
 
+    schema = "fires"
+    name = "active_fires"
+
     db.create_table(
-        schema="fires",
-        name="active_fires",
+        schema=schema,
+        name=name,
         columns=columns,
         force_recreate=force_recreate,
     )
 
-    # index active_fires_view_date_idx
-    db.create_index(
-        schema="fires",
-        name="active_fires_view_date_idx",
-        table="active_fires",
-        method="btree",
-        column="view_date",
-        force_recreate=force_recreate,
-    )
+    columns = [
+        "view_date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "geom:gist",
+    ]
 
-    # index active_fires_bioma_idx
-    db.create_index(
-        schema="fires",
-        name="active_fires_bioma_idx",
-        table="active_fires",
-        method="btree",
-        column="bioma",
-        force_recreate=force_recreate,
-    )
-
-    # index active_fires_geocode_idx
-    db.create_index(
-        schema="fires",
-        name="active_fires_geocode_idx",
-        table="active_fires",
-        method="btree",
-        column="geocode",
-        force_recreate=force_recreate,
-    )
-
-    # index idx_fires_active_fires_geom
-    db.create_index(
-        schema="fires",
-        name="fires_active_fires_geom_idx",
-        table="active_fires",
-        method="gist",
-        column="geom",
-        force_recreate=force_recreate,
+    db.create_indexes(
+        schema=schema, name=name, columns=columns, force_recreate=force_recreate
     )
 
 
@@ -162,8 +128,6 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
         "quadrant character varying(5) COLLATE pg_catalog.default",
         "orbitpoint character varying(10) COLLATE pg_catalog.default",
         "date date",
-        "date_audit date",
-        "lot character varying(254) COLLATE pg_catalog.default",
         "sensor character varying(10) COLLATE pg_catalog.default",
         "satellite character varying(13) COLLATE pg_catalog.default",
         "areatotalkm double precision",
@@ -182,42 +146,34 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
         "est_fund character varying(254) COLLATE pg_catalog.default",
         "dominio character varying(254) COLLATE pg_catalog.default",
         "tp_dominio character varying(254) COLLATE pg_catalog.default",
-        "bioma character varying(254) COLLATE pg_catalog.default",
+        "biome character varying(254) COLLATE pg_catalog.default",
         "geocode character varying(80) COLLATE pg_catalog.default",
     ]
 
+    schema = "deter"
+
     db.create_table(
-        schema="deter",
+        schema=schema,
         name=name,
         columns=columns,
         force_recreate=force_recreate,
     )
 
-    columns = ["classname", "date", "bioma", "geocode"]
+    columns = [
+        "classname:btree",
+        "date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "geom:gist",
+    ]
 
-    for col_name in columns:
-        db.create_index(
-            schema="deter",
-            name=f"{name}_{col_name}_idx",
-            table=name,
-            method="btree",
-            column=col_name,
-            force_recreate=force_recreate,
-        )
-
-    # index idx_fires_active_fires_geom
-    db.create_index(
-        schema="deter",
-        name=f"{name}_geom_idx",
-        table=name,
-        method="gist",
-        column="geom",
-        force_recreate=force_recreate,
+    db.create_indexes(
+        schema=schema, name=name, columns=columns, force_recreate=force_recreate
     )
 
 
 def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
     """Create the deter.[deter, deter_auth, deter_history] tables."""
-    names = ["deter", "deter_auth", "deter_history"]
+    names = ("deter", "deter_auth", "deter_history")
     for name in names:
         _create_deter_table(db=db, name=name, force_recreate=force_recreate)

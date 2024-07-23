@@ -1,4 +1,4 @@
-"""Update the AMS database tables."""
+"""Update the AMS active fires tables."""
 
 from __future__ import annotations
 
@@ -52,7 +52,9 @@ def update_active_fires_table(db_url: str, af_db_url: DatabaseFacade):
     print("creating the sql view")
     user, password, host, port, db_name = get_connection_components(db_url=af_db_url)
 
-    sql = f"""CREATE OR REPLACE VIEW public.raw_active_fires AS
+    sql = f"""
+        DROP VIEW IF EXISTS public.raw_active_fires;
+        CREATE VIEW public.raw_active_fires AS
         SELECT
             remote_data.id,
             remote_data.view_date,
@@ -62,12 +64,12 @@ def update_active_fires_table(db_url: str, af_db_url: DatabaseFacade):
             remote_data.diasemchuva,
             remote_data.precipitacao,
             remote_data.riscofogo,
-            remote_data.bioma,
+            remote_data.biome,
             remote_data.geom
         FROM
             dblink('hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
                    'SELECT id, data as view_date, satelite, estado, municipio, diasemchuva, precipitacao, riscofogo, bioma, geom FROM public.focos_aqua_referencia'::text)
-        AS remote_data(id integer, view_date date, satelite character varying(254), estado character varying(254), municipio character varying(254), diasemchuva integer, precipitacao double precision, riscofogo double precision, bioma character varying(254), geom geometry(Point,4674));
+        AS remote_data(id integer, view_date date, satelite character varying(254), estado character varying(254), municipio character varying(254), diasemchuva integer, precipitacao double precision, riscofogo double precision, biome character varying(254), geom geometry(Point,4674));
     """
     db = DatabaseFacade.from_url(db_url=db_url)
     db.execute(sql)
@@ -83,9 +85,9 @@ def update_active_fires_table(db_url: str, af_db_url: DatabaseFacade):
     sql = f"""
         INSERT INTO {table} (
             id, view_date, satelite, estado, municipio, diasemchuva,
-            precipitacao, riscofogo, bioma, geom
+            precipitacao, riscofogo, biome, geom
         )
-        SELECT a.id, a.view_date, a.satelite, a.estado, a.municipio, a.diasemchuva, a.precipitacao, a.riscofogo, a.bioma, a.geom
+        SELECT a.id, a.view_date, a.satelite, a.estado, a.municipio, a.diasemchuva, a.precipitacao, a.riscofogo, a.biome, a.geom
         FROM public.raw_active_fires a
     """
 

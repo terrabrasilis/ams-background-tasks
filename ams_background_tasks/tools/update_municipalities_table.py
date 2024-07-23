@@ -1,4 +1,4 @@
-"""Update the AMS database tables."""
+"""Update the AMS municipalities table."""
 
 from __future__ import annotations
 

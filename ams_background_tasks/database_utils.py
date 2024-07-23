@@ -65,7 +65,7 @@ class DatabaseFacade(BaseModel):
         sql = ""
 
         if force_recreate:
-            sql += f"DROP SCHEMA IF EXISTS {name};"
+            sql += f"DROP SCHEMA IF EXISTS {name} CASCADE;"
 
         sql += f"CREATE SCHEMA IF NOT EXISTS {name} AUTHORIZATION {self.user};"
 
@@ -120,6 +120,21 @@ class DatabaseFacade(BaseModel):
             ({column});
         """
         self.execute(sql)
+
+    def create_indexes(
+        self, schema: str, name: str, columns: tuple, force_recreate: bool
+    ):
+        """Create an index for each column."""
+        for _ in columns:
+            col, method = _.split(":")
+            self.create_index(
+                schema=schema,
+                name=f"{name}_{col}_idx",
+                table=name,
+                method=method,
+                column=col,
+                force_recreate=force_recreate,
+            )
 
     def fetchall(self, query):
         logger.debug(query)
