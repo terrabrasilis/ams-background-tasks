@@ -30,25 +30,35 @@ logger = logging.getLogger(__name__)
     default="",
     help="External active fires database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
-def main(db_url: str, af_db_url: str):
+@click.option(
+    "--all-data",
+    required=False,
+    is_flag=True,
+    default=False,
+    help="if True, all data of external database will be processed.",
+)
+def main(db_url: str, af_db_url: str, all_data: bool):
     """Update the active fires table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
-    logger.info(db_url)
+    logger.debug(db_url)
     print(db_url)
     assert db_url
 
     af_db_url = os.getenv("AMS_AF_DB_URL") if not af_db_url else af_db_url
-    logger.info(af_db_url)
+    logger.debug(af_db_url)
     print(af_db_url)
     assert af_db_url
 
-    update_active_fires_table(db_url=db_url, af_db_url=af_db_url)
+    logger.debug(all_data)
+
+    update_active_fires_table(db_url=db_url, af_db_url=af_db_url, all_data=all_data)
 
 
-def update_active_fires_table(db_url: str, af_db_url: DatabaseFacade):
+def update_active_fires_table(db_url: str, af_db_url: str, all_data: bool):
     logger.info("updating the active_fires table")
 
     # creating a sql view for the external database
+    logger.info("creating the sql view")
     print("creating the sql view")
     user, password, host, port, db_name = get_connection_components(db_url=af_db_url)
 
@@ -80,7 +90,12 @@ def update_active_fires_table(db_url: str, af_db_url: DatabaseFacade):
 
     table = "fires.active_fires"
 
-    db.truncate(table=table)
+    by_date = "a.view_date > '2016-01-01'::date "
+
+    if all_data:
+        db.truncate(table=table)
+    else:
+        by_date = f"a.view_date > (SELECT MAX(view_date) FROM {table})"
 
     sql = f"""
         INSERT INTO {table} (
@@ -89,6 +104,7 @@ def update_active_fires_table(db_url: str, af_db_url: DatabaseFacade):
         )
         SELECT a.id, a.view_date, a.satelite, a.estado, a.municipio, a.diasemchuva, a.precipitacao, a.riscofogo, a.biome, a.geom
         FROM public.raw_active_fires a
+        WHERE {by_date}
     """
 
     db.execute(sql)

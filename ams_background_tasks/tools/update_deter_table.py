@@ -24,41 +24,40 @@ logger = logging.getLogger(__name__)
     help="AMS database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
-    "--amz-deter-db-url",
+    "--deter-db-url",
     required=False,
     type=str,
     default="",
-    help="External Amazonia DETER database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
+    help="External DETER database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
-    "--cer-deter-db-url",
-    required=False,
+    "--biome",
+    required=True,
     type=str,
-    default="",
-    help="External Cerrado DETER database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
+    help="Biome.",
 )
-def main(db_url: str, amz_deter_db_url: str, cer_deter_db_url: str):
+@click.option(
+    "--all-data",
+    required=False,
+    is_flag=True,
+    default=False,
+    help="if True, all data of external database will be processed.",
+)
+def main(db_url: str, deter_db_url: str, biome: str, all_data: bool):
     """Update the deter table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
-    logger.info(db_url)
+    logger.debug(db_url)
     print(db_url)
     assert db_url
 
-    amz_deter_db_url = (
-        os.getenv("AMS_AMZ_DETER_DB_URL") if not amz_deter_db_url else amz_deter_db_url
-    )
-    logger.info(amz_deter_db_url)
-    print(amz_deter_db_url)
-    assert amz_deter_db_url
+    deter_db_url = os.getenv("AMS_DETER_DB_URL") if not deter_db_url else deter_db_url
+    logger.debug(deter_db_url)
+    print(deter_db_url)
+    assert deter_db_url
 
-    cer_deter_db_url = (
-        os.getenv("AMS_CER_DETER_DB_URL") if not cer_deter_db_url else cer_deter_db_url
-    )
-    logger.info(cer_deter_db_url)
-    print(cer_deter_db_url)
-    assert cer_deter_db_url
+    update_deter(db_url=db_url, deter_db_url=deter_db_url, biome=biome)
 
-    update_deter(db_url=db_url, deter_db_url=amz_deter_db_url, biome="Amazônia")
+    all_data=all_data  # no warn
 
 
 def update_deter(db_url: str, deter_db_url: str, biome: str):
