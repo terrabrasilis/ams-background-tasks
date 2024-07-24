@@ -174,6 +174,18 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
 
 def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
     """Create the deter.[deter, deter_auth, deter_history] tables."""
+    # deter, deter_auth, deter_history
     names = ("deter", "deter_auth", "deter_history")
     for name in names:
         _create_deter_table(db=db, name=name, force_recreate=force_recreate)
+
+    # deter_publish_date
+    db.create_table(
+        schema="deter",
+        name="deter_publish_date",
+        columns=[
+            "date date",
+            "biome character varying(254) COLLATE pg_catalog.default",
+        ],
+        force_recreate=force_recreate,
+    )

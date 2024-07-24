@@ -56,8 +56,9 @@ def main(db_url: str, deter_db_url: str, biome: str, all_data: bool):
     assert deter_db_url
 
     update_deter(db_url=db_url, deter_db_url=deter_db_url, biome=biome)
+    update_publish_date(db_url=db_url, deter_db_url=deter_db_url, biome=biome)
 
-    all_data=all_data  # no warn
+    all_data = all_data  # no warn
 
 
 def update_deter(db_url: str, deter_db_url: str, biome: str):
@@ -134,6 +135,53 @@ def _update_deter_table(db_url: str, deter_db_url: str, name: str, biome: str):
             ''::character varying(254) as dominio, ''::character varying(254) as tp_dominio,
             '{biome}'::text as biome
         FROM public.{name} as deter
+    """
+
+    db.execute(sql)
+
+
+def update_publish_date(db_url: str, deter_db_url: str, biome: str):
+    """Update the deter.deter_publish_date."""
+    logger.info("updating the deter.deter_publis_date table")
+    print("updating the deter.deter_publis_date table")
+
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    # creating a sql view for the external database
+    logger.info("creating the sql view public.deter_publish_date")
+    print("creating the sql view public.deter_publish_date")
+
+    user, password, host, port, db_name = get_connection_components(db_url=deter_db_url)
+
+    sql = f"""
+        DROP VIEW IF EXISTS public.deter_publish_date;
+        CREATE OR REPLACE VIEW public.deter_publish_date AS
+        SELECT
+            remote_data.date
+        FROM
+            dblink('hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
+            'SELECT date FROM public.deter_publish_date'::text)
+        AS remote_data(date date);
+    """
+
+    db.execute(sql)
+
+    # inserting data
+    logger.info("inserting data from view deter.deter_publish_date")
+    print("inserting data from view deter.deter_publish_date")
+
+    table = "deter.deter_publish_date"
+
+    db.truncate(table=table)
+
+    sql = f"""
+        INSERT INTO {table} (
+            date, biome
+        )
+        SELECT
+            deter.date,
+            '{biome}'::text as biome
+        FROM public.deter_publish_date as deter
     """
 
     db.execute(sql)
