@@ -66,7 +66,8 @@ x-airflow-common:
     AMS_DB_URL_secret: /run/secrets/ams_db_url
     AMS_AUX_DB_URL_secret: /run/secrets/ams_aux_db_url
     AMS_AF_DB_URL_secret: /run/secrets/ams_af_db_url
-    AMS_AMZ_DETER_DB_URL_secret: /run/secrets/ams_amz_deter_db_url
+    AMS_AMZ_DETER_B_DB_URL_secret: /run/secrets/ams_amz_deter_b_db_url
+    AMS_AMZ_DETER_R_DB_URL_secret: /run/secrets/ams_amz_deter_r_db_url
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -95,7 +96,8 @@ x-airflow-common:
     - ams_db_url
     - ams_aux_db_url
     - ams_af_db_url
-    - ams_amz_deter_db_url
+    - ams_amz_deter_b_db_url
+    - ams_amz_deter_r_db_url
 
 services:
   postgres:
@@ -303,8 +305,10 @@ secrets:
     file: ./secrets/ams_aux_db_url.txt
   ams_af_db_url:
     file: ./secrets/ams_af_db_url.txt
-  ams_amz_deter_db_url:
-    file: ./secrets/ams_amz_deter_db_url.txt
+  ams_amz_deter_b_db_url:
+    file: ./secrets/ams_amz_deter_b_db_url.txt
+  ams_amz_deter_r_db_url:
+    file: ./secrets/ams_amz_deter_r_db_url.txt
 
 volumes:
   postgres-db-volume:
