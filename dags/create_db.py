@@ -59,7 +59,9 @@ def update_amz_deter():
         f" --biome='Amazônia'"
     )
 
-    env = get_secrets_env(["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL", "AMS_AMZ_DETER_R_DB_URL"])
+    env = get_secrets_env(
+        ["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL", "AMS_AMZ_DETER_R_DB_URL"]
+    )
     env["AMS_DETER_B_DB_URL"] = env["AMS_AMZ_DETER_B_DB_URL"]
     env["AMS_DETER_R_DB_URL"] = env["AMS_AMZ_DETER_R_DB_URL"]
 

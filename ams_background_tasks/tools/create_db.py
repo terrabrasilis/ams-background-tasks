@@ -50,6 +50,9 @@ def main(db_url: str, force_recreate: bool):
     # deter
     create_deter_tables(db=db, force_recreate=force_recreate)
 
+    # spatial_units
+    create_spatial_units_table(db=db, force_recreate=force_recreate)
+
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the public.municipalities table."""
@@ -189,3 +192,40 @@ def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
         ],
         force_recreate=force_recreate,
     )
+
+
+def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False):
+    """Create the public.spatial_units table."""
+    sequence = "spatial_units_id_seq"
+
+    db.execute(f"CREATE SEQUENCE IF NOT EXISTS {sequence}");
+
+    db.create_table(
+        schema="public",
+        name="spatial_units",
+        columns=[
+            f"id integer NOT NULL DEFAULT nextval('{sequence}'::regclass) PRIMARY KEY",
+            "dataname character varying COLLATE pg_catalog.default NOT NULL UNIQUE",
+            "as_attribute_name character varying COLLATE pg_catalog.default NOT NULL",
+            "center_lat double precision NOT NULL",
+            "center_lng double precision NOT NULL",
+            "description character varying COLLATE pg_catalog.default NOT NULL",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    table = "public.spatial_units"
+
+    db.truncate(table=table)
+
+    sql = f"""
+        INSERT INTO
+            {table} (id, dataname, as_attribute_name, center_lat, center_lng, description)
+        VALUES
+            (1, 'csAmz_150km', 'id', -5.491382969006503, -58.467185764253415, 'Célula 150x150 km²'),
+            (2, 'csAmz_25km', 'id', -5.510617783522636, -58.397927203480116, 'Célula 25x25 km²'),
+            (3, 'amz_states', 'nome', -6.384962796500002, -58.97111531179317, 'Estado'),
+            (4, 'amz_municipalities', 'nome', -6.384962796413522, -58.97111531172743, 'Município');
+    """
+
+    db.execute(sql)
