@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import sys
 
 import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
+from ams_background_tasks.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 
 @click.command("create-db")
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 def main(db_url: str, force_recreate: bool):
     """Create the AMS database."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
-    print(db_url)
+    logger.debug(db_url)
     assert db_url
 
     db = DatabaseFacade.from_url(db_url=db_url)
@@ -69,7 +70,7 @@ def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False
 
     db.create_table(
         schema=schema,
-        name="name",
+        name=name,
         columns=columns,
         force_recreate=force_recreate,
     )
@@ -198,7 +199,7 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
     """Create the public.spatial_units table."""
     sequence = "spatial_units_id_seq"
 
-    db.execute(f"CREATE SEQUENCE IF NOT EXISTS {sequence}");
+    db.execute(f"CREATE SEQUENCE IF NOT EXISTS {sequence}")
 
     db.create_table(
         schema="public",

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 
 import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
+from ams_background_tasks.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 
 @click.command("update-municipalities")
@@ -31,13 +33,11 @@ def main(db_url: str, aux_db_url: str):
     """Update the municipalities table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.info(db_url)
-    print(db_url)
     assert db_url
     db = DatabaseFacade.from_url(db_url=db_url)
 
     aux_db_url = os.getenv("AMS_AUX_DB_URL") if not aux_db_url else aux_db_url
     logger.info(aux_db_url)
-    print(aux_db_url)
     assert aux_db_url
     aux_db = DatabaseFacade.from_url(db_url=aux_db_url)
 

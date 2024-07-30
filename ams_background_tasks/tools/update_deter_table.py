@@ -31,13 +31,6 @@ logger = logging.getLogger(__name__)
     help="External DETER-B database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
-    "--deter-r-db-url",
-    required=False,
-    type=str,
-    default="",
-    help="External DETER-R database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
-)
-@click.option(
     "--biome",
     required=True,
     type=str,
@@ -50,44 +43,32 @@ logger = logging.getLogger(__name__)
     default=False,
     help="if True, all data of external database will be processed.",
 )
-def main(
-    db_url: str, deter_b_db_url: str, deter_r_db_url: str, biome: str, all_data: bool
-):
-    """Update the deter table."""
+def main(db_url: str, deter_b_db_url: str, biome: str, all_data: bool):
+    """Update the DETER tables from official databases using SQL views."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
-    print(db_url)
     assert db_url
 
     deter_b_db_url = (
         os.getenv("AMS_DETER_B_DB_URL") if not deter_b_db_url else deter_b_db_url
     )
     logger.debug(deter_b_db_url)
-    print(deter_b_db_url)
     assert deter_b_db_url
-
-    deter_r_db_url = (
-        os.getenv("AMS_DETER_R_DB_URL") if not deter_r_db_url else deter_r_db_url
-    )
-    logger.debug(deter_r_db_url)
-    print(deter_r_db_url)
-    assert deter_r_db_url
 
     update_deter(
         db_url=db_url,
         deter_b_db_url=deter_b_db_url,
-        deter_r_db_url=deter_r_db_url,
         biome=biome,
         all_data=all_data,
     )
 
     update_publish_date(db_url=db_url, deter_db_url=deter_b_db_url, biome=biome)
 
+    create_tmp_table(db_url=db_url, all_data=all_data)
 
-def update_deter(
-    db_url: str, deter_b_db_url: str, deter_r_db_url: str, biome: str, all_data: bool
-):
-    """Update the deter tables."""
+
+def update_deter(db_url: str, deter_b_db_url: str, biome: str, all_data: bool):
+    """Update the DETER tables (deter, deter_auth, deter_history)."""
     tables = (
         ("deter", "deter_auth", "deter_history")
         if all_data
@@ -98,18 +79,14 @@ def update_deter(
         _update_deter_table(
             db_url=db_url,
             deter_b_db_url=deter_b_db_url,
-            deter_r_db_url=deter_r_db_url,
             name=name,
             biome=biome,
         )
 
 
-def _update_deter_table(
-    db_url: str, deter_b_db_url: str, deter_r_db_url: str, name: str, biome: str
-):
+def _update_deter_table(db_url: str, deter_b_db_url: str, name: str, biome: str):
     """Update the deter.{name} table."""
-    logger.info("updating the deter %s table", name)
-    print(f"updating the deter.{name} table")
+    logger.info("updating the deter.%s table", name)
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
@@ -151,38 +128,6 @@ def _update_deter_table(
 
     db.execute(sql)
 
-    view = "public.deter_aggregated_ibama"
-    logger.info("creating the sql view %s.", view)
-    print(f"creating the sql view {view}")
-
-    user, password, host, port, db_name = get_connection_components(
-        db_url=deter_r_db_url
-    )
-
-    sql = f"""
-        DROP VIEW IF EXISTS {view};
-        CREATE OR REPLACE VIEW {view} AS
-        SELECT
-            remote_data.origin_gid,
-            remote_data.date,
-            remote_data.areamunkm,
-            remote_data.classname,
-            remote_data.ncar_ids,
-            remote_data.car_imovel,
-            remote_data.continuo,
-            remote_data.velocidade,
-            remote_data.deltad,
-            remote_data.est_fund,
-            remote_data.dominio,
-            remote_data.tp_dominio
-        FROM
-            dblink('hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
-                   'SELECT origin_gid, view_date as date, areamunkm, classname, ncar_ids, car_imovel, continuo, velocidade, deltad, est_fund, dominio, tp_dominio FROM deter_agregate.deter WHERE areatotalkm>=0.01 AND uf<>''MS'' AND source=''D'''::text)
-            AS remote_data(origin_gid integer, date date, areamunkm double precision, classname character varying(254), ncar_ids integer, car_imovel character varying(2048), continuo integer, velocidade numeric, deltad integer, est_fund character varying(254), dominio character varying(254), tp_dominio character varying(254));
-    """
-
-    # db.execute(sql)
-
     # inserting data
     logger.info("inserting data from view deter.%s", name)
     print(f"inserting data from view deter.{name}")
@@ -211,25 +156,10 @@ def _update_deter_table(
 
     db.execute(sql)
 
-    sql = f"""
-        UPDATE deter.{table}
-        SET
-            ncar_ids=ibama.ncar_ids, car_imovel=ibama.car_imovel, velocidade=ibama.velocidade,
-            deltad=ibama.deltad, est_fund=ibama.est_fund, dominio=ibama.dominio, tp_dominio=ibama.tp_dominio
-        FROM public.deter_aggregated_ibama as ibama
-        WHERE deter.{table}.origin_gid=ibama.origin_gid
-            AND deter.{table}.areamunkm=ibama.areamunkm
-            AND (ibama.ncar_ids IS NOT NULL OR ibama.est_fund IS NOT NULL OR ibama.dominio IS NOT NULL);
-    """
-
-    if biome == "Amazônia":
-        # db.execute(sql)
-        pass
-
 
 def update_publish_date(db_url: str, deter_db_url: str, biome: str):
     """Update the deter.deter_publish_date."""
-    logger.info("updating the deter.deter_publis_date table")
+    logger.info("updating the deter.deter_public_date table")
     print("updating the deter.deter_publis_date table")
 
     db = DatabaseFacade.from_url(db_url=db_url)
@@ -272,3 +202,43 @@ def update_publish_date(db_url: str, deter_db_url: str, biome: str):
     """
 
     db.execute(sql)
+
+
+def create_tmp_table(db_url: str, all_data: bool):
+    """Create a temporary table with DETER alerts to ensure gist index creation."""
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    name = "tmp_data"
+
+    table = f"deter.{name}"
+
+    db.drop_table(table)
+
+    union = ""
+    if all_data:
+        union = """
+            UNION
+            SELECT gid, classname, date, areamunkm, geom, geocode, biome
+            FROM deter.deter_history
+        """
+
+    sql = f"""
+        CREATE TABLE IF NOT EXISTS {table} AS
+        SELECT tb.gid, tb.classname, tb.date, tb.areamunkm, tb.geom, tb.geocode, tb.biome
+        FROM (
+            SELECT gid, classname, date, areamunkm, geom, geocode, biome
+            FROM deter.deter_auth
+            {union}
+        ) as tb
+    """
+
+    db.execute(sql=sql)
+
+    db.create_indexes(
+        schema="deter",
+        name=name,
+        columns=["biome:btree", "geocode:btree", "geom:gist"],
+        force_recreate=False,
+    )
+
+    logger.info("The DETER temporary table has been created.")

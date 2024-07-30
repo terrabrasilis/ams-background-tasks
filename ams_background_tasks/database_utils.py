@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import logging
+import sys
 from typing import Any, Optional
 
 from psycopg2 import connect
 from psycopg2.extensions import connection
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+from ams_background_tasks.log import get_logger
+
+logger = get_logger(__name__, sys.stdout)
 
 
 def get_connection_components(db_url: str):
@@ -156,3 +158,9 @@ class DatabaseFacade(BaseModel):
     def truncate(self, table: str):
         sql = f"TRUNCATE {table};"
         self.execute(sql=sql)
+
+    def copy_table(self, src: str, dst: str):
+        self.execute(f"INSERT INTO {dst} SELECT * FROM {src}")
+
+    def drop_table(self, table: str):
+        self.execute(f"DROP TABLE IF EXISTS {table};")
