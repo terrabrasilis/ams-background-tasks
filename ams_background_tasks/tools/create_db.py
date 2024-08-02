@@ -44,8 +44,8 @@ def main(db_url: str, force_recreate: bool):
 
     # spatial units
     create_spatial_units_table(db=db, force_recreate=force_recreate)
-    create_municipalities_table(db=db, force_recreate=force_recreate)
     create_states_table(db=db, force_recreate=force_recreate)
+    create_municipalities_table(db=db, force_recreate=force_recreate)
     create_cell_table(db=db, cell=CELL_25KM, force_recreate=force_recreate)
     create_cell_table(db=db, cell=CELL_150KM, force_recreate=force_recreate)
 
@@ -340,6 +340,8 @@ def create_biome_border_table(db: DatabaseFacade, force_recreate: bool = False):
     columns = [
         "id int4 PRIMARY KEY",
         "biome varchar(254)",
+        "cd_biome int4",
+        "area_km double precision",
         "geom geometry(MultiPolygon, 4674)",
     ]
 
