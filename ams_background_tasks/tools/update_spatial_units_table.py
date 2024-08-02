@@ -50,11 +50,30 @@ def main(db_url: str, aux_db_url: str):
 
     for index, biome in enumerate(BIOMES):
         ignore_conflict = index
-        truncate = not index        
-        update_states_table(db=db, aux_db=aux_db, biome=biome, ignore_conflict=ignore_conflict, truncate=truncate)
-        update_municipalities_table(db=db, aux_db=aux_db, biome=biome, ignore_conflict=ignore_conflict, truncate=truncate)
+        truncate = not index
+        update_states_table(
+            db=db,
+            aux_db=aux_db,
+            biome=biome,
+            ignore_conflict=ignore_conflict,
+            truncate=truncate,
+        )
+        update_municipalities_table(
+            db=db,
+            aux_db=aux_db,
+            biome=biome,
+            ignore_conflict=ignore_conflict,
+            truncate=truncate,
+        )
         for cell in CELLS:
-            update_cells_table(db=db, aux_db=aux_db, biome=biome, cell=cell, ignore_conflict=ignore_conflict, truncate=truncate)
+            update_cells_table(
+                db=db,
+                aux_db=aux_db,
+                biome=biome,
+                cell=cell,
+                ignore_conflict=ignore_conflict,
+                truncate=truncate,
+            )
 
 
 def update_spatial_units_table(db: DatabaseFacade):
