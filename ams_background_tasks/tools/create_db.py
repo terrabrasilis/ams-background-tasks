@@ -83,6 +83,7 @@ def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False
             "state_acr varchar(2)",
             "state_name varchar(256)",
             "geom geometry(MultiPolygon, 4674)",
+            "FOREIGN KEY (state_acr) REFERENCES public.states (acronym)",
         ],
     )
 

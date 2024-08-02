@@ -55,9 +55,10 @@ class DatabaseFacade(BaseModel):
             assert self._conn.status == 1
         return self._conn
 
-    def execute(self, sql: str):
+    def execute(self, sql: str, log: bool = True):
         """Execute a sql string."""
-        logger.debug(sql)
+        if log:
+            logger.debug(sql)
 
         self.conn.cursor().execute(sql)
         self.conn.commit()
@@ -156,11 +157,14 @@ class DatabaseFacade(BaseModel):
         cursor.close()
 
     def truncate(self, table: str):
-        sql = f"TRUNCATE {table};"
+        sql = f"TRUNCATE {table} CASCADE;"
         self.execute(sql=sql)
 
     def copy_table(self, src: str, dst: str):
         self.execute(f"INSERT INTO {dst} SELECT * FROM {src}")
 
     def drop_table(self, table: str):
-        self.execute(f"DROP TABLE IF EXISTS {table};")
+        self.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
+
+    def create_postgis_extension(self):
+        self.execute("CREATE EXTENSION IF NOT EXISTS POSTGIS")
