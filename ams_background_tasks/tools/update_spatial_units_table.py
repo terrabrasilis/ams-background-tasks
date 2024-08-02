@@ -35,7 +35,7 @@ logger = get_logger(__name__, sys.stdout)
     help="Auxiliary database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 def main(db_url: str, aux_db_url: str):
-    """Update the municipalities table."""
+    """Update the spatial units tables."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
