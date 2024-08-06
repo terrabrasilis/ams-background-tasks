@@ -116,7 +116,7 @@ with DAG(DAG_KEY, default_args=default_args, schedule_interval=None) as dag:
     run_classify = classify_by_land_use()
 
     run_create_db >> run_update_biome_border >> run_update_spatial_units
-    run_update_spatial_units >> [run_update_amz_deter]  # , run_update_active_fires]
+    run_update_spatial_units >> [run_update_amz_deter, run_update_active_fires]
     run_update_amz_deter >> run_update_cer_deter
     [
         run_update_cer_deter,
