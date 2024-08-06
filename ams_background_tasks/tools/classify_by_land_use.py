@@ -147,6 +147,7 @@ def process_deter_land_structure(
     landuse_raster = rio.open(land_use_image)
 
     with alive_bar(len(deter)) as progress_bar:
+        values: list = []
         for _, row in deter.iterrows():
             geoms = [mapping(row.geom)]
             out_image, _ = mask(landuse_raster, geoms, crop=True)
@@ -155,14 +156,18 @@ def process_deter_land_structure(
             counts = pd.DataFrame(unique_counts)
             for _, count in counts.iterrows():
                 if count[0] > 0:
-                    db.execute(
-                        sql=f"""
-                            INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
-                            VALUES('{row.gid}', '{row.biome}', '{row.geocode}', {count[0]}, {count[1]})
-                        """,
-                        log=False,
+                    values.append(
+                        f"('{row.gid}', '{row.biome}', '{row.geocode}', {count[0]}, {count[1]})"
                     )
+
             progress_bar()
+
+        sql = f"""
+            INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
+            VALUES {','.join(values)};
+        """
+
+        db.execute(sql=sql, log=False)
 
 
 def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
@@ -254,23 +259,31 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
         )
 
         with alive_bar(len(group)) as progress_bar:
+            values: list = []
             for key, value in group.items():
-                sql = f"""
-                    INSERT INTO "{tmpspatial_unit}_land_use" (
-                        suid, land_use_id, classname, "date", area, geocode, biome
-                    ) 
-                    VALUES(
-                        {key[0]},
-                        {key[1]},
-                        '{key[2]}',
-                        TIMESTAMP '{key[3].year}-{key[3].month}-{key[3].day}',
-                        {value * PIXEL_LAND_USE_AREA},
-                        '{key[4]}',
-                        '{key[5]}'
-                    );
-                """
-                db.execute(sql)
+                values.append(
+                    f"""
+                        (
+                            {key[0]},
+                            {key[1]},
+                            '{key[2]}',
+                            TIMESTAMP '{key[3].year}-{key[3].month}-{key[3].day}',
+                            {value * PIXEL_LAND_USE_AREA},
+                            '{key[4]}',
+                            '{key[5]}'
+                        )
+                    """
+                )
                 progress_bar()
+
+            sql = f"""
+                INSERT INTO "{tmpspatial_unit}_land_use" (
+                    suid, land_use_id, classname, "date", area, geocode, biome
+                ) 
+                VALUES {','.join(values)};
+            """
+
+            db.execute(sql=sql, log=False)
 
 
 def percentage_calculation_for_areas(db_url: str, is_temp: bool):
