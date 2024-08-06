@@ -156,15 +156,17 @@ class DatabaseFacade(BaseModel):
         self.conn.commit()
         cursor.close()
 
-    def truncate(self, table: str):
-        sql = f"TRUNCATE {table} CASCADE;"
+    def truncate(self, table: str, cascade: bool = False):
+        _cascade = "CASCADE" if cascade else ""
+        sql = f"TRUNCATE {table} {_cascade};"
         self.execute(sql=sql)
 
     def copy_table(self, src: str, dst: str):
         self.execute(f"INSERT INTO {dst} SELECT * FROM {src}")
 
-    def drop_table(self, table: str):
-        self.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
+    def drop_table(self, table: str, cascade: bool = False):
+        _cascade = "CASCADE" if cascade else ""
+        self.execute(f"DROP TABLE IF EXISTS {table} {_cascade};")
 
     def create_postgis_extension(self):
         self.execute("CREATE EXTENSION IF NOT EXISTS POSTGIS")

@@ -31,10 +31,20 @@ def create_db():
 
 
 @task
-def update_municipalities():
+def update_biome_border():
     return BashOperator(
-        task_id="ams-update-municipalities",
-        bash_command="ams-update-municipalities",
+        task_id="ams-update-biome-border",
+        bash_command="ams-update-biome-border",
+        env=get_secrets_env(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
+        append_env=True,
+    ).execute({})
+
+
+@task
+def update_spatial_units():
+    return BashOperator(
+        task_id="ams-update-spatial-units",
+        bash_command="ams-update-spatial-units",
         env=get_secrets_env(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
         append_env=True,
     ).execute({})
@@ -59,11 +69,8 @@ def update_amz_deter():
         f" --biome='Amazônia'"
     )
 
-    env = get_secrets_env(
-        ["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL", "AMS_AMZ_DETER_R_DB_URL"]
-    )
+    env = get_secrets_env(["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL"])
     env["AMS_DETER_B_DB_URL"] = env["AMS_AMZ_DETER_B_DB_URL"]
-    env["AMS_DETER_R_DB_URL"] = env["AMS_AMZ_DETER_R_DB_URL"]
 
     return BashOperator(
         task_id="ams-update-amz-deter",
@@ -82,27 +89,36 @@ def update_cer_deter():
 
 @task
 def classify_by_land_use():
-    return PythonOperator(
-        task_id="classify-by-land-use", python_callable=_sleep
-    ).execute({})
+    bash_command = (
+        f"ams-classify-by-land-use"
+        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB') else '')}"
+        " --biome='Amazônia'"
+        " --land-use-dir=/opt/airflow/land_use"
+    )
 
+    env = get_secrets_env(["AMS_DB_URL"])
 
-@task
-def classify_by_land_use():
-    return PythonOperator(
-        task_id="classify-by-land-use", python_callable=_sleep
+    return BashOperator(
+        task_id="ams-classify-by-land-use",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
     ).execute({})
 
 
 with DAG(DAG_KEY, default_args=default_args, schedule_interval=None) as dag:
     run_create_db = create_db()
-    run_update_municipalities = update_municipalities()
+    run_update_biome_border = update_biome_border()
+    run_update_spatial_units = update_spatial_units()
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
     run_update_cer_deter = update_cer_deter()
     run_classify = classify_by_land_use()
 
-    run_create_db >> run_update_municipalities
-    run_update_municipalities >> [run_update_active_fires, run_update_amz_deter]
+    run_create_db >> run_update_biome_border >> run_update_spatial_units
+    run_update_spatial_units >> [run_update_amz_deter]  # , run_update_active_fires]
     run_update_amz_deter >> run_update_cer_deter
-    [run_update_cer_deter, run_update_active_fires] >> run_classify
+    [
+        run_update_cer_deter,
+        run_update_active_fires,
+    ] >> run_classify

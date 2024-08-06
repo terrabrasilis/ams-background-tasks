@@ -11,6 +11,7 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
+from ams_background_tasks.tools.common import BIOMES
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--biome",
     required=True,
-    type=str,
+    type=click.Choice(BIOMES),
     help="Biome.",
 )
 @click.option(
@@ -93,7 +94,6 @@ def _update_deter_table(db_url: str, deter_b_db_url: str, name: str, biome: str)
     # creating sql views for the external database
     view = f"public.{name}"
     logger.info("creating the sql view %s.", view)
-    print(f"creating the sql view {name}")
 
     user, password, host, port, db_name = get_connection_components(
         db_url=deter_b_db_url
@@ -130,7 +130,6 @@ def _update_deter_table(db_url: str, deter_b_db_url: str, name: str, biome: str)
 
     # inserting data
     logger.info("inserting data from view deter.%s", name)
-    print(f"inserting data from view deter.{name}")
 
     table = f"deter.{name}"
 
@@ -151,7 +150,8 @@ def _update_deter_table(db_url: str, deter_b_db_url: str, name: str, biome: str)
             0::integer as deltad, ''::character varying(254) as est_fund,
             ''::character varying(254) as dominio, ''::character varying(254) as tp_dominio,
             '{biome}'::text as biome
-        FROM public.{name} as deter
+        FROM public.{name} as deter, public.biome_border as border
+        WHERE ST_Within(deter.geom, border.geom) AND border.biome='{biome}';
     """
 
     db.execute(sql)
@@ -160,13 +160,11 @@ def _update_deter_table(db_url: str, deter_b_db_url: str, name: str, biome: str)
 def update_publish_date(db_url: str, deter_db_url: str, biome: str):
     """Update the deter.deter_publish_date."""
     logger.info("updating the deter.deter_public_date table")
-    print("updating the deter.deter_publis_date table")
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
     # creating a sql view for the external database
     logger.info("creating the sql view public.deter_publish_date")
-    print("creating the sql view public.deter_publish_date")
 
     user, password, host, port, db_name = get_connection_components(db_url=deter_db_url)
 
@@ -185,7 +183,6 @@ def update_publish_date(db_url: str, deter_db_url: str, biome: str):
 
     # inserting data
     logger.info("inserting data from view deter.deter_publish_date")
-    print("inserting data from view deter.deter_publish_date")
 
     table = "deter.deter_publish_date"
 

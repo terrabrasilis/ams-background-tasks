@@ -111,10 +111,10 @@ def update_states_table(
 
     if truncate:
         db.truncate(table=table2)
-        db.truncate(table=table1)
+        db.truncate(table=table1, cascade=True)
 
     select_query = f"""
-        SELECT a.id, a.nome, a.geocodigo, a.sigla, ST_AsText(a.geom)
+        SELECT a.id, a.nome, a.geocodigo, a.sigla, ST_AsText(a.geom), ST_AsText(a.geom)
         FROM
             public.lml_unidade_federacao_a a,
             lm_bioma_250 b
@@ -122,11 +122,17 @@ def update_states_table(
     """
     data = aux_db.fetchall(query=select_query)
 
-    conflict = "ON CONFLICT (id) DO NOTHING" if ignore_conflict else ""
+    conflict = "ON CONFLICT (suid) DO NOTHING" if ignore_conflict else ""
 
     insert_query = f"""
-        INSERT INTO {table1} (id, name, geocode, acronym, geom)
-        VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4674))
+        INSERT INTO {table1} (suid, name, geocode, acronym, geometry, area)
+        VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4674),
+            ST_Area(
+                ST_Transform(
+                    ST_GeomFromText(%s, 4674), 3857
+                )
+            ) / 1000000.
+        )
         {conflict}
     """
 
@@ -165,10 +171,10 @@ def update_municipalities_table(
 
     if truncate:
         db.truncate(table=table2)
-        db.truncate(table=table1)
+        db.truncate(table=table1, cascade=True)
 
     select_query = f"""
-        SELECT a.id, a.nome, a.geocodigo, a.uf_sigla, a.nm_uf, ST_AsText(a.geom)
+        SELECT a.id, a.nome, a.geocodigo, a.uf_sigla, a.nm_uf, ST_AsText(a.geom), ST_AsText(a.geom)
         FROM
             public.municipio_test a,
             public.lm_bioma_250 b
@@ -176,11 +182,17 @@ def update_municipalities_table(
     """
     data = aux_db.fetchall(query=select_query)
 
-    conflict = "ON CONFLICT (id) DO NOTHING" if ignore_conflict else ""
+    conflict = "ON CONFLICT (suid) DO NOTHING" if ignore_conflict else ""
 
     insert_query = f"""
-        INSERT INTO {table1} (id, name, geocode, state_acr, state_name, geom)
-        VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4674))
+        INSERT INTO {table1} (suid, name, geocode, state_acr, state_name, geometry, area)
+        VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4674),
+            ST_Area(
+                ST_Transform(
+                    ST_GeomFromText(%s, 4674), 3857
+                )
+            ) / 1000000.
+        )
         {conflict}
     """
 
@@ -221,7 +233,7 @@ def update_cells_table(
 
     if truncate:
         db.truncate(table=table2)
-        db.truncate(table=table1)
+        db.truncate(table=table1, cascade=True)
 
     select_query = f"""
         SELECT id, col, row, area, ST_AsText(geometry) FROM public."{table1}";

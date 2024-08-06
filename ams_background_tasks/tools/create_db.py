@@ -76,13 +76,13 @@ def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False
         schema=schema,
         name=name,
         columns=[
-            "id int4 PRIMARY KEY",
+            "suid serial NOT NULL PRIMARY KEY",
             "name varchar(150)",
             "geocode varchar(80) UNIQUE",
-            "area_km double precision",
+            "area double precision",
             "state_acr varchar(2)",
             "state_name varchar(256)",
-            "geom geometry(MultiPolygon, 4674)",
+            "geometry geometry(MultiPolygon, 4674)",
             "FOREIGN KEY (state_acr) REFERENCES public.states (acronym)",
         ],
     )
@@ -90,7 +90,7 @@ def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False
     db.create_indexes(
         schema=schema,
         name=name,
-        columns=["geocode:btree", "geom:gist", "state_acr:btree"],
+        columns=["geocode:btree", "geometry:gist", "state_acr:btree"],
         force_recreate=force_recreate,
     )
 
@@ -123,7 +123,7 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
 
     if force_recreate:
         db.drop_table(f"{schema}.states_biome")
-        db.drop_table(f"{schema}.states")
+        db.drop_table(f"{schema}.states", cascade=True)
 
     name = "states"
 
@@ -131,18 +131,19 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
         schema=schema,
         name=name,
         columns=[
-            "id int4 PRIMARY KEY",
+            "suid serial NOT NULL PRIMARY KEY",
             "acronym varchar(2) UNIQUE",
             "name varchar(80) UNIQUE",
             "geocode varchar(80) UNIQUE",
-            "geom geometry(MultiPolygon, 4674)",
+            "area double precision",
+            "geometry geometry(MultiPolygon, 4674)",
         ],
     )
 
     db.create_indexes(
         schema=schema,
         name=name,
-        columns=["geom:gist"],
+        columns=["geometry:gist"],
         force_recreate=force_recreate,
     )
 

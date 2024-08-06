@@ -110,7 +110,8 @@ disable=
     fixme,
     consider-using-assignment-expr,
     consider-alternative-union-syntax,
-    duplicate-code
+    duplicate-code,
+    too-many-locals
     
 
 [REPORTS]

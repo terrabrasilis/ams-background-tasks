@@ -41,12 +41,10 @@ def main(db_url: str, af_db_url: str, all_data: bool):
     """Update the active fires table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
-    print(db_url)
     assert db_url
 
     af_db_url = os.getenv("AMS_AF_DB_URL") if not af_db_url else af_db_url
     logger.debug(af_db_url)
-    print(af_db_url)
     assert af_db_url
 
     logger.debug(all_data)
@@ -119,7 +117,7 @@ def update_active_fires_table(db_url: str, af_db_url: str, all_data: bool):
         SET geocode = (
             SELECT mun.geocode
             FROM {municipalities_table} mun
-            WHERE ST_Within({table}.geom, mun.geom)
+            WHERE ST_Within({table}.geom, mun.geometry)
             LIMIT 1
         );
     """
