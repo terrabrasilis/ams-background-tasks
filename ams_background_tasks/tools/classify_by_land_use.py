@@ -52,7 +52,10 @@ logger = get_logger(__name__, sys.stdout)
     help="if True, all data of external database will be processed.",
 )
 @click.option("--biome", type=str, required=True, help="Biome.", multiple=True)
-def main(db_url: str, land_use_dir: str, all_data: bool, biome: str):
+@click.option(
+    "--drop-tmp", is_flag=True, default=False, help="Drop the temporary tables."
+)
+def main(db_url: str, land_use_dir: str, all_data: bool, biome: str, drop_tmp: bool):
     """Cross the indicators with the land use image and group them by spatial units."""
     assert not all_data
 
@@ -87,6 +90,9 @@ def main(db_url: str, land_use_dir: str, all_data: bool, biome: str):
     percentage_calculation_for_areas(db_url=db_url, is_temp=True)
     reset_land_use_tables(db_url=db_url, is_temp=False)
     copy_data_to_final_tables(db_url=db_url, all_data=all_data)
+
+    if drop_tmp:
+        drop_tmp_tables(db_url=db_url)
 
 
 def _create_land_structure_table(db_url: str, table: str, force_recreate: bool):
@@ -170,9 +176,7 @@ def process_deter_land_structure(
 
         logger.debug("len(values): %s", len(values))
 
-        if not len(values):
-            # logger....
-            return
+        assert len(values) > 0
 
         sql = f"""
             INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
@@ -365,3 +369,12 @@ def _copy_deter_land_structure(db_url: str, all_data: bool):
 
     # copy data from temporary table
     db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)
+
+
+def drop_tmp_tables(db_url: str):
+    """Drop the temporary tables."""
+    db = DatabaseFacade.from_url(db_url=db_url)
+    for spatial_unit in read_spatial_units(db=db):
+        land_use_table = f"tmp_{spatial_unit}_land_use"
+        db.drop_table(table=land_use_table)
+    db.drop_table(table="tmp_deter_land_structure")

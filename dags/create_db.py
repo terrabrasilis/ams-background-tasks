@@ -106,6 +106,7 @@ def classify_by_land_use():
         f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
         " --land-use-dir=/opt/airflow/land_use"
+        " --drop-tmp"
     )
 
     env = get_secrets_env(["AMS_DB_URL"])
