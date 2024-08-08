@@ -61,8 +61,7 @@ def update_active_fires_table(db_url: str, af_db_url: str, all_data: bool):
     user, password, host, port, db_name = get_connection_components(db_url=af_db_url)
 
     sql = f"""
-        DROP VIEW IF EXISTS public.raw_active_fires;
-        CREATE VIEW public.raw_active_fires AS
+        CREATE OR REPLACE VIEW public.raw_active_fires AS
         SELECT
             remote_data.id,
             remote_data.view_date,

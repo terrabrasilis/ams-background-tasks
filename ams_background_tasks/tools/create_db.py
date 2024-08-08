@@ -250,7 +250,7 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
 def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     """Create the deter.{name} table."""
     columns = [
-        "gid varchar(254) NOT NULL PRIMARY KEY",
+        "gid varchar(254) NOT NULL",
         "origin_gid int4",
         "classname varchar(254)",
         "quadrant varchar(5)",
@@ -266,16 +266,9 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
         "uc varchar(254)",
         "geom geometry(MultiPolygon, 4674)",
         "month_year varchar(10)",
-        "ncar_ids int4",
-        "car_imovel text",
-        "continuo int4",
-        "velocidade numeric",
-        "deltad int4",
-        "est_fund varchar(254)",
-        "dominio varchar(254)",
-        "tp_dominio varchar(254)",
         "biome varchar(254)",
         "geocode varchar(80)",
+        "PRIMARY KEY (gid, biome)",
     ]
 
     schema = "deter"
@@ -283,6 +276,42 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     db.create_table(
         schema=schema,
         name=name,
+        columns=columns,
+        force_recreate=force_recreate,
+    )
+
+    columns = [
+        "classname:btree",
+        "date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "geom:gist",
+    ]
+
+    db.create_indexes(
+        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+    )
+
+
+def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
+    """Create the deter.tmp_data table."""
+    columns = [
+        "gid varchar(254) NOT NULL",
+        "classname varchar(254)",
+        "date date",
+        "areamunkm double precision",
+        "geom geometry(MultiPolygon, 4674)",
+        "biome varchar(254)",
+        "geocode varchar(80)",
+        "PRIMARY KEY (gid, biome)",
+    ]
+
+    schema = "deter"
+    name = "tmp_data"
+
+    db.create_table(
+        schema=schema,
+        name="tmp_data",
         columns=columns,
         force_recreate=force_recreate,
     )
@@ -317,6 +346,9 @@ def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
         ],
         force_recreate=force_recreate,
     )
+
+    # tmp_data
+    _create_tmp_data_table(db=db, force_recreate=force_recreate)
 
 
 def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False):

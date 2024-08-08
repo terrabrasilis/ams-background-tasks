@@ -54,6 +54,8 @@ logger = get_logger(__name__, sys.stdout)
 @click.option("--biome", type=str, required=True, help="Biome.", multiple=True)
 def main(db_url: str, land_use_dir: str, all_data: bool, biome: str):
     """Cross the indicators with the land use image and group them by spatial units."""
+    assert not all_data
+
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
@@ -66,6 +68,7 @@ def main(db_url: str, land_use_dir: str, all_data: bool, biome: str):
     biome_list = list(biome)
 
     for index, _biome in enumerate(biome_list):
+        logger.info("processing biome %s", _biome)
         assert is_valid_biome(biome=_biome)
 
         land_use_image = Path(land_use_dir) / f"{_biome}_land_use.tif"
@@ -97,11 +100,12 @@ def _create_land_structure_table(db_url: str, table: str, force_recreate: bool):
         name=table,
         columns=[
             "id serial NOT NULL PRIMARY KEY",
-            "gid varchar NULL",
+            "gid varchar(254) NOT NULL",
             "land_use_id int4 NULL",
             "num_pixels int4 NULL",
             "geocode varchar(80) NULL",
             "biome varchar(254) NULL",
+            "CONSTRAINT gid_landuse_biome_unique UNIQUE (gid, biome, land_use_id)",
         ],
         force_recreate=force_recreate,
     )
@@ -113,6 +117,7 @@ def _create_land_structure_table(db_url: str, table: str, force_recreate: bool):
             "gid:hash",
             "biome:btree",
             "geocode:btree",
+            "gid,biome:btree",
         ],
         force_recreate=force_recreate,
     )
@@ -130,19 +135,21 @@ def process_deter_land_structure(
     table_prefix = get_prefix(is_temp=is_temp)
 
     table = f"{table_prefix}deter_land_structure"
-    logger.info("filling %s.", table)
+    if force_recreate:
+        _create_land_structure_table(
+            db_url=db_url, table=table, force_recreate=force_recreate
+        )
 
-    _create_land_structure_table(
-        db_url=db_url, table=table, force_recreate=force_recreate
-    )
+    logger.info("filling %s.", table)
 
     sql = f"""
         SELECT gid, biome, geocode, geom
         FROM deter.tmp_data
         WHERE biome='{biome}';
     """
+    logger.debug(sql)
     deter = gpd.GeoDataFrame.from_postgis(sql=sql, con=db.conn, geom_col="geom")
-    logger.debug(len(deter))
+    logger.debug("len(deter): %s", len(deter))
 
     landuse_raster = rio.open(land_use_image)
 
@@ -159,8 +166,13 @@ def process_deter_land_structure(
                     values.append(
                         f"('{row.gid}', '{row.biome}', '{row.geocode}', {count[0]}, {count[1]})"
                     )
-
             progress_bar()
+
+        logger.debug("len(values): %s", len(values))
+
+        if not len(values):
+            # logger....
+            return
 
         sql = f"""
             INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
@@ -195,13 +207,15 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
                     tb.gid, 
                     tb.date, 
                     ST_PointOnSurface(tb.geom) AS geom, 
-                    tb.classname
+                    tb.classname,
+                    tb.biome
                 FROM (
                     SELECT 
                         gid, 
                         date, 
                         classname, 
-                        geom
+                        geom,
+                        biome
                     FROM 
                         deter.deter_auth
                     UNION
@@ -209,11 +223,12 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
                         gid, 
                         date, 
                         classname, 
-                        geom
+                        geom,
+                        biome
                     FROM 
                         deter.deter_history
                 ) AS tb
-            ) b ON a.gid = b.gid
+            ) b ON a.gid = b.gid AND a.biome = b.biome
             INNER JOIN 
                 deter_class c ON b.classname = c.name
             INNER JOIN 
@@ -339,14 +354,14 @@ def _copy_deter_land_structure(db_url: str, all_data: bool):
 
     else:
         # here, we expect deter.tmp_data to only have DETER data coming from the current table
-        # update sequence value from the mas of table id
+        # update sequence value from the ams of table id
         sql = """
             DELETE FROM deter_land_structure WHERE gid like '%_curr';
             SELECT setval('public.deter_land_structure_id_seq', (
                 SELECT MAX(id) FROM public.deter_land_structure)::integer, true
-            );"
+            );
         """
-        db.executes(sql=sql)
+        db.execute(sql=sql)
 
     # copy data from temporary table
     db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)

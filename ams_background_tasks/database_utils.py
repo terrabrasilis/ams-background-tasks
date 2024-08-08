@@ -58,7 +58,7 @@ class DatabaseFacade(BaseModel):
     def execute(self, sql: str, log: bool = True):
         """Execute a sql string."""
         if log:
-            logger.debug(sql)
+            logger.debug(sql.strip())
 
         self.conn.cursor().execute(sql)
         self.conn.commit()
@@ -132,7 +132,7 @@ class DatabaseFacade(BaseModel):
             col, method = _.split(":")
             self.create_index(
                 schema=schema,
-                name=f"{name}_{col}_idx",
+                name=f"{name}_{col.replace(',', '_')}_idx",
                 table=name,
                 method=method,
                 column=col,
@@ -140,7 +140,7 @@ class DatabaseFacade(BaseModel):
             )
 
     def fetchall(self, query):
-        logger.debug(query)
+        logger.debug(query.strip())
 
         cursor = self.conn.cursor()
         cursor.execute(query)
@@ -149,7 +149,7 @@ class DatabaseFacade(BaseModel):
         return data
 
     def insert(self, query: str, data: Any):
-        logger.debug(query)
+        logger.debug(query.strip())
 
         cursor = self.conn.cursor()
         cursor.executemany(query, data)

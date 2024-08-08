@@ -21,7 +21,7 @@ def _sleep():
 
 @task
 def create_db():
-    bash_command = f"ams-create-db {('--force-recreate' if get_variable('AMS_FORCE_RECREATE_DB') else '')}"
+    bash_command = f"ams-create-db {('--force-recreate' if get_variable('AMS_FORCE_RECREATE_DB')=='1' else '')}"
     return BashOperator(
         task_id="ams-create-db",
         bash_command=bash_command,
@@ -52,7 +52,7 @@ def update_spatial_units():
 
 @task
 def update_active_fires():
-    bash_command = f"ams-update-active-fires {('--all-data' if get_variable('AMS_ALL_DATA_DB') else '')}"
+    bash_command = f"ams-update-active-fires {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
     return BashOperator(
         task_id="ams-update-active-fires",
         bash_command=bash_command,
@@ -65,8 +65,8 @@ def update_active_fires():
 def update_amz_deter():
     bash_command = (
         f"ams-update-deter"
-        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB') else '')}"
-        f" --biome='Amazônia'"
+        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
+        " --biome='Amazônia' --truncate"
     )
 
     env = get_secrets_env(["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL"])
@@ -82,8 +82,20 @@ def update_amz_deter():
 
 @task
 def update_cer_deter():
-    return PythonOperator(
-        task_id="ams-update-cer-deter", python_callable=_sleep
+    bash_command = (
+        f"ams-update-deter"
+        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
+        " --biome='Cerrado'"
+    )
+
+    env = get_secrets_env(["AMS_DB_URL", "AMS_CER_DETER_B_DB_URL"])
+    env["AMS_DETER_B_DB_URL"] = env["AMS_CER_DETER_B_DB_URL"]
+
+    return BashOperator(
+        task_id="ams-update-cer-deter",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
     ).execute({})
 
 
@@ -91,8 +103,8 @@ def update_cer_deter():
 def classify_by_land_use():
     bash_command = (
         f"ams-classify-by-land-use"
-        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB') else '')}"
-        " --biome='Amazônia'"
+        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
+        " --biome='Amazônia' --biome='Cerrado'"
         " --land-use-dir=/opt/airflow/land_use"
     )
 
