@@ -11,7 +11,7 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
-from ams_background_tasks.tools.common import BIOMES
+from ams_background_tasks.tools.common import BIOMES, get_biome_acronym
 
 logger = logging.getLogger(__name__)
 
@@ -90,18 +90,25 @@ def update_deter(
         else ("deter", "deter_auth")
     )
 
-    for name in tables:
+    ext_tables = (
+        ("deter_ams", "deter_auth_ams", "deter_history")
+        if all_data
+        else ("deter_ams", "deter_auth_ams")
+    )
+
+    for index, name in enumerate(tables):
         _update_deter_table(
             db_url=db_url,
             deter_b_db_url=deter_b_db_url,
             name=name,
+            ext_table=ext_tables[index],
             biome=biome,
             truncate=truncate,
         )
 
 
 def _update_deter_table(
-    db_url: str, deter_b_db_url: str, name: str, biome: str, truncate: bool
+    db_url: str, deter_b_db_url: str, name: str, biome: str, truncate: bool, ext_table: str,
 ):
     """Update the deter.{name} table."""
     logger.info("updating the deter.%s table", name)
@@ -109,7 +116,7 @@ def _update_deter_table(
     db = DatabaseFacade.from_url(db_url=db_url)
 
     # creating sql view for the external database
-    view = f"public.{biome.lower()[:3]}_{name}"
+    view = f"public.{get_biome_acronym(biome=biome)}_{name}"
     logger.info("creating the sql view %s.", view)
 
     user, password, host, port, db_name = get_connection_components(
@@ -138,7 +145,7 @@ def _update_deter_table(
             remote_data.geocode
         FROM
             dblink('hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
-                   'SELECT gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year, geocod FROM public.deter_ams'::text)
+                   'SELECT gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year, geocod FROM public.{ext_table}'::text)
         AS remote_data(gid text, origin_gid integer, classname character varying(254), quadrant character varying(5), orbitpoint character varying(10), date date, sensor character varying(10), satellite character varying(13), areatotalkm double precision, areamunkm double precision, areauckm double precision, mun character varying(254), uf character varying(2), uc character varying(254), geom geometry(MultiPolygon,4674), month_year character varying(10), geocode character varying(80));
     """
 
@@ -176,7 +183,7 @@ def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bo
     name = "deter_public_date"
 
     # creating sql view for the external database
-    view = f"public.{biome.lower()[:3]}_{name}"
+    view = f"public.{get_biome_acronym(biome=biome)}_{name}"
     logger.info("creating the sql view %s.", view)
 
     sql = f"""

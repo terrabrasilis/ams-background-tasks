@@ -38,6 +38,12 @@ def read_spatial_units(db: DatabaseFacade):
         )
     )
 
+def get_biome_acronym(biome: str):
+    assert is_valid_biome(biome=biome)
+    return {
+        AMAZONIA: "amz",
+        CERRADO: "cer",
+    }[biome]
 
 def recreate_spatial_table(db: DatabaseFacade, spatial_unit: str, is_temp: bool):
     table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use"

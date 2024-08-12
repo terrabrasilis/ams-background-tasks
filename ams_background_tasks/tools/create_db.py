@@ -251,6 +251,7 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     """Create the deter.{name} table."""
     columns = [
         "gid varchar(254) NOT NULL",
+        "biome varchar(254)",        
         "origin_gid int4",
         "classname varchar(254)",
         "quadrant varchar(5)",
@@ -266,7 +267,6 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
         "uc varchar(254)",
         "geom geometry(MultiPolygon, 4674)",
         "month_year varchar(10)",
-        "biome varchar(254)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
@@ -297,11 +297,11 @@ def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
     """Create the deter.tmp_data table."""
     columns = [
         "gid varchar(254) NOT NULL",
+        "biome varchar(254)",        
         "classname varchar(254)",
         "date date",
         "areamunkm double precision",
         "geom geometry(MultiPolygon, 4674)",
-        "biome varchar(254)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
