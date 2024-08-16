@@ -57,7 +57,8 @@ def main(db_url: str, force_recreate: bool):
 
     # deter
     create_deter_tables(db=db, force_recreate=force_recreate)
-    create_deter_class_tables(db=db, force_recreate=force_recreate)
+
+    create_class_tables(db=db, force_recreate=force_recreate)
 
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
@@ -212,7 +213,8 @@ def create_cell_table(db: DatabaseFacade, cell: str, force_recreate: bool):
 def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the fires.active_fires table."""
     columns = [
-        "id int4 PRIMARY KEY",
+        "id int4 NOT NULL",
+        "biome varchar(254)",
         "view_date date",
         "satelite varchar(254)",
         "estado varchar(254)",
@@ -222,7 +224,7 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         "riscofogo double precision",
         "geom geometry(Point, 4674)",
         "geocode varchar(80)",
-        "biome varchar(254)",
+        "PRIMARY KEY (id, biome)",
     ]
 
     schema = "fires"
@@ -251,7 +253,7 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     """Create the deter.{name} table."""
     columns = [
         "gid varchar(254) NOT NULL",
-        "biome varchar(254)",        
+        "biome varchar(254)",
         "origin_gid int4",
         "classname varchar(254)",
         "quadrant varchar(5)",
@@ -297,7 +299,7 @@ def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
     """Create the deter.tmp_data table."""
     columns = [
         "gid varchar(254) NOT NULL",
-        "biome varchar(254)",        
+        "biome varchar(254)",
         "classname varchar(254)",
         "date date",
         "areamunkm double precision",
@@ -397,15 +399,15 @@ def create_biome_border_table(db: DatabaseFacade, force_recreate: bool = False):
     )
 
 
-def create_deter_class_tables(db: DatabaseFacade, force_recreate: bool):
-    """Create the public.deter_class and public.deter_class_group tables."""
+def create_class_tables(db: DatabaseFacade, force_recreate: bool):
+    """Create the public.class and public.class_group tables."""
     schema = "public"
 
-    name = "deter_class_group"
-
     if force_recreate:
-        db.drop_table(table=f"{schema}.deter_class")
-        db.drop_table(table=f"{schema}.deter_class_group")
+        db.drop_table(table=f"{schema}.class")
+        db.drop_table(table=f"{schema}.class_group")
+
+    name = "class_group"
 
     db.create_table(
         schema=schema,
@@ -433,7 +435,7 @@ def create_deter_class_tables(db: DatabaseFacade, force_recreate: bool):
 
     db.execute(sql=sql)
 
-    name = "deter_class"
+    name = "class"
 
     db.create_table(
         schema=schema,
@@ -442,9 +444,7 @@ def create_deter_class_tables(db: DatabaseFacade, force_recreate: bool):
             "id serial NOT NULL PRIMARY KEY",
             "name varchar NOT NULL UNIQUE",
             "group_id int4",
-            f"FOREIGN KEY (group_id) REFERENCES {schema}.deter_class_group (id) "
-            "ON UPDATE NO ACTION "
-            "ON DELETE NO ACTION ",
+            f"FOREIGN KEY (group_id) REFERENCES {schema}.class_group (id)",
         ],
         force_recreate=False,
     )

@@ -10,13 +10,31 @@ from ams_background_tasks.log import get_logger
 logger = get_logger(__name__, sys.stdout)
 
 
+# cells
 AMAZONIA = "Amazônia"
 CERRADO = "Cerrado"
 CELL_25KM = "25km"
 CELL_150KM = "150km"
-BIOMES = [AMAZONIA, CERRADO]
 CELLS = [CELL_25KM, CELL_150KM]
+
+# biomes
+BIOMES = [AMAZONIA, CERRADO]
+
+# constants
 PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
+
+# classnames
+ACTIVE_FIRES_CLASSNAME = "AF"
+RISK_CLASSNAME = "RK"
+
+# indicators
+DETER_INDICATOR = "deter"
+ACTIVE_FIRES_INDICATOR = "focos"
+
+INDICATORS = [
+    DETER_INDICATOR,
+    ACTIVE_FIRES_INDICATOR,
+]
 
 
 def is_valid_biome(biome: str):
@@ -38,12 +56,14 @@ def read_spatial_units(db: DatabaseFacade):
         )
     )
 
+
 def get_biome_acronym(biome: str):
     assert is_valid_biome(biome=biome)
     return {
         AMAZONIA: "amz",
         CERRADO: "cer",
     }[biome]
+
 
 def recreate_spatial_table(db: DatabaseFacade, spatial_unit: str, is_temp: bool):
     table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use"

@@ -11,6 +11,7 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
+from ams_background_tasks.tools.common import BIOMES
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ def update_active_fires_table(db_url: str, af_db_url: str, all_data: bool):
         )
         SELECT a.id, a.view_date, a.satelite, a.estado, a.municipio, a.diasemchuva, a.precipitacao, a.riscofogo, a.biome, a.geom
         FROM public.raw_active_fires a
-        WHERE {by_date}
+        WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in BIOMES)})
     """
 
     db.execute(sql)

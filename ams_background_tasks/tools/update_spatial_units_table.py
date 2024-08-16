@@ -128,9 +128,7 @@ def update_states_table(
         INSERT INTO {table1} (suid, name, geocode, acronym, geometry, area)
         VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 4674),
             ST_Area(
-                ST_Transform(
-                    ST_GeomFromText(%s, 4674), 3857
-                )
+                ST_GeomFromText(%s, 4674)::geography
             ) / 1000000.
         )
         {conflict}
@@ -188,9 +186,7 @@ def update_municipalities_table(
         INSERT INTO {table1} (suid, name, geocode, state_acr, state_name, geometry, area)
         VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4674),
             ST_Area(
-                ST_Transform(
-                    ST_GeomFromText(%s, 4674), 3857
-                )
+                ST_GeomFromText(%s, 4674)::geography
             ) / 1000000.
         )
         {conflict}

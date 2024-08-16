@@ -58,7 +58,7 @@ class DatabaseFacade(BaseModel):
     def execute(self, sql: str, log: bool = True):
         """Execute a sql string."""
         if log:
-            logger.debug(sql.strip())
+            logger.debug(" ".join(sql.split()))
 
         self.conn.cursor().execute(sql)
         self.conn.commit()

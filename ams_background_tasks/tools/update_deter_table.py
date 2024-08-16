@@ -108,7 +108,12 @@ def update_deter(
 
 
 def _update_deter_table(
-    db_url: str, deter_b_db_url: str, name: str, biome: str, truncate: bool, ext_table: str,
+    db_url: str,
+    deter_b_db_url: str,
+    name: str,
+    biome: str,
+    truncate: bool,
+    ext_table: str,
 ):
     """Update the deter.{name} table."""
     logger.info("updating the deter.%s table", name)
@@ -162,14 +167,31 @@ def _update_deter_table(
     sql = f"""
         INSERT INTO deter.{name}(
             gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite,
-            areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year, geocode, biome            
+            areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year, biome            
         )
         SELECT deter.gid, deter.origin_gid, deter.classname, deter.quadrant, deter.orbitpoint, deter.date,
             deter.sensor, deter.satellite, deter.areatotalkm,
             deter.areamunkm, deter.areauckm, deter.mun, deter.uf, deter.uc, deter.geom, deter.month_year,
-            deter.geocode, '{biome}'::text as biome
+            '{biome}'::text as biome
         FROM {view} as deter, public.biome_border as border
         WHERE ST_Within(deter.geom, border.geom) AND border.biome='{biome}';
+    """
+
+    db.execute(sql)
+
+    # intersecting with municipalities
+    logger.info("intersecting with municipalities")
+    print("intersecting with municipalities")
+    municipalities_table = "public.municipalities"
+
+    sql = f"""
+        UPDATE {table}
+        SET geocode = (
+            SELECT mun.geocode
+            FROM {municipalities_table} mun
+            WHERE ST_Intersects({table}.geom, mun.geometry)
+            LIMIT 1
+        );
     """
 
     db.execute(sql)
