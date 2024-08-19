@@ -34,7 +34,10 @@ logger = get_logger(__name__, sys.stdout)
     default="",
     help="Auxiliary database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
-def main(db_url: str, aux_db_url: str):
+@click.option(
+    "--biome", type=click.Choice(BIOMES), required=True, help="Biome.", multiple=True
+)
+def main(db_url: str, aux_db_url: str, biome: tuple):
     """Update the spatial units tables."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
@@ -48,20 +51,20 @@ def main(db_url: str, aux_db_url: str):
 
     update_spatial_units_table(db=db)
 
-    for index, biome in enumerate(BIOMES):
+    for index, _biome in enumerate(biome):
         ignore_conflict = index
         truncate = not index
         update_states_table(
             db=db,
             aux_db=aux_db,
-            biome=biome,
+            biome=_biome,
             ignore_conflict=ignore_conflict,
             truncate=truncate,
         )
         update_municipalities_table(
             db=db,
             aux_db=aux_db,
-            biome=biome,
+            biome=_biome,
             ignore_conflict=ignore_conflict,
             truncate=truncate,
         )
@@ -69,7 +72,7 @@ def main(db_url: str, aux_db_url: str):
             update_cells_table(
                 db=db,
                 aux_db=aux_db,
-                biome=biome,
+                biome=_biome,
                 cell=cell,
                 ignore_conflict=ignore_conflict,
                 truncate=truncate,

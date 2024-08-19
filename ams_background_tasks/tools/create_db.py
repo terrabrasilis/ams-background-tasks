@@ -50,7 +50,7 @@ def main(db_url: str, force_recreate: bool):
     create_cell_table(db=db, cell=CELL_150KM, force_recreate=force_recreate)
 
     # biome border
-    create_biome_border_table(db=db, force_recreate=force_recreate)
+    create_biome_tables(db=db, force_recreate=force_recreate)
 
     # active_fires
     create_active_fires_table(db=db, force_recreate=force_recreate)
@@ -370,18 +370,37 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
     )
 
 
-def create_biome_border_table(db: DatabaseFacade, force_recreate: bool = False):
-    """Create the public.biome_border table."""
+def create_biome_tables(db: DatabaseFacade, force_recreate: bool = False):
+    """Create the public.biome and public.biome_border tables."""
+    schema = "public"
+
+    if force_recreate:
+        db.drop_table(f"{schema}.biome_border")
+        db.drop_table(f"{schema}.biome")
+
+    name = "biome"
+
     columns = [
-        "id int4 PRIMARY KEY",
-        "biome varchar(254)",
-        "cd_biome int4",
-        "area_km double precision",
-        "geom geometry(MultiPolygon, 4674)",
+        "id serial PRIMARY KEY",
+        "biome varchar(254) UNIQUE",
     ]
 
-    schema = "public"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
+    )
+
     name = "biome_border"
+
+    columns = [
+        "id serial PRIMARY KEY",
+        "biome varchar(254)",
+        "area_km double precision",
+        "geom geometry(MultiPolygon, 4674)",
+        "FOREIGN KEY (biome) REFERENCES public.biome (biome)",
+    ]
 
     db.create_table(
         schema=schema,

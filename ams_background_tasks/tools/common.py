@@ -11,14 +11,16 @@ logger = get_logger(__name__, sys.stdout)
 
 
 # cells
-AMAZONIA = "Amazônia"
-CERRADO = "Cerrado"
 CELL_25KM = "25km"
 CELL_150KM = "150km"
 CELLS = [CELL_25KM, CELL_150KM]
 
 # biomes
-BIOMES = [AMAZONIA, CERRADO]
+AMAZONIA = "Amazônia"
+CERRADO = "Cerrado"
+PANTANAL = "Pantanal"
+
+BIOMES = [AMAZONIA, CERRADO, PANTANAL]
 
 # constants
 PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
@@ -62,6 +64,7 @@ def get_biome_acronym(biome: str):
     return {
         AMAZONIA: "amz",
         CERRADO: "cer",
+        PANTANAL: "pan",
     }[biome]
 
 

@@ -38,7 +38,10 @@ logger = logging.getLogger(__name__)
     default=False,
     help="if True, all data of external database will be processed.",
 )
-def main(db_url: str, af_db_url: str, all_data: bool):
+@click.option(
+    "--biome", type=click.Choice(BIOMES), required=True, help="Biome.", multiple=True
+)
+def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple):
     """Update the active fires table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
@@ -50,10 +53,14 @@ def main(db_url: str, af_db_url: str, all_data: bool):
 
     logger.debug(all_data)
 
-    update_active_fires_table(db_url=db_url, af_db_url=af_db_url, all_data=all_data)
+    update_active_fires_table(
+        db_url=db_url, af_db_url=af_db_url, all_data=all_data, biome_list=list(biome)
+    )
 
 
-def update_active_fires_table(db_url: str, af_db_url: str, all_data: bool):
+def update_active_fires_table(
+    db_url: str, af_db_url: str, all_data: bool, biome_list: list
+):
     logger.info("updating the active_fires table")
 
     # creating a sql view for the external database
@@ -102,7 +109,7 @@ def update_active_fires_table(db_url: str, af_db_url: str, all_data: bool):
         )
         SELECT a.id, a.view_date, a.satelite, a.estado, a.municipio, a.diasemchuva, a.precipitacao, a.riscofogo, a.biome, a.geom
         FROM public.raw_active_fires a
-        WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in BIOMES)})
+        WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
     """
 
     db.execute(sql)
