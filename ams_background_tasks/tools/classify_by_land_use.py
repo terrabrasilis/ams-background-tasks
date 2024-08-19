@@ -466,7 +466,7 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
         crs="EPSG:4674",
     )
 
-    insert_data_in_land_use_tables(db=db, data=data, table_prefix=table_prefix)
+    insert_data_in_land_use_tables(db=db, data=data, table_prefix=table_prefix, log=False)
 
 
 def percentage_calculation_for_areas(db_url: str, is_temp: bool):

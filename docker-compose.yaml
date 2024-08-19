@@ -63,6 +63,7 @@ x-airflow-common:
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AMS_FORCE_RECREATE_DB: ${AMS_FORCE_RECREATE_DB}
     AMS_ALL_DATA_DB: ${AMS_ALL_DATA_DB}
+    AMS_BIOMES: ${AMS_BIOMES}
     AMS_DB_URL_secret: /run/secrets/ams_db_url
     AMS_AUX_DB_URL_secret: /run/secrets/ams_aux_db_url
     AMS_AF_DB_URL_secret: /run/secrets/ams_af_db_url

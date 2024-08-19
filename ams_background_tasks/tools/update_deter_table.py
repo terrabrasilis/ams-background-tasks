@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 )
 def main(db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate: bool):
     """Update the DETER tables from official databases using SQL views."""
-    assert not all_data  # need to be fixed
+    all_data = False  # need to be fixed
 
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
