@@ -58,6 +58,10 @@ def read_spatial_units(db: DatabaseFacade):
         )
     )
 
+def read_biomes(db: DatabaseFacade):
+    res = db.fetchall(query="SELECT biome FROM public.biome")
+    return [_[0] for _ in res]
+
 
 def get_biome_acronym(biome: str):
     assert is_valid_biome(biome=biome)
