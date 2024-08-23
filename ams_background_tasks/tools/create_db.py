@@ -58,7 +58,11 @@ def main(db_url: str, force_recreate: bool):
     # deter
     create_deter_tables(db=db, force_recreate=force_recreate)
 
+    # classnames
     create_class_tables(db=db, force_recreate=force_recreate)
+
+    # land use
+    create_land_use_table(db=db, force_recreate=force_recreate)
 
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
@@ -481,6 +485,41 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
                 (7, 'MINERACAO', 4),
                 (8, 'FOCOS', 5),
                 (9, 'RISCO', 6);
+    """
+
+    db.execute(sql=sql)
+
+
+def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
+    """Create the public.land_use table."""
+    schema = "public"
+
+    name = "land_use"
+
+    columns = [
+        "id serial PRIMARY KEY",
+        "name varchar(64)",
+        "priority INT4",
+    ]
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
+    )
+
+    sql = f"""
+        INSERT INTO
+            {schema}.{name} (id, name, priority)
+            VALUES
+                (1,	'APA', 3),
+                (2,	'Assentamentos', 2),
+                (3,	'CAR', 4),
+                (4,	'FPND', 5),
+                (5,	'TI', 0),
+                (6,	'UC', 1),
+                (12, 'Indefinida', 6);
     """
 
     db.execute(sql=sql)
