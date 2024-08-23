@@ -120,7 +120,6 @@ def classify_deter_by_land_use():
         " --biome='Amazônia' --biome='Cerrado'"
         " --indicator='deter'"
         " --land-use-dir=/opt/airflow/land_use"
-        " --drop-tmp"
     )
 
     env = get_secrets_env(["AMS_DB_URL"])
@@ -141,7 +140,6 @@ def classify_active_fires_by_land_use():
         " --biome='Amazônia' --biome='Cerrado'"
         " --indicator='focos'"
         " --land-use-dir=/opt/airflow/land_use"
-        " --drop-tmp"
     )
 
     env = get_secrets_env(["AMS_DB_URL"])
