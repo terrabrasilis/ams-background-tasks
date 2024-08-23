@@ -47,6 +47,10 @@ def is_valid_cell(cell: str):
     return cell in CELLS
 
 
+def is_valid_indicator(indicator: str):
+    return indicator in INDICATORS
+
+
 def get_prefix(is_temp: bool):
     return "tmp_" if is_temp else ""
 
@@ -57,6 +61,7 @@ def read_spatial_units(db: DatabaseFacade):
             query="SELECT dataname, as_attribute_name FROM public.spatial_units"
         )
     )
+
 
 def read_biomes(db: DatabaseFacade):
     res = db.fetchall(query="SELECT biome FROM public.biome")
@@ -106,6 +111,40 @@ def recreate_spatial_table(db: DatabaseFacade, spatial_unit: str, is_temp: bool)
             "geocode:btree",
         ],
         force_recreate=False,
+    )
+
+
+def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
+    logger.info("creating %s.", table)
+    logger.debug("%s:%s", "force_recreate", force_recreate)
+
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    db.create_table(
+        schema="public",
+        name=table,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "gid varchar(254) NOT NULL",
+            "land_use_id int4 NULL",
+            "num_pixels int4 NULL",
+            "geocode varchar(80) NULL",
+            "biome varchar(254) NULL",
+            "UNIQUE (gid, biome, land_use_id)",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    db.create_indexes(
+        schema="public",
+        name=table,
+        columns=[
+            "gid:hash",
+            "biome:btree",
+            "geocode:btree",
+            "gid,biome:btree",
+        ],
+        force_recreate=force_recreate,
     )
 
 

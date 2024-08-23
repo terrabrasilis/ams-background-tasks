@@ -57,7 +57,7 @@ def update_biome_border_table(
 
     biome_list = [_ for _ in biome_list if _ not in cur_biomes]
 
-    if not len(biome_list):
+    if not len(biome_list) > 0:
         return
 
     table = "public.biome"

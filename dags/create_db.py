@@ -18,10 +18,15 @@ DAG_KEY = "ams-create-db"
 def _sleep():
     sleep(random.random() * 20)
 
+
 def _get_biomes():
-    return " ".join([
-        f"--biome={_}" for _ in get_variable(name="AMS_BIOMES").split(";") if len(_)>0
-     ])   
+    return " ".join(
+        [
+            f"--biome={_}"
+            for _ in get_variable(name="AMS_BIOMES").split(";")
+            if len(_) > 0
+        ]
+    )
 
 
 @task
@@ -108,11 +113,12 @@ def update_cer_deter():
 
 
 @task
-def classify_by_land_use():
+def classify_deter_by_land_use():
     bash_command = (
         f"ams-classify-by-land-use"
         f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
+        " --indicator='deter'"
         " --land-use-dir=/opt/airflow/land_use"
         " --drop-tmp"
     )
@@ -127,6 +133,45 @@ def classify_by_land_use():
     ).execute({})
 
 
+@task
+def classify_active_fires_by_land_use():
+    bash_command = (
+        f"ams-classify-by-land-use"
+        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
+        " --biome='Amazônia' --biome='Cerrado'"
+        " --indicator='focos'"
+        " --land-use-dir=/opt/airflow/land_use"
+        " --drop-tmp"
+    )
+
+    env = get_secrets_env(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id="ams-classify-by-land-use",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
+@task
+def finalize_classification():
+    bash_command = (
+        f"ams-finalize-classification"
+        f" {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')}"
+        " --drop-tmp"
+    )
+
+    env = get_secrets_env(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id="ams-finalize-classification",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
 with DAG(DAG_KEY, default_args=default_args, schedule_interval=None) as dag:
     run_create_db = create_db()
     run_update_biome_border = update_biome()
@@ -134,12 +179,13 @@ with DAG(DAG_KEY, default_args=default_args, schedule_interval=None) as dag:
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
     run_update_cer_deter = update_cer_deter()
-    run_classify = classify_by_land_use()
+    run_classify_deter = classify_deter_by_land_use()
+    run_classify_active_fires = classify_active_fires_by_land_use()
+    run_finalize_classification = finalize_classification()
 
     run_create_db >> run_update_biome_border >> run_update_spatial_units
     run_update_spatial_units >> [run_update_amz_deter, run_update_active_fires]
     run_update_amz_deter >> run_update_cer_deter
-    [
-        run_update_cer_deter,
-        run_update_active_fires,
-    ] >> run_classify
+    run_update_active_fires >> run_classify_active_fires
+    run_update_cer_deter >> run_classify_deter
+    [run_classify_active_fires, run_classify_deter] >> run_finalize_classification
