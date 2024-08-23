@@ -25,6 +25,7 @@ from ams_background_tasks.tools.common import (
     DETER_INDICATOR,
     INDICATORS,
     PIXEL_LAND_USE_AREA,
+    create_land_structure_table,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
@@ -102,40 +103,6 @@ def main(
         )
 
 
-def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
-    logger.info("creating %s.", table)
-    logger.debug("%s:%s", "force_recreate", force_recreate)
-
-    db = DatabaseFacade.from_url(db_url=db_url)
-
-    db.create_table(
-        schema="public",
-        name=table,
-        columns=[
-            "id serial NOT NULL PRIMARY KEY",
-            "gid varchar(254) NOT NULL",
-            "land_use_id int4 NULL",
-            "num_pixels int4 NULL",
-            "geocode varchar(80) NULL",
-            "biome varchar(254) NULL",
-            "UNIQUE (gid, biome, land_use_id)",
-        ],
-        force_recreate=force_recreate,
-    )
-
-    db.create_indexes(
-        schema="public",
-        name=table,
-        columns=[
-            "gid:hash",
-            "biome:btree",
-            "geocode:btree",
-            "gid,biome:btree",
-        ],
-        force_recreate=force_recreate,
-    )
-
-
 def insert_data_in_land_use_tables(
     data: gpd.GeoDataFrame, db: DatabaseFacade, table_prefix: str, log: bool = False
 ):
@@ -193,8 +160,8 @@ def insert_data_in_land_use_tables(
 
         sql = f"""
             INSERT INTO "{tmpspatial_unit}_land_use" (
-                suid, land_use_id, classname, "date", area, geocode, biome
-            ) 
+                suid, land_use_id, classname, "date", area, biome, geocode
+            )
             VALUES {','.join(values)};
         """
 
