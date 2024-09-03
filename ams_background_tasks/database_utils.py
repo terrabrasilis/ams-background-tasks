@@ -170,3 +170,20 @@ class DatabaseFacade(BaseModel):
 
     def create_postgis_extension(self):
         self.execute("CREATE EXTENSION IF NOT EXISTS POSTGIS")
+
+    def count_rows(self, table: str, conditions: str = ""):
+        where = ""
+        if conditions:
+            where = f"WHERE {conditions}"
+
+        query = f"""
+            SELECT COUNT(*)
+            FROM {table}
+            {where};
+        """
+
+        logger.debug(query)
+
+        cursor = self.conn.cursor()
+        cursor.execute(query)
+        return cursor.fetchone()[0]

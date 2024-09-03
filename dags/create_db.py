@@ -9,7 +9,8 @@ from airflow import DAG
 from airflow.decorators import task
 from airflow.models import Variable
 from airflow.operators.bash import BashOperator
-from airflow.operators.python import PythonOperator
+from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import BranchPythonOperator, PythonOperator
 from common import default_args, get_secrets_env, get_variable
 
 DAG_KEY = "ams-create-db"
@@ -29,9 +30,10 @@ def _get_biomes():
     )
 
 
-@task
+@task(task_id="create-db")
 def create_db():
     bash_command = f"ams-create-db {('--force-recreate' if get_variable('AMS_FORCE_RECREATE_DB')=='1' else '')}"
+
     return BashOperator(
         task_id="ams-create-db",
         bash_command=bash_command,
@@ -40,7 +42,7 @@ def create_db():
     ).execute({})
 
 
-@task
+@task(task_id="update-biome")
 def update_biome():
     return BashOperator(
         task_id="ams-update-biome",
@@ -50,7 +52,7 @@ def update_biome():
     ).execute({})
 
 
-@task
+@task(task_id="update-spatial-units")
 def update_spatial_units():
     return BashOperator(
         task_id="ams-update-spatial-units",
@@ -60,7 +62,7 @@ def update_spatial_units():
     ).execute({})
 
 
-@task
+@task(task_id="update-active-fires")
 def update_active_fires():
     bash_command = (
         f"ams-update-active-fires {('--all-data' if get_variable('AMS_ALL_DATA_DB')=='1' else '')} "
@@ -74,7 +76,7 @@ def update_active_fires():
     ).execute({})
 
 
-@task
+@task(task_id="update-amz-deter")
 def update_amz_deter():
     bash_command = (
         f"ams-update-deter"
@@ -93,7 +95,7 @@ def update_amz_deter():
     ).execute({})
 
 
-@task
+@task(task_id="update-cer-deter")
 def update_cer_deter():
     bash_command = (
         f"ams-update-deter"
@@ -112,7 +114,7 @@ def update_cer_deter():
     ).execute({})
 
 
-@task
+@task(task_id="classify-deter-by-land-use")
 def classify_deter_by_land_use():
     bash_command = (
         f"ams-classify-by-land-use"
@@ -132,7 +134,7 @@ def classify_deter_by_land_use():
     ).execute({})
 
 
-@task
+@task(task_id="classify-fires-by-land-use")
 def classify_active_fires_by_land_use():
     bash_command = (
         f"ams-classify-by-land-use"
@@ -152,7 +154,7 @@ def classify_active_fires_by_land_use():
     ).execute({})
 
 
-@task
+@task(task_id="finalize-classification")
 def finalize_classification():
     bash_command = (
         f"ams-finalize-classification"
@@ -170,9 +172,28 @@ def finalize_classification():
     ).execute({})
 
 
-with DAG(DAG_KEY, default_args=default_args, schedule_interval=None) as dag:
+def _check_recreate_db():
+    force_recreate = get_variable("AMS_FORCE_RECREATE_DB") == "1"
+
+    if force_recreate:
+        return "create-db"
+    return "skip"
+
+
+with DAG(
+    DAG_KEY, default_args=default_args, schedule_interval=None, catchup=False
+) as dag:
+
+    run_check_recreate_db = BranchPythonOperator(
+        task_id="ams-check-recreate-db",
+        python_callable=_check_recreate_db,
+    )
+
+    run_skip = EmptyOperator(task_id="skip")
+    run_join = EmptyOperator(task_id="join", trigger_rule="none_failed_or_skipped")
+
     run_create_db = create_db()
-    run_update_biome_border = update_biome()
+    run_update_biome = update_biome()
     run_update_spatial_units = update_spatial_units()
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
@@ -181,9 +202,14 @@ with DAG(DAG_KEY, default_args=default_args, schedule_interval=None) as dag:
     run_classify_active_fires = classify_active_fires_by_land_use()
     run_finalize_classification = finalize_classification()
 
-    run_create_db >> run_update_biome_border >> run_update_spatial_units
-    run_update_spatial_units >> [run_update_amz_deter, run_update_active_fires]
+    run_check_recreate_db >> [run_create_db, run_skip]
+
+    run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
+    run_skip >> run_join
+
+    run_join >> [run_update_active_fires, run_update_amz_deter]
     run_update_amz_deter >> run_update_cer_deter
+
     run_update_active_fires >> run_classify_active_fires
     run_update_cer_deter >> run_classify_deter
     [run_classify_active_fires, run_classify_deter] >> run_finalize_classification

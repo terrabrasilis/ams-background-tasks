@@ -53,6 +53,8 @@ def update_biome_border_table(
     """Update the biome_border table."""
     logger.info("updating the biome tables")
 
+    assert not db.count_rows(table="public.biome")
+
     cur_biomes = read_biomes(db=db)
 
     biome_list = [_ for _ in biome_list if _ not in cur_biomes]

@@ -44,6 +44,8 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
     assert db_url
     db = DatabaseFacade.from_url(db_url=db_url)
 
+    check_count_rows(db=db)
+
     aux_db_url = os.getenv("AMS_AUX_DB_URL") if not aux_db_url else aux_db_url
     logger.debug(aux_db_url)
     assert aux_db_url
@@ -52,38 +54,50 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
     update_spatial_units_table(db=db)
 
     for index, _biome in enumerate(biome):
+        assert is_valid_biome(biome=_biome)
         ignore_conflict = index
-        truncate = not index
+        # truncate = not index
         update_states_table(
             db=db,
             aux_db=aux_db,
             biome=_biome,
             ignore_conflict=ignore_conflict,
-            truncate=truncate,
+            # truncate=truncate,
         )
         update_municipalities_table(
             db=db,
             aux_db=aux_db,
             biome=_biome,
             ignore_conflict=ignore_conflict,
-            truncate=truncate,
+            # truncate=truncate,
         )
         for cell in CELLS:
             update_cells_table(
                 db=db,
                 aux_db=aux_db,
-                biome=_biome,
                 cell=cell,
                 ignore_conflict=ignore_conflict,
-                truncate=truncate,
+                # truncate=truncate,
             )
+
+
+def check_count_rows(db: DatabaseFacade):
+    assert not db.count_rows(table="public.spatial_units")
+    assert not db.count_rows(table="public.states")
+    assert not db.count_rows(table="public.states_biome")
+    assert not db.count_rows(table="public.municipalities")
+    assert not db.count_rows(table="public.municipalities_biome")
+
+    for cell in CELLS:
+        assert not db.count_rows(table=f"cs_{cell}")
+        assert not db.count_rows(table=f"cs_{cell}_biome")
 
 
 def update_spatial_units_table(db: DatabaseFacade):
     """Update the public.spatial_units table."""
     table = "public.spatial_units"
 
-    db.truncate(table=table)
+    # db.truncate(table=table)
 
     sql = f"""
         INSERT INTO
@@ -103,18 +117,16 @@ def update_states_table(
     aux_db: DatabaseFacade,
     biome: str,
     ignore_conflict: bool,
-    truncate: bool,
+    # truncate: bool,
 ):
     logger.info("updating the states tables from the auxiliary database.")
-
-    assert is_valid_biome(biome=biome)
 
     table1 = "public.states"
     table2 = "public.states_biome"
 
-    if truncate:
-        db.truncate(table=table2)
-        db.truncate(table=table1, cascade=True)
+    # if truncate:
+    # db.truncate(table=table2)
+    # db.truncate(table=table1, cascade=True)
 
     select_query = f"""
         SELECT a.id, a.nome, a.geocodigo, a.sigla, ST_AsText(a.geom), ST_AsText(a.geom)
@@ -160,19 +172,17 @@ def update_municipalities_table(
     aux_db: DatabaseFacade,
     biome: str,
     ignore_conflict: bool,
-    truncate: bool,
+    # truncate: bool,
 ):
     """Update the municipalities table."""
     logger.info("updating the municipalities tables from the auxiliary database.")
 
-    assert is_valid_biome(biome=biome)
-
     table1 = "public.municipalities"
     table2 = "public.municipalities_biome"
 
-    if truncate:
-        db.truncate(table=table2)
-        db.truncate(table=table1, cascade=True)
+    # if truncate:
+    #    db.truncate(table=table2)
+    #    db.truncate(table=table1, cascade=True)
 
     select_query = f"""
         SELECT a.id, a.nome, a.geocodigo, a.uf_sigla, a.nm_uf, ST_AsText(a.geom), ST_AsText(a.geom)
@@ -216,23 +226,21 @@ def update_municipalities_table(
 def update_cells_table(
     db: DatabaseFacade,
     aux_db: DatabaseFacade,
-    biome: str,
     cell: str,
     ignore_conflict: bool,
-    truncate: bool,
+    # truncate: bool,
 ):
     """Update the cells tables (25 and 150 km)."""
     logger.info("updating the cell tables from the auxiliary database.")
 
-    assert is_valid_biome(biome=biome)
-    assert is_valid_cell(cell=cell)
-
     table1 = f"cs_{cell}"
     table2 = f"cs_{cell}_biome"
 
-    if truncate:
-        db.truncate(table=table2)
-        db.truncate(table=table1, cascade=True)
+    assert is_valid_cell(cell=cell)
+
+    # if truncate:
+    #    db.truncate(table=table2)
+    #    db.truncate(table=table1, cascade=True)
 
     select_query = f"""
         SELECT id, col, row, area, ST_AsText(geometry) FROM public."{table1}";
