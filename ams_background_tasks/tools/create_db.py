@@ -44,10 +44,18 @@ def main(db_url: str, force_recreate: bool):
 
     # spatial units
     create_spatial_units_table(db=db, force_recreate=force_recreate)
+
     create_states_table(db=db, force_recreate=force_recreate)
+    create_states_function(db=db, force_recreate=force_recreate)
+
     create_municipalities_table(db=db, force_recreate=force_recreate)
+    create_municipalities_function(db=db, force_recreate=force_recreate)
+
     create_cell_table(db=db, cell=CELL_25KM, force_recreate=force_recreate)
+    create_cell_function(db=db, cell=CELL_25KM, force_recreate=force_recreate)
+
     create_cell_table(db=db, cell=CELL_150KM, force_recreate=force_recreate)
+    create_cell_function(db=db, cell=CELL_150KM, force_recreate=force_recreate)
 
     # biome border
     create_biome_tables(db=db, force_recreate=force_recreate)
@@ -121,6 +129,79 @@ def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False
     )
 
 
+def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
+    if force_recreate:
+        sql = """
+            DROP FUNCTION IF EXISTS public.ams_get_municipalities(
+                character varying, date, date, date, integer[], character varying[]
+            );
+        """
+        db.execute(sql=sql)
+
+    sql = """
+        CREATE OR REPLACE FUNCTION public.ams_get_municipalities(
+            clsname character varying,
+            startdate date,
+            enddate date,
+            publish_date date,
+            land_use_ids integer[],
+            biomes character varying[]
+        )
+        RETURNS TABLE(
+            suid integer,
+            name character varying,
+            geometry geometry,
+            classname character varying,
+            date date,
+            percentage double precision,
+            area double precision,
+            counts bigint,
+            biome character varying
+        )
+        LANGUAGE 'plpgsql'
+        COST 100
+        VOLATILE PARALLEL UNSAFE
+        ROWS 1000
+        AS $BODY$
+        BEGIN
+            RETURN QUERY
+            SELECT 
+                su.suid AS suid, 
+                su.nome AS name, 
+                su.geometry AS geometry, 
+                ri.classname AS classname, 
+                ri.date AS date, 
+                COALESCE(ri.perc, 0) AS percentage, 
+                COALESCE(ri.total, 0) AS area, 
+                COALESCE(ri.counts, 0) AS counts,
+                rii.biome
+            FROM public."municipalities" su
+            INNER JOIN (
+                SELECT 
+                    rii.suid, 
+                    rii.classname, 
+                    MAX(rii.date) AS date, 
+                    SUM(rii.percentage) AS perc, 
+                    SUM(rii.area) AS total, 
+                    SUM(rii.counts) AS counts,
+                    rii.biome
+                FROM public."municipalities_land_use" rii
+                WHERE (rii.date <= publish_date OR 'AF' = clsname)
+                    AND rii.land_use_id = ANY (land_use_ids)
+                    AND rii.classname = clsname
+                    AND rii.date > enddate
+                    AND rii.date <= startdate
+                    AND rii.biome = ANY (biomes)
+                GROUP BY rii.suid, rii.classname, rii.biome
+            ) AS ri
+            ON su.suid = ri.suid;
+        END;
+        $BODY$;
+    """
+
+    db.execute(sql=sql)
+
+
 def create_states_table(db: DatabaseFacade, force_recreate: bool):
     """Create the states and states_biome tables."""
 
@@ -165,6 +246,77 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
         name=name,
         columns=columns,
     )
+
+
+def create_states_function(db: DatabaseFacade, force_recreate: bool):
+    if force_recreate:
+        sql = """
+            DROP FUNCTION IF EXISTS public.ams_get_states(
+                character varying, date, date, date, integer[], character varying[]
+            );
+        """
+        db.execute(sql=sql)
+
+    sql = """
+        CREATE OR REPLACE FUNCTION public.ams_get_states(
+            clsname character varying,
+            startdate date,
+            enddate date,
+            publish_date date,
+            land_use_ids integer[],
+            biomes character varying []
+        )
+        RETURNS TABLE(
+            suid integer,
+            name character varying,
+            geometry geometry,
+            classname character varying,
+            date date,
+            percentage double precision,
+            area double precision,
+            counts bigint,
+            biome character varying
+        ) 
+        LANGUAGE 'plpgsql'
+        COST 100
+        VOLATILE PARALLEL UNSAFE
+        ROWS 1000
+        AS $BODY$
+        BEGIN
+            RETURN QUERY
+            SELECT
+                su.suid AS suid, 
+                su.nome AS name, 
+                su.geometry AS geometry, 
+                ri.classname AS classname, 
+                ri.date AS date, 
+                COALESCE(ri.perc, 0) AS percentage, 
+                COALESCE(ri.total, 0) AS area, 
+                COALESCE(ri.counts, 0) AS counts,
+                rii.biome
+            FROM public."states" su
+            INNER JOIN (
+                SELECT rii.suid, 
+                       rii.classname, 
+                       MAX(rii.date) AS date, 
+                       SUM(rii.percentage) AS perc, 
+                       SUM(rii.area) AS total, 
+                       SUM(rii.counts) AS counts
+                FROM public."states_land_use" rii
+                WHERE (rii.date <= pusblish_date OR 'AF' = clsname)
+                    AND rii.land_use_id = ANY (land_use_ids)
+                    AND rii.classname = clsname
+                    AND rii.date > enddate
+                    AND rii.date <= startdate
+                    AND rii.biome = ANY (biomes)		
+                GROUP BY rii.suid, rii.classname, rii.biome
+            ) AS ri
+            ON su.suid = ri.suid;
+        END;
+        $BODY$;
+    """
+
+    db.execute(sql=sql)
 
 
 def create_cell_table(db: DatabaseFacade, cell: str, force_recreate: bool):
@@ -212,6 +364,81 @@ def create_cell_table(db: DatabaseFacade, cell: str, force_recreate: bool):
         columns=["id:btree", "biome:btree"],
         force_recreate=force_recreate,
     )
+
+
+def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
+    """Create the get_cs_{25|50}km_function."""
+    assert is_valid_cell(cell=cell)
+
+    if force_recreate:
+        sql = f"""
+            DROP FUNCTION IF EXISTS public.ams_get_cs_{cell}(
+                character varying, date, date, date, integer[], character varying[]
+            );
+        """
+        db.execute(sql=sql)
+
+    sql = f"""
+            CREATE OR REPLACE FUNCTION public.ams_get_cs_{cell}(
+            clsname character varying,
+            startdate date,
+            enddate date,
+            publish_date date,
+            land_use_ids integer[],
+            biomes character varying[]
+        )
+        RETURNS TABLE(
+            suid integer,
+            name character varying,
+            geometry geometry,
+            classname character varying,
+            date date,
+            percentage double precision,
+            area double precision,
+            counts bigint,
+            biome character varying
+        )
+        LANGUAGE 'plpgsql'
+        COST 100
+        VOLATILE PARALLEL UNSAFE
+        ROWS 1000
+        AS $BODY$
+        BEGIN
+            RETURN QUERY
+            SELECT
+                su.suid AS suid, 
+                su.id AS name, 
+                su.geometry AS geometry, 
+                ri.classname AS classname, 
+                ri.date AS date, 
+                COALESCE(ri.perc, 0) AS percentage, 
+                COALESCE(ri.total, 0) AS area, 
+                COALESCE(ri.counts, 0) AS counts,
+                rii.biome
+            FROM public."cs_{cell}" su
+            LEFT JOIN (
+                SELECT rii.suid, 
+                       rii.classname, 
+                       MAX(rii.date) AS date, 
+                       SUM(rii.percentage) AS perc, 
+                       SUM(rii.area) AS total, 
+                       SUM(rii.counts) AS counts,
+                       rii.biome
+                FROM public."cs_{cell}_land_use" rii
+                WHERE (rii.date <= publish_date OR 'AF' = clsname)
+                    AND rii.land_use_id = ANY (land_use_ids)
+                    AND rii.classname = clsname
+                    AND rii.date > enddate
+                    AND rii.date <= startdate
+                    AND rii.biome = ANY (biomes)
+                GROUP BY rii.suid, rii.classname, rii.biome
+            ) AS ri
+            ON su.suid = ri.suid;
+        END;
+        $BODY$;
+    """
+
+    db.execute(sql=sql)
 
 
 def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
