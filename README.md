@@ -1,5 +1,4 @@
 # ams-background-tasks
-AMS Background tasks
 
 The **AMS Background Tasks** is a set of tools designed to create and update the database of the **Amazon Situation Room (AMS)**. The execution of these tools is managed by **Airflow**.
 
@@ -20,7 +19,7 @@ The **DAG `ams-create-db`** is responsible for creating and updating the AMS dat
 
 Each of these tasks is a Python command-line tool developed using the **Click** library.
 
-To run the DAG `ams-create-db`, three external databases are required: one for **DETER data**, another for **active fires data**, and an **auxiliary database**.
+To run the DAG `ams-create-db`, three external databases are required: one for **DETER data** (for each biome), another for **active fires data**, and an **auxiliary database**.
 
 From the auxiliary database, the following tables are required:
 
