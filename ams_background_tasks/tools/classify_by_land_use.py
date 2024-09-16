@@ -104,8 +104,24 @@ def main(
 
 
 def insert_data_in_land_use_tables(
-    data: gpd.GeoDataFrame, db: DatabaseFacade, table_prefix: str, log: bool = False
+    indicator: str,
+    data: gpd.GeoDataFrame,
+    db: DatabaseFacade,
+    table_prefix: str,
+    log: bool = False,
 ):
+    assert is_valid_indicator(indicator=indicator)
+
+    measure = None
+    multiplier = 1.0
+    if indicator is DETER_INDICATOR:
+        measure = "area"
+        multiplier = PIXEL_LAND_USE_AREA
+    elif indicator is ACTIVE_FIRES_INDICATOR:
+        measure = "counts"
+    else:
+        assert False
+
     for spatial_unit in read_spatial_units(db=db):
         tmpspatial_unit = f"{table_prefix}{spatial_unit}"
         logger.info("processing %s ...", tmpspatial_unit)
@@ -148,7 +164,7 @@ def insert_data_in_land_use_tables(
                             {key[1]},
                             '{key[2]}',
                             TIMESTAMP '{key[3].year}-{key[3].month}-{key[3].day}',
-                            {value * PIXEL_LAND_USE_AREA},
+                            {value * multiplier},
                             '{key[4]}',
                             '{key[5]}'
                         )
@@ -158,9 +174,17 @@ def insert_data_in_land_use_tables(
 
         assert len(values) > 0
 
+        measure = None
+        if indicator is DETER_INDICATOR:
+            measure = "area"
+        elif indicator is ACTIVE_FIRES_INDICATOR:
+            measure = "counts"
+        else:
+            assert False
+
         sql = f"""
             INSERT INTO "{tmpspatial_unit}_land_use" (
-                suid, land_use_id, classname, "date", area, biome, geocode
+                suid, land_use_id, classname, "date", {measure}, biome, geocode
             )
             VALUES {','.join(values)};
         """
@@ -282,7 +306,11 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
     )
 
     insert_data_in_land_use_tables(
-        db=db, data=data, table_prefix=table_prefix, log=False
+        indicator=ACTIVE_FIRES_INDICATOR,
+        db=db,
+        data=data,
+        table_prefix=table_prefix,
+        log=False,
     )
 
 
@@ -423,5 +451,9 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
     )
 
     insert_data_in_land_use_tables(
-        db=db, data=data, table_prefix=table_prefix, log=False
+        indicator=DETER_INDICATOR,
+        db=db,
+        data=data,
+        table_prefix=table_prefix,
+        log=False,
     )

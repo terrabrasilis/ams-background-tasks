@@ -202,7 +202,7 @@ def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bo
     db = DatabaseFacade.from_url(db_url=db_url)
     user, password, host, port, db_name = get_connection_components(db_url=deter_db_url)
 
-    name = "deter_public_date"
+    name = "deter_publish_date"
 
     # creating sql view for the external database
     view = f"public.{get_biome_acronym(biome=biome)}_{name}"

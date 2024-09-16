@@ -12,6 +12,7 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     BIOMES,
     CELLS,
+    get_biome_acronym,
     is_valid_biome,
     is_valid_cell,
 )
@@ -77,6 +78,7 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
                 aux_db=aux_db,
                 cell=cell,
                 ignore_conflict=ignore_conflict,
+                biome=_biome,
                 # truncate=truncate,
             )
 
@@ -228,6 +230,7 @@ def update_cells_table(
     aux_db: DatabaseFacade,
     cell: str,
     ignore_conflict: bool,
+    biome: str,
     # truncate: bool,
 ):
     """Update the cells tables (25 and 150 km)."""
@@ -243,11 +246,13 @@ def update_cells_table(
     #    db.truncate(table=table1, cascade=True)
 
     select_query = f"""
-        SELECT id, col, row, area, ST_AsText(geometry) FROM public."{table1}";
+        SELECT id, col, row, area, ST_AsText(geometry)
+        FROM public.cs_{get_biome_acronym(biome=biome)}_{cell};
     """
     data = aux_db.fetchall(query=select_query)
 
-    conflict = "ON CONFLICT (id) DO NOTHING" if ignore_conflict else ""
+    _ = ignore_conflict  # no warn
+    conflict = "ON CONFLICT (id) DO NOTHING"  # if ignore_conflict else ""
 
     insert_query = f"""
         INSERT INTO {table1} (id, col, row, area, geometry)
@@ -256,7 +261,7 @@ def update_cells_table(
     """
     db.insert(query=insert_query, data=data)
 
-    select_query = f'SELECT id, biome FROM public."{table2}";'
+    select_query = f"SELECT id, biome FROM public.cs_{get_biome_acronym(biome=biome)}_{cell}_biome;"
     data = aux_db.fetchall(query=select_query)
 
     insert_query = f"""

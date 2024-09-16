@@ -83,7 +83,7 @@ class DatabaseFacade(BaseModel):
         self, schema: str, name: str, columns: list, force_recreate: bool = False
     ):
         """Create a database table."""
-        table = f"{schema}.{name}"
+        table = f'{schema}."{name}"'
 
         sql = ""
 
@@ -170,6 +170,9 @@ class DatabaseFacade(BaseModel):
 
     def create_postgis_extension(self):
         self.execute("CREATE EXTENSION IF NOT EXISTS POSTGIS")
+
+    def create_dblink_extension(self):
+        self.execute("CREATE EXTENSION IF NOT EXISTS dblink")
 
     def count_rows(self, table: str, conditions: str = ""):
         where = ""

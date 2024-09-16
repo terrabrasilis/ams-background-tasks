@@ -58,6 +58,7 @@ def update_biome_border_table(
     cur_biomes = read_biomes(db=db)
 
     biome_list = [_ for _ in biome_list if _ not in cur_biomes]
+    print(biome_list)
 
     if not len(biome_list) > 0:
         return
@@ -75,16 +76,19 @@ def update_biome_border_table(
 
     table = "public.biome_border"
 
+    values = ",".join([f"'{_}'" for _ in biome_list])
+
     select_query = f"""
         SELECT bioma, area_km, ST_AsText(geom)
         FROM public.lm_bioma_250
-        WHERE bioma IN {tuple(biome_list)}
+        WHERE bioma IN ({values})
     """
+
     data = aux_db.fetchall(query=select_query)
 
     insert_query = f"""
         INSERT INTO {table} (biome, area_km, geom)
-        VALUES (%s, %s, ST_GeomFromText(%s, 4674))
-        
+        VALUES (%s, %s, ST_GeomFromText(%s, 4674))        
     """
+
     db.insert(query=insert_query, data=data)
