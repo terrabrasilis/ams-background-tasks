@@ -11,7 +11,12 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
-from ams_background_tasks.tools.common import BIOMES, get_biome_acronym
+from ams_background_tasks.tools.common import (
+    AMAZONIA,
+    BIOMES,
+    CERRADO,
+    get_biome_acronym,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +58,6 @@ logger = logging.getLogger(__name__)
 )
 def main(db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate: bool):
     """Update the DETER tables from official databases using SQL views."""
-    all_data = False  # need to be fixed
-
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
@@ -128,8 +131,30 @@ def _update_deter_table(
         db_url=deter_b_db_url
     )
 
+    dbl_cred = f"'hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text"
+    dbl_sel = ""
+
+    if name in {"deter", "deter_auth"}:
+        dbl_sel = f"""
+            'SELECT gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year FROM public.{ext_table}'::text
+        """
+    # deter_history
+    elif biome == AMAZONIA:
+        dbl_sel = f"""
+            'SELECT id||''_hist'' as gid, gid as origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, county as mun, uf, uc, st_multi(geom)::geometry(MultiPolygon,4674) AS geom, to_char(timezone(''UTC''::text, date::timestamp with time zone), ''MM-YYYY''::text) AS month_year FROM public.{ext_table} WHERE areatotalkm>=0.0625'::text
+            """
+    elif biome == CERRADO:
+        dbl_sel = f"""
+            'SELECT gid||''_hist'', origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, mun, uf, uc, st_multi(geom)::geometry(MultiPolygon,4674) AS geom, to_char(timezone(''UTC''::text, date::timestamp with time zone), ''MM-YYYY''::text) AS month_year FROM public.{ext_table}'::text
+        """
+    else:
+        assert False
+
+    sql = f"DROP VIEW IF EXISTS {view}"
+    db.execute(sql)
+
     sql = f"""
-        CREATE OR REPLACE VIEW {view} AS
+        CREATE VIEW {view} AS
         SELECT
             remote_data.gid,
             remote_data.origin_gid,
@@ -146,12 +171,12 @@ def _update_deter_table(
             remote_data.uf,
             remote_data.uc,
             remote_data.geom,
-            remote_data.month_year,
-            remote_data.geocode
+            remote_data.month_year
         FROM
-            dblink('hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
-                   'SELECT gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year, geocod FROM public.{ext_table}'::text)
-        AS remote_data(gid text, origin_gid integer, classname character varying(254), quadrant character varying(5), orbitpoint character varying(10), date date, sensor character varying(10), satellite character varying(13), areatotalkm double precision, areamunkm double precision, areauckm double precision, mun character varying(254), uf character varying(2), uc character varying(254), geom geometry(MultiPolygon,4674), month_year character varying(10), geocode character varying(80));
+            dblink(
+                {dbl_cred}, {dbl_sel}
+            )
+        AS remote_data(gid text, origin_gid integer, classname character varying(254), quadrant character varying(5), orbitpoint character varying(10), date date, sensor character varying(10), satellite character varying(13), areatotalkm double precision, areamunkm double precision, areauckm double precision, mun character varying(254), uf character varying(2), uc character varying(254), geom geometry(MultiPolygon,4674), month_year character varying(10));
     """
 
     db.execute(sql)
