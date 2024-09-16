@@ -38,6 +38,7 @@ def main(db_url: str, force_recreate: bool):
     db = DatabaseFacade.from_url(db_url=db_url)
 
     db.create_postgis_extension()
+    db.create_dblink_extension()
 
     db.create_schema(name="fires", force_recreate=False)
     db.create_schema(name="deter", force_recreate=False)
@@ -418,14 +419,12 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the fires.active_fires table."""
     columns = [
         "id int4 NOT NULL",
+        "uuid character varying(254)",
         "biome varchar(254)",
         "view_date date",
         "satelite varchar(254)",
         "estado varchar(254)",
         "municipio varchar(254)",
-        "diasemchuva int4",
-        "precipitacao double precision",
-        "riscofogo double precision",
         "geom geometry(Point, 4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (id, biome)",

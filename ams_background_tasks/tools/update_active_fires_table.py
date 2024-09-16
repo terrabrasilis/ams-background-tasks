@@ -72,20 +72,19 @@ def update_active_fires_table(
         CREATE OR REPLACE VIEW public.raw_active_fires AS
         SELECT
             remote_data.id,
+            remote_data.uuid,
             remote_data.view_date,
             remote_data.satelite,
             remote_data.estado,
             remote_data.municipio,
-            remote_data.diasemchuva,
-            remote_data.precipitacao,
-            remote_data.riscofogo,
             remote_data.biome,
             remote_data.geom
         FROM
             dblink('hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
-                   'SELECT id, data as view_date, satelite, estado, municipio, diasemchuva, precipitacao, riscofogo, bioma, geom FROM public.focos_aqua_referencia'::text)
-        AS remote_data(id integer, view_date date, satelite character varying(254), estado character varying(254), municipio character varying(254), diasemchuva integer, precipitacao double precision, riscofogo double precision, biome character varying(254), geom geometry(Point,4674));
+                   'SELECT fid as id, uuid, data as view_date, satelite, estado, municipio, bioma, geom FROM public.focos_aqua_referencia'::text)
+        AS remote_data(id integer, uuid character varying(254), view_date date, satelite character varying(254), estado character varying(254), municipio character varying(254), biome character varying(254), geom geometry(Point,4674));
     """
+
     db = DatabaseFacade.from_url(db_url=db_url)
     db.execute(sql)
 
@@ -104,10 +103,9 @@ def update_active_fires_table(
 
     sql = f"""
         INSERT INTO {table} (
-            id, view_date, satelite, estado, municipio, diasemchuva,
-            precipitacao, riscofogo, biome, geom
+            id, uuid, view_date, satelite, estado, municipio, biome, geom
         )
-        SELECT a.id, a.view_date, a.satelite, a.estado, a.municipio, a.diasemchuva, a.precipitacao, a.riscofogo, a.biome, a.geom
+        SELECT a.id, a.uuid, a.view_date, a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
     """
