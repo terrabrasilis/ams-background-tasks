@@ -1,6 +1,47 @@
 # ams-background-tasks
 AMS Background tasks
 
+The **AMS Background Tasks** is a set of tools designed to create and update the database of the **Amazon Situation Room (AMS)**. The execution of these tools is managed by **Airflow**.
+
+In short, **Airflow** is a platform created by the community to programmatically author, schedule, and monitor workflows or DAGs. In Airflow, a **DAG** (*Directed Acyclic Graph*) is a collection of tasks that you want to run, organized in a way that reflects their relationships and dependencies. A DAG is defined in a Python script, which represents the DAG's structure (tasks and their dependencies) as code.
+
+The **DAG `ams-create-db`** is responsible for creating and updating the AMS database. This DAG consists of following tasks:
+
+1. `check-recreate-db`
+2. `create-db`
+3. `update-biome`
+4. `update-spatial-units`
+5. `update-active-fires`
+6. `update-amz-deter`
+7. `update-cer-deter`
+8. `classify-deter-by-land-use`
+9. `classify-fires-by-land-use`
+10. `finalize-classification`
+
+Each of these tasks is a Python command-line tool developed using the **Click** library.
+
+To run the DAG `ams-create-db`, three external databases are required: one for **DETER data**, another for **active fires data**, and an **auxiliary database**.
+
+From the auxiliary database, the following tables are required:
+
+- `public.lm_bioma_250`
+- `public.municipio_test`
+- `public.lml_unidade_federacao_a`
+- `cs_amz_25km`
+- `cs_amz_25km_biome`
+- `cs_amz_150km`
+- `cs_amz_150km_biome`
+- `cs_cer_25km`
+- `cs_cer_25km_biome`
+- `cs_cer_150km`
+- `cs_cer_150km_biome`
+
+These cell tables (starting with `cs_`) are created by the notebook [`update_auxiliary.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/update_auxiliary.ipynb), which uses data from the existing AMS Database.
+
+To run the environment, you need to update the `secrets.sh` and `.env` files with real values. To verify that everything is working properly locally, run the command `make install`. This will install the necessary dependencies and check the Python version.
+
+To prepare Airflow, follow the steps described in the next section.
+
 ## Airflow
 
 Below is a brief explanation about Airflow instalation. See the complete documentation [here](https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html).
