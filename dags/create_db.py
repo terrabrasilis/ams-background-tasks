@@ -185,7 +185,7 @@ with DAG(
 ) as dag:
 
     run_check_recreate_db = BranchPythonOperator(
-        task_id="ams-check-recreate-db",
+        task_id="check-recreate-db",
         python_callable=_check_recreate_db,
     )
 

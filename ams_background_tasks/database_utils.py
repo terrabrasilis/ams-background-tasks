@@ -148,6 +148,15 @@ class DatabaseFacade(BaseModel):
         cursor.close()
         return data
 
+    def fetchone(self, query):
+        logger.debug(query.strip())
+
+        cursor = self.conn.cursor()
+        cursor.execute(query)
+        data = cursor.fetchone()[0]
+        cursor.close()
+        return data
+
     def insert(self, query: str, data: Any):
         logger.debug(query.strip())
 

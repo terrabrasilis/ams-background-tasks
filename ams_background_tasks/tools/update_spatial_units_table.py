@@ -52,8 +52,6 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
     assert aux_db_url
     aux_db = DatabaseFacade.from_url(db_url=aux_db_url)
 
-    update_spatial_units_table(db=db)
-
     for index, _biome in enumerate(biome):
         assert is_valid_biome(biome=_biome)
         ignore_conflict = index
@@ -84,7 +82,6 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
 
 
 def check_count_rows(db: DatabaseFacade):
-    assert not db.count_rows(table="public.spatial_units")
     assert not db.count_rows(table="public.states")
     assert not db.count_rows(table="public.states_biome")
     assert not db.count_rows(table="public.municipalities")
@@ -93,25 +90,6 @@ def check_count_rows(db: DatabaseFacade):
     for cell in CELLS:
         assert not db.count_rows(table=f"cs_{cell}")
         assert not db.count_rows(table=f"cs_{cell}_biome")
-
-
-def update_spatial_units_table(db: DatabaseFacade):
-    """Update the public.spatial_units table."""
-    table = "public.spatial_units"
-
-    # db.truncate(table=table)
-
-    sql = f"""
-        INSERT INTO
-            {table} (id, dataname, as_attribute_name, center_lat, center_lng, description)
-        VALUES
-            (1, 'cs_150km', 'id', -5.491382969006503, -58.467185764253415, 'Célula 150x150 km²'),
-            (2, 'cs_25km', 'id', -5.510617783522636, -58.397927203480116, 'Célula 25x25 km²'),
-            (3, 'states', 'nome', -6.384962796500002, -58.97111531179317, 'Estado'),
-            (4, 'municipalities', 'nome', -6.384962796413522, -58.97111531172743, 'Município');
-    """
-
-    db.execute(sql)
 
 
 def update_states_table(

@@ -73,6 +73,9 @@ def main(db_url: str, force_recreate: bool):
     # land use
     create_land_use_table(db=db, force_recreate=force_recreate)
 
+    # municipalities group
+    create_municipalities_group_tables(db=db, force_recreate=force_recreate)
+
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the public.municipalities and public.municipalities_biome tables."""
@@ -558,9 +561,17 @@ def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
 
 def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the public.spatial_units table."""
+    schema = "public"
+
+    # spatial_units table
+    if force_recreate:
+        db.drop_table("public.spatial_units_subsets")
+        db.drop_table("public.spatial_units")
+
+    name = "spatial_units"
     db.create_table(
-        schema="public",
-        name="spatial_units",
+        schema=schema,
+        name=name,
         columns=[
             "id serial NOT NULL PRIMARY KEY",
             "dataname varchar NOT NULL UNIQUE",
@@ -571,6 +582,51 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
         ],
         force_recreate=force_recreate,
     )
+
+    table = f"{schema}.{name}"
+
+    sql = f"""
+        INSERT INTO
+            {table} (id, dataname, as_attribute_name, center_lat, center_lng, description)
+        VALUES
+            (1, 'cs_150km', 'id', -5.491382969006503, -58.467185764253415, 'Célula 150x150 km²'),
+            (2, 'cs_25km', 'id', -5.510617783522636, -58.397927203480116, 'Célula 25x25 km²'),
+            (3, 'states', 'nome', -6.384962796500002, -58.97111531179317, 'Estado'),
+            (4, 'municipalities', 'nome', -6.384962796413522, -58.97111531172743, 'Município');
+    """
+
+    db.execute(sql)
+
+    # spatial_units_subsets table
+    name = "spatial_units_subsets"
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "spatial_unit_id int4 NOT NULL",
+            "subset varchar(80) NOT NULL",
+            "FOREIGN KEY (spatial_unit_id) REFERENCES public.spatial_units (id)",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    table = f"{schema}.{name}"
+
+    sql = f"""
+        INSERT INTO
+            {table} (spatial_unit_id, subset)
+        VALUES
+            (1, 'Bioma'),
+            (2, 'Bioma'),
+            (3, 'Bioma'),
+            (4, 'Bioma'),
+            (1, 'Municípios'),
+            (2, 'Municípios');
+    """
+
+    db.execute(sql)
 
 
 def create_biome_tables(db: DatabaseFacade, force_recreate: bool = False):
@@ -722,3 +778,55 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
     """
 
     db.execute(sql=sql)
+
+
+def create_municipalities_group_tables(
+    db: DatabaseFacade, force_recreate: bool = False
+):
+    """Create the public.municipalities_group and public.municipalities_group_members tables."""
+    logger.info("creating the municipalities group tables.")
+
+    schema = "public"
+
+    if force_recreate:
+        db.drop_table(f"{schema}.municipalities_group_members")
+        db.drop_table(f"{schema}.municipalities_group")
+
+    name = "municipalities_group"
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "name varchar(150) UNIQUE",
+        ],
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["name:btree"],
+        force_recreate=force_recreate,
+    )
+
+    name = "municipalities_group_members"
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "group_id int4 NOT NULL",
+            "geocode varchar(80)",
+            "FOREIGN KEY (group_id) REFERENCES public.municipalities_group (id)",
+            "UNIQUE (group_id, geocode)",
+        ],
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["geocode:btree", "group_id:btree"],
+        force_recreate=force_recreate,
+    )
