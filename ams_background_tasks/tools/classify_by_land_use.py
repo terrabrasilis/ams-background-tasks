@@ -224,6 +224,16 @@ def process_active_fires_land_structure(
     all_data: bool,
     force_recreate: bool,
 ):
+    def _insert_into_active_fires_land_structure(
+        db: DatabaseFacade, table_prefix: str, values
+    ):
+        sql = f"""
+            INSERT INTO {table_prefix}fires_land_structure (gid, biome, geocode, land_use_id, num_pixels)
+            VALUES {','.join(values)};
+        """
+        logger.info("inserting into %sfires_land_structure", table_prefix)
+        db.execute(sql=sql, log=False)
+
     db = DatabaseFacade.from_url(db_url=db_url)
 
     spatial_units = read_spatial_units(db=db)
@@ -255,6 +265,7 @@ def process_active_fires_land_structure(
 
     fires["value"] = list(landuse_raster.sample(coord_list))
     values: list = []
+    count_values: int = 0
 
     with alive_bar(len(fires)) as progress_bar:
         for _, point in fires.iterrows():
@@ -262,19 +273,24 @@ def process_active_fires_land_structure(
                 values.append(
                     f"('{point.gid}', '{point.biome}', '{point.geocode}', {point['value'][0]}, 1)"
                 )
+                count_values += 1
+
             progress_bar()
-    logger.debug("len(values): %s", len(values))
 
-    assert len(values) > 0
+            if len(values) >= 1e5:  # optimizing
+                _insert_into_active_fires_land_structure(
+                    db=db, table_prefix=table_prefix, values=values
+                )
+                values = []
 
-    sql = f"""
-        INSERT INTO {table_prefix}fires_land_structure (gid, biome, geocode, land_use_id, num_pixels)
-        VALUES {','.join(values)};
-    """
+    if len(values) > 0:
+        _insert_into_active_fires_land_structure(
+            db=db, table_prefix=table_prefix, values=values
+        )
+        values = []
 
-    logger.info("inserting into %sfires_land_structure", table_prefix)
-
-    db.execute(sql=sql, log=False)
+    logger.debug("len(values): %s", count_values)
+    assert count_values > 0
 
 
 def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
@@ -341,6 +357,16 @@ def process_deter_land_structure(
     biome: str,
     force_recreate: bool,
 ):
+    def _insert_into_deter_land_structure(
+        db: DatabaseFacade, table_prefix: str, values
+    ):
+        sql = f"""
+            INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
+            VALUES {','.join(values)};
+        """
+        logger.info("inserting into %sdeter_land_structure", table_prefix)
+        db.execute(sql=sql, log=False)
+
     db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
@@ -365,6 +391,7 @@ def process_deter_land_structure(
     landuse_raster = rio.open(land_use_image)
 
     values: list = []
+    count_values: int = 0
 
     with alive_bar(len(deter)) as progress_bar:
         for _, row in deter.iterrows():
@@ -378,19 +405,22 @@ def process_deter_land_structure(
                     values.append(
                         f"('{row.gid}', '{row.biome}', '{row.geocode}', {count[0]}, {count[1]})"
                     )
+                    count_values += 1
             progress_bar()
 
-    logger.debug("len(values): %s", len(values))
+            if len(values) >= 1e5:  # optimizing
+                _insert_into_deter_land_structure(
+                    db=db, table_prefix=table_prefix, values=values
+                )
+                values = []
 
-    assert len(values) > 0
+    if len(values) > 0:
+        _insert_into_deter_land_structure(
+            db=db, table_prefix=table_prefix, values=values
+        )
 
-    sql = f"""
-        INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
-        VALUES {','.join(values)};
-    """
-
-    logger.info("inserting into %sdeter_land_structure", table_prefix)
-    db.execute(sql=sql, log=False)
+    logger.debug("len(values): %s", count_values)
+    assert count_values > 0
 
 
 def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):

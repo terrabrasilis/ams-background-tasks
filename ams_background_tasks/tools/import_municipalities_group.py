@@ -54,7 +54,7 @@ def main(db_url: str, municipalities_group_file: str):
         geocodes = groups[_]["geocodes"]
 
         for geocode in geocodes:
-            assert geocode in valid_geocodes, "invalid geocode '{geocode}'"
+            assert geocode in valid_geocodes, f"invalid geocode '{geocode}'"
 
         table = "public.municipalities_group"
 

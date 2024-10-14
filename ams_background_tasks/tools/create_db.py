@@ -591,8 +591,8 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
         VALUES
             (1, 'cs_150km', 'id', -5.491382969006503, -58.467185764253415, 'Célula 150x150 km²'),
             (2, 'cs_25km', 'id', -5.510617783522636, -58.397927203480116, 'Célula 25x25 km²'),
-            (3, 'states', 'nome', -6.384962796500002, -58.97111531179317, 'Estado'),
-            (4, 'municipalities', 'nome', -6.384962796413522, -58.97111531172743, 'Município');
+            (3, 'states', 'name', -6.384962796500002, -58.97111531179317, 'Estado'),
+            (4, 'municipalities', 'name', -6.384962796413522, -58.97111531172743, 'Município');
     """
 
     db.execute(sql)
@@ -623,7 +623,8 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
             (3, 'Bioma'),
             (4, 'Bioma'),
             (1, 'Municípios'),
-            (2, 'Municípios');
+            (2, 'Municípios'),
+            (4, 'Municípios');
     """
 
     db.execute(sql)
@@ -720,8 +721,10 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
         name=name,
         columns=[
             "id serial NOT NULL PRIMARY KEY",
-            "name varchar NOT NULL UNIQUE",
+            "name varchar NOT NULL",
             "group_id int4",
+            "biome varchar(254)",
+            "UNIQUE (name, biome)",
             f"FOREIGN KEY (group_id) REFERENCES {schema}.class_group (id)",
         ],
         force_recreate=False,
@@ -729,17 +732,19 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
 
     sql = f"""
         INSERT INTO
-            {schema}.{name} (id, name, group_id)
+            {schema}.{name} (id, name, group_id, biome)
             VALUES
-                (1, 'DESMATAMENTO_CR', 1),
-                (2, 'DESMATAMENTO_VEG', 1),
-                (3, 'CICATRIZ_DE_QUEIMADA', 2),
-                (4, 'DEGRADACAO', 2),
-                (5, 'CS_DESORDENADO', 3),
-                (6, 'CS_GEOMETRICO', 3),
-                (7, 'MINERACAO', 4),
-                (8, 'FOCOS', 5),
-                (9, 'RISCO', 6);
+                (1, 'DESMATAMENTO_CR', 1, 'Amazônia'),
+                (2, 'DESMATAMENTO_VEG', 1, 'Amazônia'),
+                (3, 'CICATRIZ_DE_QUEIMADA', 2, 'Amazônia'),
+                (4, 'DEGRADACAO', 2, 'Amazônia'),
+                (5, 'CS_DESORDENADO', 3, 'Amazônia'),
+                (6, 'CS_GEOMETRICO', 3, 'Amazônia'),
+                (7, 'MINERACAO', 4, 'Amazônia'),
+                (8, 'FOCOS', 5, 'Amazônia'),
+                (9, 'RISCO', 6, 'Amazônia'),
+                (10, 'DESMATAMENTO_CR', 1, 'Cerrado'),
+                (11, 'FOCOS', 5, 'Cerrado');
     """
 
     db.execute(sql=sql)
