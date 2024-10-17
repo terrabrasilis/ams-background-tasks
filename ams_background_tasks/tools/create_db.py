@@ -144,52 +144,65 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
 
     sql = """
         CREATE OR REPLACE FUNCTION public.ams_get_municipalities(
-            clsname character varying,
-            startdate date,
-            enddate date,
-            publish_date date,
-            land_use_ids integer[],
-            biomes character varying[])
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, biome character varying) 
+                clsname character varying,
+                startdate date,
+                enddate date,
+                publish_date date,
+                land_use_ids integer[],
+                biomes character varying[],
+                municipality_group_name character varying)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
             ROWS 1000
+
         AS $BODY$
-            BEGIN
-                RETURN QUERY
-                SELECT 
-                    mun.suid AS suid, 
-                    mun.name AS name, 
-                    mun.geometry AS geometry, 
-                    mlu_j.classname AS classname, 
-                    mlu_j.date AS date, 
-                    COALESCE(mlu_j.perc, 0) AS percentage, 
-                    COALESCE(mlu_j.total, 0) AS area, 
-                    COALESCE(mlu_j.counts, 0) AS counts,
-                    mlu_j.biome
-                FROM public."municipalities" mun
-                INNER JOIN (
-                    SELECT 
-                        mlu.suid, 
-                        mlu.classname, 
-                        MAX(mlu.date) AS date, 
-                        SUM(mlu.percentage) AS perc, 
-                        SUM(mlu.area) AS total, 
-                        SUM(mlu.counts) AS counts,
-                        mlu.biome
-                    FROM public."municipalities_land_use" mlu
-                    WHERE
-                        (mlu.date <= publish_date OR 'AF' = clsname)
-                        AND mlu.land_use_id = ANY (land_use_ids)
-                        AND mlu.classname = clsname
-                        AND mlu.date > enddate
-                        AND mlu.date <= startdate
-                        AND mlu.biome = ANY (biomes)
-                    GROUP BY mlu.suid, mlu.classname, mlu.biome
-                ) AS mlu_j
-                ON mun.suid = mlu_j.suid;
-            END;
+                    BEGIN
+                        RETURN QUERY
+                        SELECT 
+                            mun.suid AS suid, 
+                            mun.name AS name, 
+                            mun.geometry AS geometry, 
+                            mlu_j.classname AS classname, 
+                            mlu_j.date AS date, 
+                            COALESCE(mlu_j.perc, 0) AS percentage, 
+                            COALESCE(mlu_j.total, 0) AS area, 
+                            COALESCE(mlu_j.counts, 0) AS counts
+                        FROM public."municipalities" mun
+                        INNER JOIN (
+                            SELECT 
+                                mlu.suid, 
+                                mlu.classname, 
+                                MAX(mlu.date) AS date, 
+                                SUM(mlu.percentage) AS perc, 
+                                SUM(mlu.area) AS total, 
+                                SUM(mlu.counts) AS counts
+                            FROM public."municipalities_land_use" mlu
+                            WHERE
+                                (mlu.date <= publish_date OR 'AF' = clsname)
+                                AND mlu.land_use_id = ANY (land_use_ids)
+                                AND mlu.classname = clsname
+                                AND mlu.date > enddate
+                                AND mlu.date <= startdate
+                                AND ('ALL' = ANY (biomes) OR mlu.biome = ANY (biomes))
+                                AND (municipality_group_name = 'ALL' OR mlu.geocode =
+                                    ANY(
+                                        SELECT geocode
+                                        FROM public.municipalities_group_members mgm
+                                        WHERE mgm.group_id = (
+                                              SELECT mg.id
+                                              FROM public.municipalities_group mg
+                                              WHERE mg.name=municipality_group_name
+                                        )
+                                   )   
+                               )
+                            GROUP BY mlu.suid, mlu.classname
+                        ) AS mlu_j
+                        ON mun.suid = mlu_j.suid
+                        ORDER BY COALESCE(mlu_j.perc, 0) DESC;
+                    END;
+        
         $BODY$;
     """
 
@@ -253,51 +266,62 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
 
     sql = """
         CREATE OR REPLACE FUNCTION public.ams_get_states(
-            clsname character varying,
-            startdate date,
-            enddate date,
-            publish_date date,
-            land_use_ids integer[],
-            biomes character varying[])
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, biome character varying) 
+                clsname character varying,
+                startdate date,
+                enddate date,
+                publish_date date,
+                land_use_ids integer[],
+                biomes character varying[],
+                municipality_group_name character varying)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
             ROWS 1000
 
         AS $BODY$
-            BEGIN
-                RETURN QUERY
-                SELECT
-                    sta.suid AS suid, 
-                    sta.name AS name, 
-                    sta.geometry AS geometry, 
-                    slu_j.classname AS classname, 
-                    slu_j.date AS date, 
-                    COALESCE(slu_j.perc, 0) AS percentage, 
-                    COALESCE(slu_j.total, 0) AS area, 
-                    COALESCE(slu_j.counts, 0) AS counts,
-                    slu_j.biome
-                FROM public."states" sta
-                INNER JOIN (
-                    SELECT slu.suid, 
-                           slu.classname, 
-                           MAX(slu.date) AS date, 
-                           SUM(slu.percentage) AS perc, 
-                           SUM(slu.area) AS total, 
-                           SUM(slu.counts) AS counts,
-                           slu.biome
-                    FROM public."states_land_use" slu
-                    WHERE (slu.date <= publish_date OR 'AF' = clsname)
-                        AND slu.land_use_id = ANY (land_use_ids)
-                        AND slu.classname = clsname
-                        AND slu.date > enddate
-                        AND slu.date <= startdate
-                        AND slu.biome = ANY (biomes)		
-                    GROUP BY slu.suid, slu.classname, slu.biome
-                ) AS slu_j
-                ON sta.suid = slu_j.suid;
-            END;
+                    BEGIN
+                        RETURN QUERY
+                        SELECT
+                            sta.suid AS suid, 
+                            sta.name AS name, 
+                            sta.geometry AS geometry, 
+                            slu_j.classname AS classname, 
+                            slu_j.date AS date, 
+                            COALESCE(slu_j.perc, 0) AS percentage, 
+                            COALESCE(slu_j.total, 0) AS area, 
+                            COALESCE(slu_j.counts, 0) AS counts
+                        FROM public."states" sta
+                        INNER JOIN (
+                            SELECT slu.suid, 
+                                   slu.classname, 
+                                   MAX(slu.date) AS date, 
+                                   SUM(slu.percentage) AS perc, 
+                                   SUM(slu.area) AS total, 
+                                   SUM(slu.counts) AS counts
+                            FROM public."states_land_use" slu
+                            WHERE (slu.date <= publish_date OR 'AF' = clsname)
+                                AND slu.land_use_id = ANY (land_use_ids)
+                                AND slu.classname = clsname
+                                AND slu.date > enddate
+                                AND slu.date <= startdate
+                                AND ('ALL' = ANY (biomes) OR slu.biome = ANY (biomes))
+                                AND (municipality_group_name = 'ALL' OR slu.geocode =
+                                    ANY(
+                                        SELECT geocode
+                                        FROM public.municipalities_group_members mgm
+                                        WHERE mgm.group_id = (
+                                              SELECT mg.id
+                                              FROM public.municipalities_group mg
+                                              WHERE mg.name=municipality_group_name
+                                        )
+                                   )   
+                               )
+                            GROUP BY slu.suid, slu.classname
+                        ) AS slu_j
+                        ON sta.suid = slu_j.suid
+                        ORDER BY COALESCE(slu_j.perc, 0) DESC;
+                    END;
 
         $BODY$;
     """
@@ -371,47 +395,60 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 enddate date,
                 publish_date date,
                 land_use_ids integer[],
-                biomes character varying[])
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, biome character varying) 
+                biomes character varying[],
+                municipality_group_name character varying
+        )
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
             ROWS 1000
 
         AS $BODY$
-                BEGIN
-                        RETURN QUERY
-                        SELECT
-                                cel.suid AS suid, 
-                                cel.id AS name, 
-                                cel.geometry AS geometry, 
-                                cls_j.classname AS classname, 
-                                cls_j.date AS date, 
-                                COALESCE(cls_j.perc, 0) AS percentage, 
-                                COALESCE(cls_j.total, 0) AS area, 
-                                COALESCE(cls_j.counts, 0) AS counts,
-                                cls_j.biome
-                        FROM public."cs_{cell}" cel
-                        LEFT JOIN (
-                                SELECT cls.suid, 
-                                       cls.classname, 
-                                       MAX(cls.date) AS date, 
-                                       SUM(cls.percentage) AS perc, 
-                                       SUM(cls.area) AS total, 
-                                       SUM(cls.counts) AS counts,
-                                       cls.biome
-                                FROM public."cs_{cell}_land_use" cls
-                                WHERE (cls.date <= publish_date OR 'AF' = clsname)
-                                    AND cls.land_use_id = ANY (land_use_ids)
-                                    AND cls.classname = clsname
-                                    AND cls.date > enddate
-                                    AND cls.date <= startdate
-                                    AND cls.biome = ANY (biomes)
-                                GROUP BY cls.suid, cls.classname, cls.biome
-                        ) AS cls_j
-                        ON cel.suid = cls_j.suid;
-                END;
-                
+                        BEGIN
+                                RETURN QUERY
+                                SELECT
+                                        cel.suid AS suid, 
+                                        cel.id AS name, 
+                                        cel.geometry AS geometry, 
+                                        cls_j.classname AS classname, 
+                                        cls_j.date AS date, 
+                                        COALESCE(cls_j.perc, 0) AS percentage, 
+                                        COALESCE(cls_j.total, 0) AS area, 
+                                        COALESCE(cls_j.counts, 0) AS counts
+                                FROM public."cs_{cell}" cel
+                                LEFT JOIN (
+                                        SELECT cls.suid, 
+                                               cls.classname, 
+                                               MAX(cls.date) AS date, 
+                                               SUM(cls.percentage) AS perc, 
+                                               SUM(cls.area) AS total, 
+                                               SUM(cls.counts) AS counts
+                                        FROM public."cs_{cell}_land_use" cls
+                                        WHERE (cls.date <= publish_date OR 'AF' = clsname)
+                                            AND cls.land_use_id = ANY (land_use_ids)
+                                            AND cls.classname = clsname
+                                            AND cls.date > enddate
+                                            AND cls.date <= startdate
+                                            AND ('ALL' = ANY (biomes) OR cls.biome = ANY (biomes))
+                                            AND (municipality_group_name = 'ALL' OR cls.geocode =
+                                                ANY(
+                                                    SELECT geocode
+                                                    FROM public.municipalities_group_members mgm
+                                                    WHERE mgm.group_id = (
+                                                        SELECT mg.id
+                                                        FROM public.municipalities_group mg
+                                                        WHERE mg.name=municipality_group_name
+                                                    )
+                                                )   
+                                            )
+
+                                        GROUP BY cls.suid, cls.classname
+                                ) AS cls_j
+                                ON cel.suid = cls_j.suid
+                                ORDER BY COALESCE(cls_j.perc, 0) DESC;
+                        END;
+        
         $BODY$;
     """
 
