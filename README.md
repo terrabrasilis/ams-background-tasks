@@ -37,7 +37,28 @@ From the auxiliary database, the following tables are required:
 
 These cell tables (starting with `cs_`) are created by the notebook [`update_auxiliary.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/update_auxiliary.ipynb), which uses data from the existing AMS Database.
 
-To run the environment, you need to update the `secrets.sh` and `.env` files with real values. To verify that everything is working properly locally, run the command `make install`. This will install the necessary dependencies and check the Python version. Run the command `./secrets.sh` to create or update the secret variables.
+To run the environment, you need to update the `secrets.sh` and `.env` files with real values.
+
+From the .env file, the following variables must be defined:
+
+- `AIRFLOW_UID`: see [Setting the right Airflow user](https://github.com/terrabrasilis/ams-background-tasks?tab=readme-ov-file#setting-the-right-airflow-user). Example: AIRFLOW_UID=1000
+- `AMS_FORCE_RECREATE_DB`: the expected values are 0 or 1. When enabled, it forces the recreation of the AMS database. Example: AMS_FORCE_RECREATE_DB=1
+- `AMS_ALL_DATA_DB`: the expected values are 0 or 1. When enabled, it updates all data, including historical data. Example: AMS_ALL_DATA_DB=1
+- `AMS_BIOMES`: a list of biomes separated by semicolons. Example: AMS_BIOMES="AmazÃ´nia;Cerrado;".
+- `_AIRFLOW_WWW_USER_USERNAME`: the airflow username. Example: _AIRFLOW_WWW_USER_USERNAME=airflow
+- `_AIRFLOW_WWW_USER_PASSWORD`: the airflow password. Example: _AIRFLOW_WWW_USER_PASSWORD=airflow
+
+The secrets.sh file defines the databases access information.
+
+- `AMS Database`: echo "postgresql://ams:postgres@192.168.0.51:5432/AMS" > secrets/ams_db_url.txt
+- `Auxiliary Database`: echo "postgresql://ams:postgres@192.168.0.51:5432/auxiliary" > secrets/ams_aux_db_url.txt
+- `Active Fires Database`: echo "postgresql://ams:postgres@192.168.0.51:5432/raw_active_fires2" > secrets/ams_af_db_url.txt
+- `Deter Database - Amazônia`: echo "postgresql://ams:postgres@192.168.0.51:5432/DETER-B" > secrets/ams_amz_deter_b_db_url.txt
+- `Deter Database - Cerrado`: echo "postgresql://ams:postgres@192.168.0.51:5432/deter_cerrado_nb" > secrets/ams_cer_deter_b_db_url.txt
+
+Additionally, it is necessary to place the land use files in the `land_use` directory. The naming convention for the files is: `{BIOMA}_land_use`.tif (e.g., `Amazônia_land_use.tif`, `Cerrado_land_use.tif`, and so on).
+
+To verify that everything is working properly locally, run the command `make install`. This will install the necessary dependencies and check the Python version. Run the command `./secrets.sh` to create or update the secret variables.
 
 To prepare Airflow, follow the steps described in the next section.
 
