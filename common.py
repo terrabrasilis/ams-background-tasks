@@ -20,5 +20,4 @@ def get_conn_secrets_uri(names: list):
             env[name] = url
         else:
             env[name] = url.split("?__extra__=")[0]
-        print("Connection secret: " + env[name])
     return env
