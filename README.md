@@ -35,7 +35,12 @@ From the auxiliary database, the following tables are required:
 - `cs_cer_150km`
 - `cs_cer_150km_biome`
 
-These cell tables (starting with `cs_`) are created by the notebook [`update_auxiliary.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/update_auxiliary.ipynb), which uses data from the existing AMS Database.
+These cell tables (starting with `cs_`) are created by the notebook [`update_auxiliary.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/update_auxiliary.ipynb), which uses data from the existing AMS Database. 
+
+
+```bash
+$ jupyter-notebook notebooks/update_auxiliary.ipynb
+```
 
 To run the environment, you need to update the `secrets.sh` and `.env` files with real values. To verify that everything is working properly locally, run the command `make install`. This will install the necessary dependencies and check the Python version. Run the command `./secrets.sh` to create or update the secret variables.
 
