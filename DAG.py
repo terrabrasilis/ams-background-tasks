@@ -40,7 +40,7 @@ def _get_biomes():
     return " ".join(
         [
             f"--biome={_}"
-            for _ in Variable.get(name="AMS_BIOMES").split(";")
+            for _ in Variable.get("AMS_BIOMES").split(";")
             if len(_) > 0
         ]
     )
@@ -68,7 +68,6 @@ def check_variables():
 
    if not AMS_BIOMES: 
        raise Exception("Missing AMS_BIOMES airflow variable.")
-   
    
    return True
 
