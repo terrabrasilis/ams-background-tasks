@@ -58,6 +58,9 @@ Docker Compose v2.14.0 or newer.
 
 Before starting Airflow for the first time, you need to prepare your environment, i.e. create the necessary files, directories and initialize the database.
 
+
+
+
 #### Setting the right Airflow user
 
 On Linux, the quick-start needs to know your host user id and needs to have group id set to 0. Otherwise the files created in *dags*, *logs* and *plugins* will be created with root user ownership. You have to make sure to configure them for the docker-compose:
@@ -93,3 +96,38 @@ The best way to do this is to:
 2. Remove the entire directory where you downloaded the *docker-compose.yaml* file ```rm -rf '<DIRECTORY>'```.
 
 3. Run through this guide from the very beginning, starting by re-downloading the *docker-compose.yaml* file.
+
+
+### Initializing production airflow connections and variables
+
+To run over an Airflow instance, it's necessary to setup the following airflow configurations:
+
+#### Connections:
+
+Setup this connections ids:
+1)  AMS_AF_DB_URL (Raw fires database, ex: raw_fires_data)
+2)  AMS_AUX_DB_URL (Auxiliary database, ex: auxiliary)
+3)  AMS_AMZ_DETER_B_DB_URL (Deter Amazonia database, ex: deter_amazonia_nb)
+4) AMS_CER_DETER_B_DB_URL (Deter Cerrado database, ex: deter_amazonia_nb)
+5)  AMS_DB_URL (AMS ouput database, ex: ams_new)
+
+
+Example how to setup the connection fields:
+
+- Connection Id: AMS_AF_DB_URL (Id used by DAG)
+- Connection Type: Postgres
+- Host: 192.168.1.9 (Database host or IP)
+- Database: raw_fires_data (Database name)
+- Login: ams (Database username)
+- Password: ams (Database password)
+- Port: 5432 (Database port) 
+
+#### Variables:
+
+Setup the following variables:
+
+1) AMS_ALL_DATA_DB (0 or 1)
+
+2) AMS_BIOMES (Values separated by ;. ex: Amazônia;Cerrado;Pantanal)
+
+3) AMS_FORCE_RECREATE_DB (0 or 1)
