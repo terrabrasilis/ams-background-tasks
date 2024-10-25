@@ -6,16 +6,19 @@ In short, **Airflow** is a platform created by the community to programmatically
 
 The **DAG `ams-create-db`** is responsible for creating and updating the AMS database. This DAG consists of following tasks:
 
-1. `check-recreate-db`
-2. `create-db`
-3. `update-biome`
-4. `update-spatial-units`
-5. `update-active-fires`
-6. `update-amz-deter`
-7. `update-cer-deter`
-8. `classify-deter-by-land-use`
-9. `classify-fires-by-land-use`
-10. `finalize-classification`
+1. `check-variables`
+2. `update-environment`
+3. `check-recreate-db`
+4. `check-recreate-db`
+5. `create-db`
+6. `update-biome`
+7. `update-spatial-units`
+8. `update-active-fires`
+9. `update-amz-deter`
+10. `update-cer-deter`
+11. `classify-deter-by-land-use`
+12. `classify-fires-by-land-use`
+13. `finalize-classification`
 
 Each of these tasks is a Python command-line tool developed using the **Click** library.
 
@@ -42,61 +45,10 @@ These cell tables (starting with `cs_`) are created by the notebook [`update_aux
 $ jupyter-notebook notebooks/update_auxiliary.ipynb
 ```
 
-To run the environment, you need to update the `secrets.sh` and `.env` files with real values. To verify that everything is working properly locally, run the command `make install`. This will install the necessary dependencies and check the Python version. Run the command `./secrets.sh` to create or update the secret variables.
+## Run on Production Environment
 
-To prepare Airflow, follow the steps described in the next section.
-
-## Airflow
-
-Below is a brief explanation about Airflow instalation. See the complete documentation [here](https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html).
-
-### Requirements
-
-Docker Compose v2.14.0 or newer.
-
-### Initializing environment
-
-Before starting Airflow for the first time, you need to prepare your environment, i.e. create the necessary files, directories and initialize the database.
-
-
-
-
-#### Setting the right Airflow user
-
-On Linux, the quick-start needs to know your host user id and needs to have group id set to 0. Otherwise the files created in *dags*, *logs* and *plugins* will be created with root user ownership. You have to make sure to configure them for the docker-compose:
-
-```bash
-$ echo -e "AIRFLOW_UID=$(id -u)" > .env
-```
-
-#### Initialize the database
-
-You need to run database migrations and create the first user account. To do this, run.
-
-```bash
-$ docker compose up airflow-init
-```
-
-#### Running
-
-Now you can start all services:
-
-```bash
-$ docker compose up
-```
-
-#### Cleaning-up the environment
-
-The docker-compose environment we have prepared is a “quick-start” one. It was not designed to be used in production and it has a number of caveats - one of them being that the best way to recover from any problem is to clean it up and restart from scratch.
-
-The best way to do this is to:
-
-1. Run ```docker compose down --volumes --remove-orphans``` command in the directory you downloaded the *docker-compose.yaml* file.
-
-2. Remove the entire directory where you downloaded the *docker-compose.yaml* file ```rm -rf '<DIRECTORY>'```.
-
-3. Run through this guide from the very beginning, starting by re-downloading the *docker-compose.yaml* file.
-
+This DAG is made to run from "DagBag", this means that all the dag files are inside the root folder.
+Assuming that the Airflow environment is using 
 
 ### Initializing production airflow connections and variables
 
@@ -131,3 +83,5 @@ Setup the following variables:
 2) AMS_BIOMES (Values separated by ;. ex: Amazônia;Cerrado;Pantanal)
 
 3) AMS_FORCE_RECREATE_DB (0 or 1)
+
+
