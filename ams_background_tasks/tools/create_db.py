@@ -150,7 +150,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 publish_date date,
                 land_use_ids integer[],
                 biomes character varying[],
-                municipality_group_name character varying)
+                municipality_group_name character varying,
+	            geocodes character varying[])
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
@@ -195,7 +196,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                               FROM public.municipalities_group mg
                                               WHERE mg.name=municipality_group_name
                                         )
-                                   )   
+                                   )
+                                   OR mlu.geocode = ANY(geocodes)   
                                )
                             GROUP BY mlu.suid, mlu.classname
                         ) AS mlu_j
@@ -272,7 +274,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 publish_date date,
                 land_use_ids integer[],
                 biomes character varying[],
-                municipality_group_name character varying)
+                municipality_group_name character varying,
+	            geocodes character varying[])
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
@@ -315,7 +318,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                               FROM public.municipalities_group mg
                                               WHERE mg.name=municipality_group_name
                                         )
-                                   )   
+                                   )
+                                   OR slu.geocode = ANY(geocodes)
                                )
                             GROUP BY slu.suid, slu.classname
                         ) AS slu_j
@@ -396,7 +400,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 publish_date date,
                 land_use_ids integer[],
                 biomes character varying[],
-                municipality_group_name character varying
+                municipality_group_name character varying,
+	            geocodes character varying[]
         )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
@@ -440,7 +445,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                         FROM public.municipalities_group mg
                                                         WHERE mg.name=municipality_group_name
                                                     )
-                                                )   
+                                                )
+                                                OR cls.geocode = ANY(geocodes)   
                                             )
 
                                         GROUP BY cls.suid, cls.classname
