@@ -167,3 +167,6 @@ cython_debug/
 #.idea/
 
 *.bkp
+
+#project files
+land_use/*.tif
