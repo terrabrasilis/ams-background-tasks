@@ -29,16 +29,20 @@ From the auxiliary database, the following tables are required:
 - `public.lm_bioma_250`
 - `public.municipio_test`
 - `public.lml_unidade_federacao_a`
+- `cs_amz_5km`
+- `cs_amz_5km_biome`
 - `cs_amz_25km`
 - `cs_amz_25km_biome`
 - `cs_amz_150km`
 - `cs_amz_150km_biome`
+- `cs_cer_5km`
+- `cs_cer_5km_biome`
 - `cs_cer_25km`
 - `cs_cer_25km_biome`
 - `cs_cer_150km`
 - `cs_cer_150km_biome`
 
-These cell tables (starting with `cs_`) are created by the notebook [`update_auxiliary.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/update_auxiliary.ipynb), which uses data from the existing AMS Database. 
+The cell tables (prefixed with `cs_`), except for the 5km ones, are created by the notebook [`update_auxiliary.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/update_auxiliary.ipynb), which uses data from the existing AMS Database. The tables `cs_*_5km*`, however, are created by the notebook [`import_cells_from_shapefile.ipynb`](https://github.com/terrabrasilis/ams-background-tasks/blob/main/notebooks/import_cells_from_shapefile.ipynb), which allows for importing cells into the auxiliary database from a shapefile. If the cell tables are not defined in the auxiliary database, it is necessary to run these notebooks. The shapefile containing the 5km cells is attached to [`issue #26`](https://github.com/terrabrasilis/ams-background-tasks/issues/26).
 
 ```bash
 $ jupyter-notebook notebooks/update_auxiliary.ipynb
