@@ -1,32 +1,32 @@
 """A DAG to create the AMS database."""
 
-import os, sys
-
+import os
 import pathlib
+import sys
 
 project_dir = str(pathlib.Path(__file__).parent.resolve().absolute())
 
 # Loading project dir files
 sys.path.append(project_dir)
 
-from common import *
-
 import random
-
 from datetime import datetime
 from time import sleep
 
 from airflow import DAG
 from airflow.decorators import task
+from airflow.hooks.base import BaseHook
 from airflow.models import Variable
+from airflow.models.connection import Connection
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import BranchPythonOperator, PythonVirtualenvOperator, ShortCircuitOperator
-from airflow.models import Variable
-from airflow.hooks.base import BaseHook
+from airflow.operators.python import (
+    BranchPythonOperator,
+    PythonVirtualenvOperator,
+    ShortCircuitOperator,
+)
 
-from airflow.models.connection import Connection
-
+from common import *
 
 land_use_dir = project_dir + "/land_use"
 
@@ -36,63 +36,64 @@ AMS_ALL_DATA_DB = None
 AMS_FORCE_RECREATE_DB = None
 AMS_BIOMES = None
 
+
 def _sleep():
     sleep(random.random() * 20)
 
 
 def _get_biomes():
     return " ".join(
-        [
-            f"--biome={_}"
-            for _ in Variable.get("AMS_BIOMES").split(";")
-            if len(_) > 0
-        ]
+        [f"--biome={_}" for _ in Variable.get("AMS_BIOMES").split(";") if len(_) > 0]
     )
+
 
 @task(task_id="update-environment")
 def update_environment():
-    bash_command = f"pip install "+ project_dir    
+    bash_command = f"pip install " + project_dir
 
     return BashOperator(
-        task_id="update-environment",
-        bash_command=bash_command
+        task_id="update-environment", bash_command=bash_command
     ).execute({})
 
 
 def check_variables():
-    
-    AMS_ALL_DATA_DB = Variable.get('AMS_ALL_DATA_DB')
-    AMS_FORCE_RECREATE_DB = Variable.get('AMS_FORCE_RECREATE_DB')
-    AMS_BIOMES = Variable.get('AMS_BIOMES')
-   
-    ams_db_url = BaseHook.get_connection('AMS_DB_URL')
-    ams_aux_db_url = BaseHook.get_connection('AMS_AUX_DB_URL')
-    ams_af_db_url = BaseHook.get_connection('AMS_AF_DB_URL')
-    ams_amz_deter_b_db_url = BaseHook.get_connection('AMS_AMZ_DETER_B_DB_URL')
-    ams_cer_deter_b_db_url = BaseHook.get_connection('AMS_CER_DETER_B_DB_URL')
 
-    if not ams_db_url and not ams_db_url.get_uri(): 
+    AMS_ALL_DATA_DB = Variable.get("AMS_ALL_DATA_DB")
+    AMS_FORCE_RECREATE_DB = Variable.get("AMS_FORCE_RECREATE_DB")
+    AMS_BIOMES = Variable.get("AMS_BIOMES")
+
+    ams_db_url = BaseHook.get_connection("AMS_DB_URL")
+    ams_aux_db_url = BaseHook.get_connection("AMS_AUX_DB_URL")
+    ams_af_db_url = BaseHook.get_connection("AMS_AF_DB_URL")
+    ams_amz_deter_b_db_url = BaseHook.get_connection("AMS_AMZ_DETER_B_DB_URL")
+    ams_cer_deter_b_db_url = BaseHook.get_connection("AMS_CER_DETER_B_DB_URL")
+
+    if not ams_db_url and not ams_db_url.get_uri():
         raise Exception("Missing ams_db_url airflow conection configuration.")
-    
-    if not ams_aux_db_url and not ams_aux_db_url.get_uri(): 
+
+    if not ams_aux_db_url and not ams_aux_db_url.get_uri():
         raise Exception("Missing ams_aux_db_url airflow conection configuration.")
 
-    if not ams_af_db_url and not ams_af_db_url.get_uri(): 
+    if not ams_af_db_url and not ams_af_db_url.get_uri():
         raise Exception("Missing ams_af_db_url airflow conection configuration.")
-    
-    if not ams_amz_deter_b_db_url and not ams_amz_deter_b_db_url.get_uri(): 
-        raise Exception("Missing ams_amz_deter_b_db_url airflow conection configuration.")
-    
-    if not ams_cer_deter_b_db_url and not ams_cer_deter_b_db_url.get_uri(): 
-        raise Exception("Missing ams_cer_deter_b_db_url airflow conection configuration.")
 
-    if not AMS_ALL_DATA_DB: 
+    if not ams_amz_deter_b_db_url and not ams_amz_deter_b_db_url.get_uri():
+        raise Exception(
+            "Missing ams_amz_deter_b_db_url airflow conection configuration."
+        )
+
+    if not ams_cer_deter_b_db_url and not ams_cer_deter_b_db_url.get_uri():
+        raise Exception(
+            "Missing ams_cer_deter_b_db_url airflow conection configuration."
+        )
+
+    if not AMS_ALL_DATA_DB:
         raise Exception("Missing AMS_ALL_DATA_DB airflow variable.")
-        
-    if not AMS_FORCE_RECREATE_DB: 
+
+    if not AMS_FORCE_RECREATE_DB:
         raise Exception("Missing AMS_FORCE_RECREATE_DB airflow variable.")
 
-    if not AMS_BIOMES: 
+    if not AMS_BIOMES:
         raise Exception("Missing AMS_BIOMES airflow variable.")
 
     return True
@@ -189,7 +190,7 @@ def classify_deter_by_land_use():
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
         " --indicator='deter'"
-        " --land-use-dir="+land_use_dir
+        " --land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
@@ -251,7 +252,7 @@ def _check_recreate_db():
 with DAG(
     DAG_KEY, default_args=default_args, schedule_interval=None, catchup=False
 ) as dag:
-    
+
     run_check_variables = ShortCircuitOperator(
         task_id="check-variables",
         provide_context=True,
@@ -279,14 +280,13 @@ with DAG(
     run_classify_active_fires = classify_active_fires_by_land_use()
     run_finalize_classification = finalize_classification()
 
-
-    #RUNS
+    # RUNS
 
     run_check_variables >> run_update_environment
 
-    run_update_environment >> run_check_recreate_db    
+    run_update_environment >> run_check_recreate_db
 
-    run_check_recreate_db >> [run_create_db, run_skip]    
+    run_check_recreate_db >> [run_create_db, run_skip]
 
     run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
     run_skip >> run_join

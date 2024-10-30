@@ -9,7 +9,12 @@ import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import CELL_25KM, CELL_150KM, is_valid_cell
+from ams_background_tasks.tools.common import (
+    CELL_5KM,
+    CELL_25KM,
+    CELL_150KM,
+    is_valid_cell,
+)
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -51,6 +56,9 @@ def main(db_url: str, force_recreate: bool):
 
     create_municipalities_table(db=db, force_recreate=force_recreate)
     create_municipalities_function(db=db, force_recreate=force_recreate)
+
+    create_cell_table(db=db, cell=CELL_5KM, force_recreate=force_recreate)
+    create_cell_function(db=db, cell=CELL_5KM, force_recreate=force_recreate)
 
     create_cell_table(db=db, cell=CELL_25KM, force_recreate=force_recreate)
     create_cell_function(db=db, cell=CELL_25KM, force_recreate=force_recreate)
@@ -358,6 +366,13 @@ def create_cell_table(db: DatabaseFacade, cell: str, force_recreate: bool):
         columns=columns,
     )
 
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["id:btree", "geometry:gist"],
+        force_recreate=force_recreate,
+    )
+
     name = f"cs_{cell}_biome"
     columns = [
         "bid serial NOT NULL PRIMARY KEY",
@@ -635,7 +650,8 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
             (1, 'cs_150km', 'id', -5.491382969006503, -58.467185764253415, 'Célula 150x150 km²'),
             (2, 'cs_25km', 'id', -5.510617783522636, -58.397927203480116, 'Célula 25x25 km²'),
             (3, 'states', 'name', -6.384962796500002, -58.97111531179317, 'Estado'),
-            (4, 'municipalities', 'name', -6.384962796413522, -58.97111531172743, 'Município');
+            (4, 'municipalities', 'name', -6.384962796413522, -58.97111531172743, 'Município'),
+            (5, 'cs_5km', 'id', -5.510617783522636, -58.397927203480116, 'Célula 5x5 km²');
     """
 
     db.execute(sql)
@@ -667,7 +683,8 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
             (4, 'Bioma'),
             (1, 'Municípios'),
             (2, 'Municípios'),
-            (4, 'Municípios');
+            (4, 'Municípios'),
+            (5, 'Municípios');
     """
 
     db.execute(sql)

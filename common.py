@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+
 from airflow.hooks.base import BaseHook
 
 default_args = {
@@ -11,11 +12,12 @@ default_args = {
     "catchup": False,
 }
 
+
 def get_conn_secrets_uri(names: list):
     """Return a dict with airflow connection secrets uri."""
     env = {}
     for name in names:
-        url = BaseHook.get_connection(name).get_uri()        
+        url = BaseHook.get_connection(name).get_uri()
         if "?__extra__=" not in url:
             env[name] = url
         else:

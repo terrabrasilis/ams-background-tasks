@@ -71,6 +71,10 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
             # truncate=truncate,
         )
         for cell in CELLS:
+            assert aux_db.table_exist(
+                schema="public", table=f"cs_{get_biome_acronym(biome=_biome)}_{cell}"
+            )
+
             update_cells_table(
                 db=db,
                 aux_db=aux_db,
@@ -88,6 +92,7 @@ def check_count_rows(db: DatabaseFacade):
     assert not db.count_rows(table="public.municipalities_biome")
 
     for cell in CELLS:
+        assert db.table_exist(schema="public", table=f"cs_{cell}")
         assert not db.count_rows(table=f"cs_{cell}")
         assert not db.count_rows(table=f"cs_{cell}_biome")
 

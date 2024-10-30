@@ -153,7 +153,9 @@ class DatabaseFacade(BaseModel):
 
         cursor = self.conn.cursor()
         cursor.execute(query)
-        data = cursor.fetchone()[0]
+        data = cursor.fetchone()
+        if data:
+            data = data[0]
         cursor.close()
         return data
 
@@ -194,8 +196,15 @@ class DatabaseFacade(BaseModel):
             {where};
         """
 
-        logger.debug(query)
+        return self.fetchone(query=query)
 
-        cursor = self.conn.cursor()
-        cursor.execute(query)
-        return cursor.fetchone()[0]
+    def table_exist(self, table: str, schema: str):
+        query = f"""
+            SELECT EXISTS (
+	            SELECT 1 
+	            FROM information_schema.tables 
+	            WHERE table_schema = '{schema}' 
+	            AND table_name = '{table}'
+            );
+        """
+        return self.fetchone(query=query)
