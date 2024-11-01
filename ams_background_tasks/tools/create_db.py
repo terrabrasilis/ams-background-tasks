@@ -159,7 +159,9 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	            geocodes character varying[])
+	            geocodes character varying[],
+                isAuthenticated boolean DEFAULT False                
+            )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
@@ -167,7 +169,19 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
             ROWS 1000
 
         AS $BODY$
+                    DECLARE
+                        effective_publish_date date;
+
                     BEGIN
+                        IF isAuthenticated THEN
+                            effective_publish_date := CURRENT_DATE;
+                        ELSE
+                            SELECT MAX(dpd.date)
+                            INTO effective_publish_date
+                            FROM deter.deter_publish_date dpd
+                            WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                        END IF;
+
                         RETURN QUERY
                         SELECT 
                             mun.suid AS suid, 
@@ -189,7 +203,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.counts) AS counts
                             FROM public."municipalities_land_use" mlu
                             WHERE
-                                (mlu.date <= publish_date OR 'AF' = clsname)
+                                (mlu.date <= effective_publish_date OR 'AF' = clsname)
                                 AND mlu.land_use_id = ANY (land_use_ids)
                                 AND mlu.classname = clsname
                                 AND mlu.date > enddate
@@ -283,7 +297,9 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	            geocodes character varying[])
+	            geocodes character varying[],
+                isAuthenticated boolean DEFAULT False                
+            )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
             COST 100
@@ -291,7 +307,20 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
             ROWS 1000
 
         AS $BODY$
+                    DECLARE
+                        effective_publish_date date;
+
                     BEGIN
+
+                        IF isAuthenticated THEN
+                            effective_publish_date := CURRENT_DATE;
+                        ELSE
+                            SELECT MAX(dpd.date)
+                            INTO effective_publish_date
+                            FROM deter.deter_publish_date dpd
+                            WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                        END IF;
+
                         RETURN QUERY
                         SELECT
                             sta.suid AS suid, 
@@ -311,7 +340,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    SUM(slu.area) AS total, 
                                    SUM(slu.counts) AS counts
                             FROM public."states_land_use" slu
-                            WHERE (slu.date <= publish_date OR 'AF' = clsname)
+                            WHERE (slu.date <= effective_publish_date OR 'AF' = clsname)
                                 AND slu.land_use_id = ANY (land_use_ids)
                                 AND slu.classname = clsname
                                 AND slu.date > enddate
@@ -416,7 +445,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	            geocodes character varying[]
+	            geocodes character varying[],
+                isAuthenticated boolean DEFAULT False
         )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
             LANGUAGE 'plpgsql'
@@ -425,7 +455,19 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
             ROWS 1000
 
         AS $BODY$
+                        DECLARE
+                            effective_publish_date date;
+
                         BEGIN
+                                IF isAuthenticated THEN
+                                    effective_publish_date := CURRENT_DATE;
+                                ELSE
+                                    SELECT MAX(dpd.date)
+                                    INTO effective_publish_date
+                                    FROM deter.deter_publish_date dpd
+                                    WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                                END IF;                        
+
                                 RETURN QUERY
                                 SELECT
                                         cel.suid AS suid, 
@@ -445,7 +487,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.area) AS total, 
                                                SUM(cls.counts) AS counts
                                         FROM public."cs_{cell}_land_use" cls
-                                        WHERE (cls.date <= publish_date OR 'AF' = clsname)
+                                        WHERE (cls.date <= effective_publish_date OR 'AF' = clsname)
                                             AND cls.land_use_id = ANY (land_use_ids)
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
