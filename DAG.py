@@ -250,7 +250,7 @@ def _check_recreate_db():
 
 
 with DAG(
-    DAG_KEY, default_args=default_args, schedule_interval=None, catchup=False
+    DAG_KEY, default_args=default_args, schedule_interval="0 2 * * *", catchup=False
 ) as dag:
 
     run_check_variables = ShortCircuitOperator(
