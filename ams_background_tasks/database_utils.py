@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from psycopg2 import connect
 from psycopg2.extensions import connection
@@ -15,10 +16,14 @@ logger = get_logger(__name__, sys.stdout)
 
 
 def get_connection_components(db_url: str):
-    tmp = db_url.split("//")[1].split("@")
-    user, password = tmp[0].split(":")
-    host, port, db_name = [tmp[1].split(":")[0]] + tmp[1].split(":")[1].split("/")
-    return user, password, host, port, db_name
+    parsed_url = urlparse(db_url)
+
+    user = parsed_url.username
+    password = parsed_url.password
+    host = parsed_url.hostname
+    port = parsed_url.port
+    db_name = parsed_url.path[1:]
+    return user, password, host, str(port), db_name
 
 
 class DatabaseFacade(BaseModel):
@@ -51,7 +56,13 @@ class DatabaseFacade(BaseModel):
     def conn(self):
         """Database connection."""
         if self._conn is None:
-            self._conn = connect(self.db_url)
+            self._conn = connect(
+                user=self.user,
+                password=self.password,
+                host=self.host,
+                port=self.port,
+                dbname=self.db_name,
+            )
             assert self._conn.status == 1
         return self._conn
 
