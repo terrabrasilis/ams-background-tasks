@@ -110,6 +110,19 @@ def insert_data_in_land_use_tables(
     table_prefix: str,
     log: bool = False,
 ):
+    def _insert_into_land_use(
+        db: DatabaseFacade, spatial_unit: str, measure: str, log: bool, values: list
+    ):
+        sql = f"""
+            INSERT INTO "{spatial_unit}_land_use" (
+                suid, land_use_id, classname, "date", {measure}, biome, geocode
+            )
+            VALUES {','.join(values)};
+        """
+
+        logger.info("inserting data into %s_land_use", spatial_unit)
+        db.execute(sql=sql, log=log)
+
     assert is_valid_indicator(indicator=indicator)
 
     measure = None
@@ -155,6 +168,8 @@ def insert_data_in_land_use_tables(
         )
 
         values: list = []
+        count_values: int = 0
+
         with alive_bar(len(group)) as progress_bar:
             for key, value in group.items():
                 values.append(
@@ -170,27 +185,32 @@ def insert_data_in_land_use_tables(
                         )
                     """
                 )
+                count_values += 1
+
                 progress_bar()
 
-        assert len(values) > 0
+                if len(values) >= 1e5:  # optimizing
+                    logger.info("inserting data into %s_land_use", tmpspatial_unit)
+                    _insert_into_land_use(
+                        db=db,
+                        spatial_unit=tmpspatial_unit,
+                        measure=measure,
+                        values=values,
+                        log=log,
+                    )
+                    values = []
 
-        measure = None
-        if indicator is DETER_INDICATOR:
-            measure = "area"
-        elif indicator is ACTIVE_FIRES_INDICATOR:
-            measure = "counts"
-        else:
-            assert False
-
-        sql = f"""
-            INSERT INTO "{tmpspatial_unit}_land_use" (
-                suid, land_use_id, classname, "date", {measure}, biome, geocode
+        if len(values) > 0:  # optimizing
+            _insert_into_land_use(
+                db=db,
+                spatial_unit=tmpspatial_unit,
+                measure=measure,
+                values=values,
+                log=log,
             )
-            VALUES {','.join(values)};
-        """
 
-        logger.info("inserting data into %s_land_use", tmpspatial_unit)
-        db.execute(sql=sql, log=log)
+        logger.debug("len(values): %s", count_values)
+        assert count_values > 0
 
 
 def process_active_fires(
