@@ -78,7 +78,9 @@ def get_biome_acronym(biome: str):
     }[biome]
 
 
-def recreate_spatial_table(db: DatabaseFacade, spatial_unit: str, is_temp: bool):
+def recreate_spatial_table(
+    db: DatabaseFacade, spatial_unit: str, is_temp: bool, force_recreate: bool = True
+):
     table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use"
 
     logger.info("recreating %s.", table)
@@ -99,7 +101,7 @@ def recreate_spatial_table(db: DatabaseFacade, spatial_unit: str, is_temp: bool)
             "geocode character varying(80)",
             "biome character varying(254)",
         ],
-        force_recreate=True,
+        force_recreate=force_recreate,
     )
 
     db.create_indexes(
@@ -111,7 +113,7 @@ def recreate_spatial_table(db: DatabaseFacade, spatial_unit: str, is_temp: bool)
             "biome:btree",
             "geocode:btree",
         ],
-        force_recreate=False,
+        force_recreate=force_recreate,
     )
 
 
@@ -149,7 +151,12 @@ def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
     )
 
 
-def reset_land_use_tables(db_url: str, is_temp: bool):
+def reset_land_use_tables(db_url: str, is_temp: bool, force_recreate: bool):
     db = DatabaseFacade.from_url(db_url=db_url)
     for spatial_unit in read_spatial_units(db=db):
-        recreate_spatial_table(db=db, spatial_unit=spatial_unit, is_temp=is_temp)
+        recreate_spatial_table(
+            db=db,
+            spatial_unit=spatial_unit,
+            is_temp=is_temp,
+            force_recreate=force_recreate,
+        )

@@ -62,7 +62,7 @@ def main(
     assert db_url
 
     percentage_calculation_for_areas(db_url=db_url, is_temp=True)
-    reset_land_use_tables(db_url=db_url, is_temp=False)
+    reset_land_use_tables(db_url=db_url, is_temp=False, force_recreate=True)
     copy_data_to_final_tables(db_url=db_url, all_data=all_data, indicators=indicators)
 
     if drop_tmp:

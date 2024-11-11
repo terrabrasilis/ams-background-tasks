@@ -81,7 +81,7 @@ def main(
     logger.debug(land_use_dir)
     logger.debug(biome)
 
-    reset_land_use_tables(db_url=db_url, is_temp=True)
+    reset_land_use_tables(db_url=db_url, is_temp=True, force_recreate=False)
 
     assert Path(land_use_dir).exists()
 
