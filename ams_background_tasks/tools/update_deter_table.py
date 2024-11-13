@@ -87,16 +87,10 @@ def update_deter(
     db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate: bool
 ):
     """Update the DETER tables (deter, deter_auth, deter_history)."""
-    tables = (
-        ("deter", "deter_auth", "deter_history")
-        if all_data
-        else ("deter", "deter_auth")
-    )
+    tables = ("deter_auth", "deter_history") if all_data else ("deter_auth",)
 
     ext_tables = (
-        ("deter_ams", "deter_auth_ams", "deter_history")
-        if all_data
-        else ("deter_ams", "deter_auth_ams")
+        ("deter_auth_ams", "deter_history") if all_data else ("deter_auth_ams",)
     )
 
     for index, name in enumerate(tables):
@@ -206,17 +200,25 @@ def _update_deter_table(
 
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
-    print("intersecting with municipalities")
-    municipalities_table = "public.municipalities"
 
     sql = f"""
-        UPDATE {table}
-        SET geocode = (
-            SELECT mun.geocode
-            FROM {municipalities_table} mun
-            WHERE ST_Intersects({table}.geom, mun.geometry)
-            LIMIT 1
-        );
+        UPDATE {table} AS dt
+        SET geocode = a.geocode	
+        FROM (
+            SELECT 
+                dt2.gid, mun.geocode
+            FROM 
+                {table} AS dt2
+            JOIN 
+                public.municipalities mun 
+                ON dt2.geom && mun.geometry
+                AND ST_Intersects(dt2.geom, mun.geometry)
+            WHERE
+                dt2.biome='{biome}'
+        ) AS a
+        WHERE 
+            dt.gid = a.gid
+            AND dt.biome='{biome}';
     """
 
     db.execute(sql)

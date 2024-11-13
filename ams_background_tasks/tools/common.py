@@ -133,7 +133,7 @@ def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
             "num_pixels int4 NULL",
             "geocode varchar(80) NULL",
             "biome varchar(254) NULL",
-            "UNIQUE (gid, biome, land_use_id)",
+            "UNIQUE (gid, biome, land_use_id, geocode)",
         ],
         force_recreate=force_recreate,
     )

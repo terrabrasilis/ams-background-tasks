@@ -183,6 +183,21 @@ def update_cer_deter():
     ).execute({})
 
 
+@task(task_id="prepare-classification")
+def prepare_classification():
+    bash_command = "ams-prepare-classification"
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id="ams-prepare-classification",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        trigger_rule="none_failed_or_skipped",
+    ).execute({})
+
+
 @task(task_id="classify-deter-by-land-use")
 def classify_deter_by_land_use():
     bash_command = (
@@ -276,6 +291,7 @@ with DAG(
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
     run_update_cer_deter = update_cer_deter()
+    run_prepare_classification = prepare_classification()
     run_classify_deter = classify_deter_by_land_use()
     run_classify_active_fires = classify_active_fires_by_land_use()
     run_finalize_classification = finalize_classification()
@@ -294,6 +310,8 @@ with DAG(
     run_join >> [run_update_active_fires, run_update_amz_deter]
     run_update_amz_deter >> run_update_cer_deter
 
-    run_update_active_fires >> run_classify_active_fires
-    run_update_cer_deter >> run_classify_deter
+    [run_update_active_fires, run_update_cer_deter] >> run_prepare_classification
+
+    run_prepare_classification >> [run_classify_active_fires, run_classify_deter]
+
     [run_classify_active_fires, run_classify_deter] >> run_finalize_classification

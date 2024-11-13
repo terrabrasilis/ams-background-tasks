@@ -25,12 +25,10 @@ from ams_background_tasks.tools.common import (
     DETER_INDICATOR,
     INDICATORS,
     PIXEL_LAND_USE_AREA,
-    create_land_structure_table,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
     read_spatial_units,
-    reset_land_use_tables,
 )
 
 logger = get_logger(__name__, sys.stdout)
@@ -72,6 +70,7 @@ def main(
     indicator: str,
 ):
     """Cross the indicators with the land use image and group them by spatial units."""
+    assert all_data
     assert is_valid_indicator(indicator=indicator)
 
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
@@ -80,8 +79,6 @@ def main(
 
     logger.debug(land_use_dir)
     logger.debug(biome)
-
-    reset_land_use_tables(db_url=db_url, is_temp=True, force_recreate=False)
 
     assert Path(land_use_dir).exists()
 
@@ -99,7 +96,6 @@ def main(
             db_url=db_url,
             biome_list=list(biome),
             land_use_dir=Path(land_use_dir),
-            all_data=all_data,
         )
 
 
@@ -156,9 +152,9 @@ def insert_data_in_land_use_tables(
                     "land_use_id",
                     "classname",
                     "date",
-                    "num_pixels",
                     "biome",
                     "geocode",
+                    "num_pixels",
                 ]
             ]
             .groupby(["suid", "land_use_id", "classname", "date", "biome", "geocode"])[
@@ -213,10 +209,8 @@ def insert_data_in_land_use_tables(
         assert count_values > 0
 
 
-def process_active_fires(
-    db_url: str, biome_list: list, land_use_dir: Path, all_data: bool
-):
-    for index, biome in enumerate(biome_list):
+def process_active_fires(db_url: str, biome_list: list, land_use_dir: Path):
+    for biome in biome_list:
         logger.info("processing biome %s", biome)
         assert is_valid_biome(biome=biome)
 
@@ -229,8 +223,6 @@ def process_active_fires(
             is_temp=True,
             land_use_image=land_use_image,
             biome=biome,
-            all_data=all_data,
-            force_recreate=not index,
         )
 
     insert_fires_in_land_use_tables(db_url=db_url, is_temp=True)
@@ -241,8 +233,6 @@ def process_active_fires_land_structure(
     land_use_image: Path,
     db_url: str,
     biome: str,
-    all_data: bool,
-    force_recreate: bool,
 ):
     def _insert_into_active_fires_land_structure(
         db: DatabaseFacade, table_prefix: str, values
@@ -256,32 +246,20 @@ def process_active_fires_land_structure(
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
-    spatial_units = read_spatial_units(db=db)
-
     table_prefix = get_prefix(is_temp=is_temp)
-
-    table = f"{table_prefix}fires_land_structure"
-    where = f"WHERE biome='{biome}'"
-
-    if all_data:
-        create_land_structure_table(
-            db_url=db_url, table=table, force_recreate=force_recreate
-        )
-    else:
-        where += f"""
-            AND view_date > (SELECT MAX(date) FROM "{list(spatial_units.keys())[0]}_land_use" WHERE classname='{ACTIVE_FIRES_CLASSNAME}')
-        """
-
-    landuse_raster = rio.open(land_use_image)
 
     sql = f"""
         SELECT id as gid, biome, geocode, geom
         FROM fires.active_fires
-        {where}
+        WHERE biome='{biome}'
     """
+
     logger.debug(sql)
+
     fires = gpd.GeoDataFrame.from_postgis(sql=sql, con=db.conn, geom_col="geom")
     coord_list = list(zip(fires["geom"].x, fires["geom"].y))
+
+    landuse_raster = rio.open(land_use_image)
 
     fires["value"] = list(landuse_raster.sample(coord_list))
     values: list = []
@@ -289,6 +267,9 @@ def process_active_fires_land_structure(
 
     with alive_bar(len(fires)) as progress_bar:
         for _, point in fires.iterrows():
+            assert point.biome == biome
+            assert point.geocode
+
             if point["value"][0] > 0:
                 values.append(
                     f"('{point.gid}', '{point.biome}', '{point.geocode}', {point['value'][0]}, 1)"
@@ -322,7 +303,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
 
     data = gpd.GeoDataFrame.from_postgis(
         sql=f"""
-            SELECT
+            SELECT DISTINCT
                 a.id,
                 a.land_use_id,
                 a.num_pixels,
@@ -334,7 +315,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
             FROM
                 {table_prefix}fires_land_structure a 
             INNER JOIN
-                fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome;
+                fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
         con=db.conn,
         geom_col="geometry",
@@ -351,7 +332,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
 
 
 def process_deter(db_url: str, biome_list: list, land_use_dir: Path):
-    for index, biome in enumerate(biome_list):
+    for biome in biome_list:
         logger.info("processing biome %s", biome)
         assert is_valid_biome(biome=biome)
 
@@ -364,9 +345,9 @@ def process_deter(db_url: str, biome_list: list, land_use_dir: Path):
             is_temp=True,
             land_use_image=land_use_image,
             biome=biome,
-            force_recreate=not index,
         )
 
+    # inserting data in land use table
     insert_deter_in_land_use_tables(db_url=db_url, is_temp=True)
 
 
@@ -375,14 +356,13 @@ def process_deter_land_structure(
     land_use_image: Path,
     db_url: str,
     biome: str,
-    force_recreate: bool,
 ):
     def _insert_into_deter_land_structure(
         db: DatabaseFacade, table_prefix: str, values
     ):
         sql = f"""
             INSERT INTO {table_prefix}deter_land_structure (gid, biome, geocode, land_use_id, num_pixels)
-            VALUES {','.join(values)};
+            VALUES {','.join(list(set(values)))};
         """
         logger.info("inserting into %sdeter_land_structure", table_prefix)
         db.execute(sql=sql, log=False)
@@ -392,10 +372,6 @@ def process_deter_land_structure(
     table_prefix = get_prefix(is_temp=is_temp)
 
     table = f"{table_prefix}deter_land_structure"
-    if force_recreate:
-        create_land_structure_table(
-            db_url=db_url, table=table, force_recreate=force_recreate
-        )
 
     logger.info("filling %s.", table)
 
@@ -415,6 +391,8 @@ def process_deter_land_structure(
 
     with alive_bar(len(deter)) as progress_bar:
         for _, row in deter.iterrows():
+            assert row.biome == biome
+            assert row.geocode
             geoms = [mapping(row.geom)]
             out_image, _ = mask(landuse_raster, geoms, crop=True)
             unique, counts = np.unique(out_image[0], return_counts=True)
@@ -426,6 +404,7 @@ def process_deter_land_structure(
                         f"('{row.gid}', '{row.biome}', '{row.geocode}', {count[0]}, {count[1]})"
                     )
                     count_values += 1
+
             progress_bar()
 
             if len(values) >= 1e5:  # optimizing
@@ -452,7 +431,7 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
 
     data = gpd.GeoDataFrame.from_postgis(
         sql=f""" 
-            SELECT 
+            SELECT DISTINCT
                 a.id, 
                 a.land_use_id, 
                 a.num_pixels,
@@ -469,14 +448,16 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
                     tb.date, 
                     ST_PointOnSurface(tb.geom) AS geom, 
                     tb.classname,
-                    tb.biome
+                    tb.biome,
+                    tb.geocode
                 FROM (
                     SELECT 
                         gid, 
                         date, 
                         classname, 
                         geom,
-                        biome
+                        biome,
+                        geocode
                     FROM 
                         deter.deter_auth
                     UNION
@@ -485,11 +466,12 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
                         date, 
                         classname, 
                         geom,
-                        biome
+                        biome,
+                        geocode
                     FROM 
                         deter.deter_history
                 ) AS tb
-            ) b ON a.gid = b.gid AND a.biome = b.biome
+            ) b ON a.gid = b.gid AND a.biome = b.biome AND a.geocode = b.geocode
             INNER JOIN 
                 class c ON b.classname = c.name
             INNER JOIN 

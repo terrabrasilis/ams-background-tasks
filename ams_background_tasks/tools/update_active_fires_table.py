@@ -114,17 +114,27 @@ def update_active_fires_table(
 
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
-    print("intersecting with municipalities")
-    municipalities_table = "public.municipalities"
 
     sql = f"""
-        UPDATE {table}
-        SET geocode = (
-            SELECT mun.geocode
-            FROM {municipalities_table} mun
-            WHERE ST_Within({table}.geom, mun.geometry)
-            LIMIT 1
-        );
+        UPDATE {table} AS ac
+        SET geocode = a.geocode	
+        FROM (
+            SELECT 
+                ac2.id, ac2.biome, mun.geocode
+            FROM 
+                {table} AS ac2
+            JOIN 
+                public.municipalities_biome mub
+                ON ac2.biome=mub.biome
+            JOIN 
+                public.municipalities mun
+                ON mun.geocode=mub.geocode
+                AND ac2.geom && mun.geometry
+                AND ST_Within(ac2.geom, mun.geometry)
+        ) AS a
+        WHERE 
+            ac.id = a.id
+            AND ac.biome=a.biome;
     """
 
     db.execute(sql)
