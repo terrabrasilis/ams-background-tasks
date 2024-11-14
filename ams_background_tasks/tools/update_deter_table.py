@@ -87,10 +87,16 @@ def update_deter(
     db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate: bool
 ):
     """Update the DETER tables (deter, deter_auth, deter_history)."""
-    tables = ("deter_auth", "deter_history") if all_data else ("deter_auth",)
+    tables = (
+        ("deter", "deter_auth", "deter_history")
+        if all_data
+        else ("deter", "deter_auth")
+    )
 
     ext_tables = (
-        ("deter_auth_ams", "deter_history") if all_data else ("deter_auth_ams",)
+        ("deter_ams", "deter_auth_ams", "deter_history")
+        if all_data
+        else ("deter_ams", "deter_auth_ams")
     )
 
     for index, name in enumerate(tables):
