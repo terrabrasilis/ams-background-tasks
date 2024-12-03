@@ -941,7 +941,7 @@ def create_municipalities_group_tables(
     # priority municipalities
     name = "municipalities_group"
     sql = f"""
-        INSERT INTO {schema}.{name} (id, name) VALUES ('1', 'Prioritários');
+        INSERT INTO {schema}.{name} (id, name) VALUES ('1', 'prioritários amz');
     """
 
     db.execute(sql)

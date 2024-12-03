@@ -209,16 +209,16 @@ def _update_deter_table(
 
     sql = f"""
         UPDATE {table} AS dt
-        SET geocode = a.geocode	
+        SET geocode=a.geocode, mun=a.name
         FROM (
             SELECT 
-                dt2.gid, mun.geocode
+                dt2.gid, mun.geocode, mun.name
             FROM 
                 {table} AS dt2
             JOIN 
                 public.municipalities mun 
                 ON dt2.geom && mun.geometry
-                AND ST_Intersects(dt2.geom, mun.geometry)
+                AND ST_Within(ST_PointOnSurface(dt2.geom), mun.geometry)
             WHERE
                 dt2.biome='{biome}'
         ) AS a
