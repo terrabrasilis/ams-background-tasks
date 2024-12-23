@@ -84,6 +84,9 @@ def main(db_url: str, force_recreate: bool):
     # municipalities group
     create_municipalities_group_tables(db=db, force_recreate=force_recreate)
 
+    # risk
+    create_risk_tables(db=db, force_recreate=force_recreate)
+
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the public.municipalities and public.municipalities_biome tables."""
@@ -883,6 +886,14 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
                 (6,	'UC', 1),
                 (12, 'Indefinida', 6);
     """
+    #            (5,	'APA', 4),
+    #            (4,	'Assentamentos', 3),
+    #            (6,	'CAR', 5),
+    #            (7,	'FPND', 6),
+    #            (1,	'TI', 0),
+    #            (3,	'UC', 2),
+    #            (8, 'Indefinida', 7),
+    #            (2, 'Quilombola', 1)
 
     db.execute(sql=sql)
 
@@ -1027,3 +1038,102 @@ def create_municipalities_group_tables(
     """
 
     db.execute(sql)
+
+
+def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
+    """Create the risk tables."""
+    schema = "risk"
+
+    db.create_schema(name=schema, force_recreate=False)
+
+    if force_recreate:
+        db.drop_table(f"{schema}.weekly_data", cascade=True)
+
+    name = "etl_log_ibama"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar",
+            "process_status int4",
+            "process_message varchar",
+            "file_date date NOT NULL",
+            "is_new boolean DEFAULT true",
+            "created_at timestamp with time zone NOT NULL DEFAULT now()",
+            "processed_at timestamp with time zone",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    name = "matrix_ibama_1km"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "geom geometry(Point, 4674)",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["geom:gist"],
+        force_recreate=force_recreate,
+    )
+
+    name = "weekly_ibama_tmp"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=["geometry geometry(Point, 4674)", "data real"],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["geometry:gist"],
+        force_recreate=force_recreate,
+    )
+
+    name = "risk_ibama_date"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar UNIQUE",
+            "expiration_date date",
+            "created_at date NOT NULL DEFAULT now()",
+            "risk_date date",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["file_name:btree"],
+        force_recreate=force_recreate,
+    )
+
+    name = "weekly_data"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "date_id int4",
+            "geom_id int4",
+            "risk double precision",
+            "FOREIGN KEY (date_id) REFERENCES risk.risk_ibama_date (id)",
+            "FOREIGN KEY (geom_id) REFERENCES risk.matrix_ibama_1km (id)",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["date_id:btree"],
+        force_recreate=force_recreate,
+    )

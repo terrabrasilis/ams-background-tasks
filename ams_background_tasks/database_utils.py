@@ -165,8 +165,10 @@ class DatabaseFacade(BaseModel):
         cursor = self.conn.cursor()
         cursor.execute(query)
         data = cursor.fetchone()
-        if data:
+
+        if data and len(data) == 1:
             data = data[0]
+
         cursor.close()
         return data
 
@@ -178,9 +180,10 @@ class DatabaseFacade(BaseModel):
         self.conn.commit()
         cursor.close()
 
-    def truncate(self, table: str, cascade: bool = False):
+    def truncate(self, table: str, cascade: bool = False, restart: bool = False):
         _cascade = "CASCADE" if cascade else ""
-        sql = f"TRUNCATE {table} {_cascade};"
+        _restart = "RESTART IDENTITY" if restart else ""
+        sql = f"TRUNCATE {table} {_restart} {_cascade};"
         self.execute(sql=sql)
 
     def copy_table(self, src: str, dst: str):
