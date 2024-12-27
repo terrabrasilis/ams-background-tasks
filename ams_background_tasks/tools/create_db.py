@@ -1126,6 +1126,8 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "date_id int4",
             "geom_id int4",
             "risk double precision",
+            "biome varchar(254)",
+            "geocode varchar(80)",
             "FOREIGN KEY (date_id) REFERENCES risk.risk_ibama_date (id)",
             "FOREIGN KEY (geom_id) REFERENCES risk.matrix_ibama_1km (id)",
         ],
@@ -1134,6 +1136,10 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
     db.create_indexes(
         schema=schema,
         name=name,
-        columns=["date_id:btree"],
+        columns=[
+            "date_id:btree",
+            "biome:btree",
+            "geocode:btree",
+        ],
         force_recreate=force_recreate,
     )

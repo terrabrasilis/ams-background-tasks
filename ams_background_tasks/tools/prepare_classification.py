@@ -12,6 +12,7 @@ from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_INDICATOR,
     DETER_INDICATOR,
     INDICATORS,
+    RISK_INDICATOR,
     create_land_structure_table,
     reset_land_use_tables,
 )
@@ -60,4 +61,12 @@ def main(
         )
         create_land_structure_table(
             db_url=db_url, table="deter_land_structure", force_recreate=True
+        )
+
+    if RISK_INDICATOR in indicator:
+        create_land_structure_table(
+            db_url=db_url, table="tmp_risk_land_structure", force_recreate=True
+        )
+        create_land_structure_table(
+            db_url=db_url, table="risk_land_structure", force_recreate=True
         )
