@@ -29,6 +29,7 @@ from airflow.operators.python import (
 from common import *
 
 land_use_dir = project_dir + "/land_use"
+risk_dir = project_dir + "/risk"
 
 DAG_KEY = "ams-create-db"
 
@@ -67,9 +68,13 @@ def check_variables():
     ams_af_db_url = BaseHook.get_connection("AMS_AF_DB_URL")
     ams_amz_deter_b_db_url = BaseHook.get_connection("AMS_AMZ_DETER_B_DB_URL")
     ams_cer_deter_b_db_url = BaseHook.get_connection("AMS_CER_DETER_B_DB_URL")
+    ams_ftp_url = BaseHook.get_connection("AMS_FTP_URL")
 
     if not ams_db_url and not ams_db_url.get_uri():
         raise Exception("Missing ams_db_url airflow conection configuration.")
+
+    if not ams_ftp_url and not ams_ftp_url.get_uri():
+        raise Exception("Missing ams_ftp_url airflow conection configuration.")
 
     if not ams_aux_db_url and not ams_aux_db_url.get_uri():
         raise Exception("Missing ams_aux_db_url airflow conection configuration.")
@@ -256,6 +261,52 @@ def finalize_classification():
     ).execute({})
 
 
+@task(task_id="download-risk-file")
+def download_risk_file():
+    bash_command = (
+        "ams-download-risk-file --days-until-expiration=15 --save-dir=" + risk_dir
+    )
+
+    return BashOperator(
+        task_id="ams-download-risk-file",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_FTP_URL"]),
+        append_env=True,
+    ).execute({})
+
+
+@task(task_id="update-ibama-risk")
+def update_ibama_risk():
+    bash_command = "ams-update-ibama-risk --risk-threshold=0.85 --biome='Amazônia'"
+
+    return BashOperator(
+        task_id="ams-update-ibama-risk",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+    ).execute({})
+
+
+@task(task_id="classify-risk-by-land-use")
+def classify_risk_by_land_use():
+    bash_command = (
+        f"ams-classify-by-land-use"
+        f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
+        " --biome='Amazônia'"
+        " --indicator='risco'"
+        " --land-use-dir=" + land_use_dir
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id="ams-classify-by-land-use",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
 def _check_recreate_db():
     force_recreate = Variable.get("AMS_FORCE_RECREATE_DB") == "1"
 
@@ -295,6 +346,9 @@ with DAG(
     run_classify_deter = classify_deter_by_land_use()
     run_classify_active_fires = classify_active_fires_by_land_use()
     run_finalize_classification = finalize_classification()
+    run_download_risk_file = download_risk_file()
+    run_update_ibama_risk = update_ibama_risk()
+    run_classify_risk = classify_risk_by_land_use()
 
     # RUNS
 
@@ -307,11 +361,24 @@ with DAG(
     run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
     run_skip >> run_join
 
-    run_join >> [run_update_active_fires, run_update_amz_deter]
+    run_join >> [run_update_active_fires, run_update_amz_deter, run_download_risk_file]
     run_update_amz_deter >> run_update_cer_deter
+    run_download_risk_file >> run_update_ibama_risk
 
-    [run_update_active_fires, run_update_cer_deter] >> run_prepare_classification
+    [
+        run_update_active_fires,
+        run_update_cer_deter,
+        run_update_ibama_risk,
+    ] >> run_prepare_classification
 
-    run_prepare_classification >> [run_classify_active_fires, run_classify_deter]
+    run_prepare_classification >> [
+        run_classify_active_fires,
+        run_classify_deter,
+        run_classify_risk,
+    ]
 
-    [run_classify_active_fires, run_classify_deter] >> run_finalize_classification
+    [
+        run_classify_active_fires,
+        run_classify_deter,
+        run_classify_risk,
+    ] >> run_finalize_classification

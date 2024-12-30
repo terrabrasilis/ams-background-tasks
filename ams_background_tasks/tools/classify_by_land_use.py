@@ -113,8 +113,8 @@ def insert_data_in_land_use_tables(
     data: gpd.GeoDataFrame,
     db: DatabaseFacade,
     table_prefix: str,
-    log: bool = False,
-    risk: bool = False,
+    risk: bool,
+    log: bool,
 ):
     def _insert_into_land_use(
         db: DatabaseFacade, spatial_unit: str, measure: str, log: bool, values: list
@@ -190,8 +190,8 @@ def insert_data_in_land_use_tables(
                             TIMESTAMP '{key[3].year}-{key[3].month}-{key[3].day}',
                             {value * multiplier},
                             '{key[4]}',
-                            '{key[5]}',
-                            {(key[6] if risk else '')}
+                            '{key[5]}'
+                            {(','+str(key[6]) if risk else '')}
                         ) 
                     """
                 )
@@ -342,6 +342,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
         data=data,
         table_prefix=table_prefix,
         log=False,
+        risk=False,
     )
 
 
@@ -502,6 +503,7 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
         data=data,
         table_prefix=table_prefix,
         log=False,
+        risk=False,
     )
 
 

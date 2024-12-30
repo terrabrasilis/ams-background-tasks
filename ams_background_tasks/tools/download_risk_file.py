@@ -103,7 +103,9 @@ async def download_risk_file(
     if len(files) == 0:
         status = 0
         msg = "There is no file on ftp server."
-        _write_log(db=db, msg=msg, status=status, file_date=None, file_name="")
+        _write_log(
+            db=db, msg=msg, status=status, file_date=None, file_name="", is_new=False
+        )
         return
 
     output_file = (
@@ -121,33 +123,42 @@ async def download_risk_file(
 
     logger.info(msg)
 
+    file_date = remote_risk_file["date"]
+    file_expiration_date = file_date + relativedelta(days=days_until_expiration)
+
     _write_log(
         db=db,
         msg=msg,
         status=status,
         file_date=remote_risk_file["date"],
         file_name=output_file,
+        is_new=datetime.now().date() <= file_expiration_date,
     )
 
     if status == 1:
         _write_expiration_date(
             db=db,
             status=status,
-            file_date=remote_risk_file["date"],
-            days_until_expiration=days_until_expiration,
             file_name=output_file,
+            file_date=file_date,
+            file_expiration_date=file_expiration_date,
         )
 
 
 def _write_log(
-    db: DatabaseFacade, msg: str, status: int, file_date: datetime, file_name: str
+    db: DatabaseFacade,
+    msg: str,
+    status: int,
+    file_date: datetime,
+    file_name: str,
+    is_new: bool,
 ):
     """Write log to database."""
     dt = file_date.strftime("%Y-%m-%d") if file_date is not None else ""
 
     sql = f"""
         INSERT INTO risk.etl_log_ibama (file_name, process_status, process_message, file_date, is_new)
-        VALUES('{file_name}', {status}, '{msg}', '{dt}', {status==1});
+        VALUES('{file_name}', {status}, '{msg}', '{dt}', {is_new});
     """
 
     db.execute(sql)
@@ -157,15 +168,16 @@ def _write_expiration_date(
     db: DatabaseFacade,
     status: int,
     file_date: datetime,
-    days_until_expiration: int,
+    file_expiration_date: datetime,
     file_name: str,
 ):
     """Write an expiration date only if has new risk data."""
 
     assert status == 1
     assert file_date
+    assert file_expiration_date
 
-    dt = (file_date + relativedelta(days=days_until_expiration)).strftime("%Y-%m-%d")
+    dt = file_expiration_date.strftime("%Y-%m-%d")
 
     sql = f"""
         INSERT INTO risk.risk_ibama_date (expiration_date,risk_date, file_name)
