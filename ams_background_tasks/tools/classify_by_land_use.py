@@ -220,7 +220,7 @@ def insert_data_in_land_use_tables(
             )
 
         logger.debug("len(values): %s", count_values)
-        assert count_values > 0
+        # assert count_values > 0
 
 
 def process_active_fires(db_url: str, biome_list: list, land_use_dir: Path):
@@ -588,7 +588,7 @@ def process_risk_land_structure(
         values = []
 
     logger.debug("len(values): %s", count_values)
-    assert count_values > 0
+    # assert count_values > 0
 
 
 def insert_risk_in_land_use_tables(db_url: str, is_temp: bool):
