@@ -109,6 +109,7 @@ def main(
 
 
 def insert_data_in_land_use_tables(
+    *,
     indicator: str,
     data: gpd.GeoDataFrame,
     db: DatabaseFacade,

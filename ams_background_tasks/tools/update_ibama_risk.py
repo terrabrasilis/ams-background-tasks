@@ -72,6 +72,38 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
         db.execute(sql=sql, log=False)
 
     db = DatabaseFacade.from_url(db_url=db_url)
+
+    # creating view
+    view = "public.last_risk_data"
+
+    sql = f"DROP VIEW IF EXISTS {view}"
+    db.execute(sql)
+
+    sql = f"""
+        CREATE VIEW {view} AS
+        SELECT
+            geo.id,
+            geo.geom,
+            wd.risk,
+            dt.risk_date AS view_date
+        FROM
+            risk.weekly_data wd,
+            risk.risk_ibama_date dt,
+            risk.matrix_ibama_1km geo
+        WHERE
+            wd.date_id = (
+                SELECT risk_ibama_date.id
+                FROM risk.risk_ibama_date
+                ORDER BY risk_ibama_date.expiration_date DESC
+                LIMIT 1
+            )
+            AND wd.geom_id=geo.id
+            AND wd.date_id=dt.id;
+    """
+
+    db.execute(sql)
+
+    # last risk file
     risk_file, _ = get_last_risk_file_info(db=db, is_new=True)
 
     logger.info(risk_file)
@@ -167,36 +199,6 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
             rk.id=a.id
             AND rk.biome=a.biome
             AND rk.geom_id=a.geom_id;
-    """
-
-    db.execute(sql)
-
-    # creating view
-    view = "public.last_risk_data"
-
-    sql = f"DROP VIEW IF EXISTS {view}"
-    db.execute(sql)
-
-    sql = f"""
-        CREATE VIEW {view} AS
-        SELECT
-            geo.id,
-            geo.geom,
-            wd.risk,
-            dt.risk_date AS view_date
-        FROM
-            risk.weekly_data wd,
-            risk.risk_ibama_date dt,
-            risk.matrix_ibama_1km geo
-        WHERE
-            wd.date_id = (
-                SELECT risk_ibama_date.id
-                FROM risk.risk_ibama_date
-                ORDER BY risk_ibama_date.expiration_date DESC
-                LIMIT 1
-            )
-            AND wd.geom_id=geo.id
-            AND wd.date_id=dt.id;
     """
 
     db.execute(sql)

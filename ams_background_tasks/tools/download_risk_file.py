@@ -146,6 +146,7 @@ async def download_risk_file(
 
 
 def _write_log(
+    *,
     db: DatabaseFacade,
     msg: str,
     status: int,
@@ -154,7 +155,11 @@ def _write_log(
     is_new: bool,
 ):
     """Write log to database."""
-    dt = file_date.strftime("%Y-%m-%d") if file_date is not None else ""
+    dt = (
+        file_date.strftime("%Y-%m-%d")
+        if file_date is not None
+        else datetime.now().strftime("%d_%m_%Y")
+    )
 
     sql = f"""
         INSERT INTO risk.etl_log_ibama (file_name, process_status, process_message, file_date, is_new)

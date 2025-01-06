@@ -91,7 +91,7 @@ class DatabaseFacade(BaseModel):
         self.execute(sql)
 
     def create_table(
-        self, schema: str, name: str, columns: list, force_recreate: bool = False
+        self, *, schema: str, name: str, columns: list, force_recreate: bool = False
     ):
         """Create a database table."""
         table = f'{schema}."{name}"'
@@ -112,6 +112,7 @@ class DatabaseFacade(BaseModel):
 
     def create_index(
         self,
+        *,
         schema: str,
         name: str,
         table: str,

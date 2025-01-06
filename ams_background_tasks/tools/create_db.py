@@ -1058,7 +1058,7 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "file_name varchar",
             "process_status int4",
             "process_message varchar",
-            "file_date date NOT NULL",
+            "file_date date",
             "is_new boolean DEFAULT true",
             "created_at timestamp with time zone NOT NULL DEFAULT now()",
             "processed_at timestamp with time zone",
