@@ -266,7 +266,7 @@ def process_active_fires_land_structure(
     sql = f"""
         SELECT id as gid, biome, geocode, geom
         FROM fires.active_fires
-        WHERE biome='{biome}'
+        WHERE biome='{biome}' AND geocode IS NOT NULL
     """
 
     logger.debug(sql)
@@ -394,7 +394,7 @@ def process_deter_land_structure(
     sql = f"""
         SELECT gid, biome, geocode, geom
         FROM deter.tmp_data
-        WHERE biome='{biome}';
+        WHERE biome='{biome}' AND geocode IS NOT NULL
     """
     logger.debug(sql)
     deter = gpd.GeoDataFrame.from_postgis(sql=sql, con=db.conn, geom_col="geom")
