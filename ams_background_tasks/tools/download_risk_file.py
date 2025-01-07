@@ -161,6 +161,8 @@ def _write_log(
         else datetime.now().strftime("%d_%m_%Y")
     )
 
+    msg = msg.replace("'","\"")
+
     sql = f"""
         INSERT INTO risk.etl_log_ibama (file_name, process_status, process_message, file_date, is_new)
         VALUES('{file_name}', {status}, '{msg}', '{dt}', {is_new});
