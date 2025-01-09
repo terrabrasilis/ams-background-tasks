@@ -15,6 +15,7 @@ from ams_background_tasks.tools.common import (
     DETER_INDICATOR,
     INDICATORS,
     RISK_CLASSNAME,
+    RISK_INDICATOR,
     create_land_structure_table,
     get_prefix,
     read_spatial_units,
@@ -100,6 +101,9 @@ def copy_data_to_final_tables(db_url: str, all_data: bool, indicators: list):
     if ACTIVE_FIRES_INDICATOR in indicators:
         copy_fires_land_structure(db_url=db_url, all_data=all_data)
 
+    if RISK_INDICATOR in indicators:
+        copy_risk_land_structure(db_url=db_url)
+
     db = DatabaseFacade.from_url(db_url=db_url)
 
     for spatial_unit in read_spatial_units(db=db):
@@ -145,6 +149,17 @@ def copy_fires_land_structure(db_url: str, all_data: bool):
 
     if all_data:
         create_land_structure_table(db_url=db_url, table=table, force_recreate=True)
+
+    # copy data from temporary table
+    db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)
+
+
+def copy_risk_land_structure(db_url: str):
+    table = "risk_land_structure"
+
+    logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
+
+    db = DatabaseFacade.from_url(db_url=db_url)
 
     # copy data from temporary table
     db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)

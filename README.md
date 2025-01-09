@@ -9,16 +9,18 @@ The **DAG `ams-create-db`** is responsible for creating and updating the AMS dat
 1. `check-variables`
 2. `update-environment`
 3. `check-recreate-db`
-4. `check-recreate-db`
-5. `create-db`
-6. `update-biome`
-7. `update-spatial-units`
-8. `update-active-fires`
-9. `update-amz-deter`
-10. `update-cer-deter`
-11. `classify-deter-by-land-use`
-12. `classify-fires-by-land-use`
-13. `finalize-classification`
+4. `create-db`
+5. `update-biome`
+6. `update-spatial-units`
+7. `update-active-fires`
+8. `update-amz-deter`
+9. `update-cer-deter`
+10. `download-risk-file`
+11. `update-ibama-risk`
+12. `prepare-classification`
+13. `classify-deter-by-land-use`
+14. `classify-fires-by-land-use`
+15. `finalize-classification`
 
 Each of these tasks is a Python command-line tool developed using the **Click** library.
 
@@ -60,11 +62,12 @@ To run over an Airflow instance, it's necessary to setup the following airflow c
 #### Connections:
 
 Setup this connections ids:
-1)  `AMS_AF_DB_URL` (Raw fires database, ex: raw_fires_data)
-2)  `AMS_AUX_DB_URL` (Auxiliary database, ex: auxiliary)
-3)  `AMS_AMZ_DETER_B_DB_URL` (Deter Amazonia database, ex: deter_amazonia_nb)
+1) `AMS_AF_DB_URL` (Raw fires database, ex: raw_fires_data)
+2) `AMS_AUX_DB_URL` (Auxiliary database, ex: auxiliary)
+3) `AMS_AMZ_DETER_B_DB_URL` (Deter Amazonia database, ex: deter_amazonia_nb)
 4) `AMS_CER_DETER_B_DB_URL` (Deter Cerrado database, ex: deter_amazonia_nb)
-5)  `AMS_DB_URL` (AMS ouput database, ex: ams_new)
+5) `AMS_DB_URL` (AMS ouput database, ex: ams_new)
+6) `AMS_FTP_URL` (FTP to get the risk file provided by IBAMA)
 
 
 Example how to setup the connection fields:

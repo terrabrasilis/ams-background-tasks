@@ -22,9 +22,12 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
+    AMAZONIA,
     DETER_INDICATOR,
     INDICATORS,
     PIXEL_LAND_USE_AREA,
+    RISK_CLASSNAME,
+    RISK_INDICATOR,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
@@ -98,20 +101,29 @@ def main(
             land_use_dir=Path(land_use_dir),
         )
 
+    if AMAZONIA in list(biome) and indicator == RISK_INDICATOR:
+        process_risk(
+            db_url=db_url,
+            land_use_dir=Path(land_use_dir),
+        )
+
 
 def insert_data_in_land_use_tables(
+    *,
     indicator: str,
     data: gpd.GeoDataFrame,
     db: DatabaseFacade,
     table_prefix: str,
-    log: bool = False,
+    risk: bool,
+    log: bool,
 ):
     def _insert_into_land_use(
         db: DatabaseFacade, spatial_unit: str, measure: str, log: bool, values: list
     ):
+        risk_column = ",risk" if risk else ""
         sql = f"""
             INSERT INTO "{spatial_unit}_land_use" (
-                suid, land_use_id, classname, "date", {measure}, biome, geocode
+                suid, land_use_id, classname, "date", {measure}, biome, geocode {risk_column}
             )
             VALUES {','.join(values)};
         """
@@ -126,7 +138,7 @@ def insert_data_in_land_use_tables(
     if indicator is DETER_INDICATOR:
         measure = "area"
         multiplier = PIXEL_LAND_USE_AREA
-    elif indicator is ACTIVE_FIRES_INDICATOR:
+    elif indicator is ACTIVE_FIRES_INDICATOR or indicator is RISK_INDICATOR:
         measure = "counts"
     else:
         assert False
@@ -156,10 +168,12 @@ def insert_data_in_land_use_tables(
                     "geocode",
                     "num_pixels",
                 ]
+                + (["risk"] if risk else [])
             ]
-            .groupby(["suid", "land_use_id", "classname", "date", "biome", "geocode"])[
-                "num_pixels"
-            ]
+            .groupby(
+                ["suid", "land_use_id", "classname", "date", "biome", "geocode"]
+                + (["risk"] if risk else [])
+            )["num_pixels"]
             .sum()
         )
 
@@ -178,7 +192,8 @@ def insert_data_in_land_use_tables(
                             {value * multiplier},
                             '{key[4]}',
                             '{key[5]}'
-                        )
+                            {(','+str(key[6]) if risk else '')}
+                        ) 
                     """
                 )
                 count_values += 1
@@ -206,7 +221,7 @@ def insert_data_in_land_use_tables(
             )
 
         logger.debug("len(values): %s", count_values)
-        assert count_values > 0
+        # assert count_values > 0
 
 
 def process_active_fires(db_url: str, biome_list: list, land_use_dir: Path):
@@ -328,6 +343,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool):
         data=data,
         table_prefix=table_prefix,
         log=False,
+        risk=False,
     )
 
 
@@ -488,4 +504,128 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool):
         data=data,
         table_prefix=table_prefix,
         log=False,
+        risk=False,
+    )
+
+
+def process_risk(db_url: str, land_use_dir: Path):
+    biome = AMAZONIA
+
+    land_use_image = land_use_dir / f"{biome}_land_use.tif"
+    logger.debug(land_use_image)
+    assert land_use_image.exists()
+
+    process_risk_land_structure(
+        db_url=db_url,
+        is_temp=True,
+        land_use_image=land_use_image,
+        biome=biome,
+    )
+
+    insert_risk_in_land_use_tables(db_url=db_url, is_temp=True)
+
+
+def process_risk_land_structure(
+    is_temp: bool,
+    land_use_image: Path,
+    db_url: str,
+    biome: str,
+):
+    def _insert_into_risk_land_structure(db: DatabaseFacade, table_prefix: str, values):
+        sql = f"""
+            INSERT INTO {table_prefix}risk_land_structure (gid, biome, geocode, land_use_id, num_pixels)
+            VALUES {','.join(values)};
+        """
+        logger.info("inserting into %srisk_land_structure", table_prefix)
+        db.execute(sql=sql, log=False)
+
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    table_prefix = get_prefix(is_temp=is_temp)
+
+    sql = f"""
+        SELECT rmi.id as gid, rwd.biome, rwd.geocode, rmi.geom
+        FROM risk.matrix_ibama_1km rmi
+        JOIN
+            risk.weekly_data rwd
+            ON rwd.geom_id=rmi.id
+        WHERE rwd.biome='{biome}'
+    """
+
+    logger.debug(sql)
+
+    risk = gpd.GeoDataFrame.from_postgis(sql=sql, con=db.conn, geom_col="geom")
+    coord_list = list(zip(risk["geom"].x, risk["geom"].y))
+
+    landuse_raster = rio.open(land_use_image)
+
+    risk["value"] = list(landuse_raster.sample(coord_list))
+    values: list = []
+    count_values: int = 0
+
+    with alive_bar(len(risk)) as progress_bar:
+        for _, point in risk.iterrows():
+            assert point.biome == biome
+            assert point.geocode
+
+            if point["value"][0] > 0:
+                values.append(
+                    f"('{point.gid}', '{point.biome}', '{point.geocode}', {point['value'][0]}, 1)"
+                )
+                count_values += 1
+
+            progress_bar()
+
+            if len(values) >= 1e5:  # optimizing
+                _insert_into_risk_land_structure(
+                    db=db, table_prefix=table_prefix, values=values
+                )
+                values = []
+
+    if len(values) > 0:
+        _insert_into_risk_land_structure(
+            db=db, table_prefix=table_prefix, values=values
+        )
+        values = []
+
+    logger.debug("len(values): %s", count_values)
+    # assert count_values > 0
+
+
+def insert_risk_in_land_use_tables(db_url: str, is_temp: bool):
+    logger.info("Insert RISK data in land use tables for each spatial units.")
+
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    table_prefix = get_prefix(is_temp=is_temp)
+
+    data = gpd.GeoDataFrame.from_postgis(
+        sql=f"""
+            SELECT DISTINCT
+                a.id,
+                a.land_use_id,
+                a.num_pixels,
+                a.biome,
+                a.geocode,
+                '{RISK_CLASSNAME}' as classname,
+                b.risk,
+                b.view_date AS date,
+                b.geom AS geometry
+            FROM
+                {table_prefix}risk_land_structure a 
+            INNER JOIN
+                public.last_risk_data b ON a.gid = b.id::text;
+        """,
+        con=db.conn,
+        geom_col="geometry",
+        crs="EPSG:4674",
+    )
+
+    insert_data_in_land_use_tables(
+        indicator=RISK_INDICATOR,
+        db=db,
+        data=data,
+        table_prefix=table_prefix,
+        log=False,
+        risk=True,
     )

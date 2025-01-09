@@ -24,7 +24,7 @@ PANTANAL = "Pantanal"
 BIOMES = [AMAZONIA, CERRADO, PANTANAL]
 
 # constants
-PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
+PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10 ** -6)
 
 # classnames
 ACTIVE_FIRES_CLASSNAME = "AF"
@@ -33,10 +33,12 @@ RISK_CLASSNAME = "RK"
 # indicators
 DETER_INDICATOR = "deter"
 ACTIVE_FIRES_INDICATOR = "focos"
+RISK_INDICATOR = "risco"
 
 INDICATORS = [
     DETER_INDICATOR,
     ACTIVE_FIRES_INDICATOR,
+    RISK_INDICATOR,
 ]
 
 
@@ -160,3 +162,46 @@ def reset_land_use_tables(db_url: str, is_temp: bool, force_recreate: bool):
             is_temp=is_temp,
             force_recreate=force_recreate,
         )
+
+
+def get_last_risk_file_info(db: DatabaseFacade, is_new: bool = None):
+    """Return the information about the last downloaded risk file (path and date)."""
+
+    _filter = ""
+    if is_new is not None:
+        _filter = f" AND is_new={is_new}"
+
+    sql = f"""
+        SELECT file_name, file_date FROM risk.etl_log_ibama
+        WHERE process_status=1 {_filter}
+        ORDER BY created_at DESC LIMIT 1;
+    """
+
+    res = db.fetchone(query=sql)
+
+    if not res:
+        return None, None
+
+    return res[0], res[1]
+
+
+def get_risk_date_id(db: DatabaseFacade, file_name: str):
+    """Return the date_if of the risk file."""
+
+    sql = f"""
+        SELECT id FROM risk.risk_ibama_date
+        WHERE file_name='{file_name}';
+    """
+
+    return db.fetchone(query=sql)
+
+
+def mark_risk_file_as_used(db: DatabaseFacade, file_name: str):
+    """Mark the risk file as used (is_new=False)"""
+    sql = f"""
+        UPDATE risk.etl_log_ibama
+        SET is_new=False, processed_at=now()
+        WHERE file_name='{file_name}'
+    """
+
+    db.execute(sql)

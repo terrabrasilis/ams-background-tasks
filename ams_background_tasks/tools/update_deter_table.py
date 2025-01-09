@@ -111,6 +111,7 @@ def update_deter(
 
 
 def _update_deter_table(
+    *,
     db_url: str,
     deter_b_db_url: str,
     name: str,
