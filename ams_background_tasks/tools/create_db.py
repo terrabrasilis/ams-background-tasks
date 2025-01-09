@@ -162,7 +162,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	            geocodes character varying[],
+	        geocodes character varying[],
+                riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
@@ -206,11 +207,12 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.counts) AS counts
                             FROM public."municipalities_land_use" mlu
                             WHERE
-                                (mlu.date <= effective_publish_date OR 'AF' = clsname)
+                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK'))
                                 AND mlu.land_use_id = ANY (land_use_ids)
                                 AND mlu.classname = clsname
                                 AND mlu.date > enddate
                                 AND mlu.date <= startdate
+                                AND mlu.risk >= riskThreshold
                                 AND ('ALL' = ANY (biomes) OR mlu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR mlu.geocode =
                                     ANY(
@@ -300,7 +302,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	            geocodes character varying[],
+	        geocodes character varying[],
+                riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
@@ -343,11 +346,12 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    SUM(slu.area) AS total, 
                                    SUM(slu.counts) AS counts
                             FROM public."states_land_use" slu
-                            WHERE (slu.date <= effective_publish_date OR 'AF' = clsname)
+                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK'))
                                 AND slu.land_use_id = ANY (land_use_ids)
                                 AND slu.classname = clsname
                                 AND slu.date > enddate
                                 AND slu.date <= startdate
+                                AND slu.risk >= riskThreshold
                                 AND ('ALL' = ANY (biomes) OR slu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR slu.geocode =
                                     ANY(
@@ -448,7 +452,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	            geocodes character varying[],
+	        geocodes character varying[],
+                riskThreshold float,
                 isAuthenticated boolean DEFAULT False
         )
             RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
@@ -490,11 +495,12 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.area) AS total, 
                                                SUM(cls.counts) AS counts
                                         FROM public."cs_{cell}_land_use" cls
-                                        WHERE (cls.date <= effective_publish_date OR 'AF' = clsname)
+                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK'))
                                             AND cls.land_use_id = ANY (land_use_ids)
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
                                             AND cls.date <= startdate
+                                            AND cls.risk >= riskThreshold
                                             AND ('ALL' = ANY (biomes) OR cls.biome = ANY (biomes))
                                             AND (municipality_group_name = 'ALL' OR cls.geocode =
                                                 ANY(
