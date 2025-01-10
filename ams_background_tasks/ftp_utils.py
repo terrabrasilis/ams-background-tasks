@@ -72,7 +72,7 @@ class FtpFacade(BaseModel):
     async def download(self, src_file: Path, dst_file: Path):
         """Download a file from the ftp server."""
         try:
-            print("Downloading file {0} from ".format(src_file))
+            print(f"Downloading file {src_file}")
             client = Client()
             await client.connect(self.host, int(self.port))
             await client.login(self.user, self.password)

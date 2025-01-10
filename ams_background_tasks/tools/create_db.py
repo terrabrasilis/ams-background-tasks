@@ -884,22 +884,16 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
         INSERT INTO
             {schema}.{name} (id, name, priority)
             VALUES
-                (1,	'APA', 3),
-                (2,	'Assentamentos', 2),
-                (3,	'CAR', 4),
-                (4,	'FPND', 5),
-                (5,	'TI', 0),
-                (6,	'UC', 1),
-                (12, 'Indefinida', 6);
+		        (1, 'Terra indígena', 0),
+		        (2, 'Unidade de conservação de proteção integral', 1),
+		        (3, 'Unidade de conservacão de uso sustentável (sem APA)', 2),
+		        (4, 'Território quilombola', 3),
+		        (5, 'Assentamento rural', 4),
+		        (6, 'Área de proteção ambiental', 5),
+		        (7, 'Propriedade privada (Dados do SIGEF)', 6),
+		        (8, 'Floresta pública não destinada', 7),
+		        (9, 'Área sem registro fundiário', 8);
     """
-    #            (5,	'APA', 4),
-    #            (4,	'Assentamentos', 3),
-    #            (6,	'CAR', 5),
-    #            (7,	'FPND', 6),
-    #            (1,	'TI', 0),
-    #            (3,	'UC', 2),
-    #            (8, 'Indefinida', 7),
-    #            (2, 'Quilombola', 1)
 
     db.execute(sql=sql)
 
