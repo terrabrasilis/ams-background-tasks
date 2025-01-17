@@ -265,7 +265,7 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
     db.create_indexes(
         schema=schema,
         name=name,
-        columns=["geometry:gist"],
+        columns=["geometry:gist", "acronym:btree", "geocode:btree"],
         force_recreate=force_recreate,
     )
 
@@ -281,6 +281,13 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
         schema=schema,
         name=name,
         columns=columns,
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["biome:gist"],
+        force_recreate=force_recreate,
     )
 
 
@@ -873,6 +880,8 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
         "priority INT4",
     ]
 
+    table_exists = db.table_exist(schema=schema, table=name)
+
     db.create_table(
         schema=schema,
         name=name,
@@ -880,22 +889,23 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    sql = f"""
-        INSERT INTO
-            {schema}.{name} (id, name, priority)
-            VALUES
-		        (1, 'Terra indígena', 0),
-		        (2, 'Unidade de conservação de proteção integral', 1),
-		        (3, 'Unidade de conservacão de uso sustentável (sem APA)', 2),
-		        (4, 'Território quilombola', 3),
-		        (5, 'Assentamento rural', 4),
-		        (6, 'Área de proteção ambiental', 5),
-		        (7, 'Propriedade privada (Dados do SIGEF)', 6),
-		        (8, 'Floresta pública não destinada', 7),
-		        (9, 'Área sem registro fundiário', 8);
-    """
+    if not table_exists or force_recreate:
+        sql = f"""
+            INSERT INTO
+                {schema}.{name} (id, name, priority)
+                VALUES
+		            (1, 'Terra indígena', 0),
+		            (2, 'Unidade de conservação de proteção integral', 1),
+		            (3, 'Unidade de conservacão de uso sustentável (sem APA)', 2),
+		            (4, 'Território quilombola', 3),
+		            (5, 'Assentamento rural', 4),
+		            (6, 'Área de proteção ambiental', 5),
+		            (7, 'Propriedade privada (Dados do SIGEF)', 6),
+		            (8, 'Floresta pública não destinada', 7),
+		            (9, 'Área sem registro fundiário', 8);
+        """
 
-    db.execute(sql=sql)
+        db.execute(sql=sql)
 
 
 def create_municipalities_group_tables(
