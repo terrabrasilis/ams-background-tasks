@@ -85,8 +85,8 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
     for spatial_unit, _ in read_spatial_units(db=db).items():
         name = f"{spatial_unit}_land_use_area"
 
-        # if db.table_exist(schema=schema, table=name) and not force_recreate:
-        #    continue
+        if db.table_exist(schema=schema, table=name) and not force_recreate:
+            continue
 
         db.create_table(
             schema=schema,
@@ -101,7 +101,7 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
                 "geocode varchar(80)",
                 "UNIQUE (id, land_use_id, geocode, biome)",
             ],
-            force_recreate=True,
+            force_recreate=force_recreate,
         )
 
         db.create_indexes(
@@ -113,7 +113,7 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
                 "biome:btree",
                 "geocode:btree",
             ],
-            force_recreate=True,
+            force_recreate=force_recreate,
         )
 
     # municipalities_biome_intersection table
