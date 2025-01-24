@@ -99,7 +99,7 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
                 "area double precision",
                 "biome varchar(254)",
                 "geocode varchar(80)",
-                "UNIQUE (id, land_use_id, geocode, biome)",
+                "UNIQUE (suid, land_use_id, geocode, biome)",
             ],
             force_recreate=force_recreate,
         )
@@ -128,6 +128,7 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
                 "geocode character varying(80)",
                 "biome character varying(254)",
                 "geometry geometry(MultiPolygon, 4674)",
+                "UNIQUE (geocode, biome)",
             ],
             force_recreate=force_recreate,
         )
@@ -188,8 +189,8 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
         db.execute(sql=sql, log=False)
 
     with rio.open(land_use_image) as raster:
-        for table, col_id in read_spatial_units(db=db).items():
-            # if table != "states":
+        for table, _ in read_spatial_units(db=db).items():
+            # if table == "cs_5km":
             #    print(f"ignoring {table}")
             #    continue
 
@@ -209,12 +210,6 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
                 )
                 continue
 
-            join = (
-                "sub.geocode = su.geocode"
-                if table == "municipalities"
-                else f"sub.{col_id} = su.{col_id}"
-            )
-
             spatial_units_query = f"""
                 SELECT
                     su.suid,
@@ -222,15 +217,13 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
                     mbi.biome,
                     ST_Multi(ST_CollectionExtract(ST_Intersection(su.geometry, mbi.geometry), 3)) AS geom
                 FROM
-                    public.{table} su
-                INNER JOIN
-                    public.{table}_biome sub ON {join}
-                INNER JOIN
-                    public.municipalities_biome_intersection mbi ON sub.biome = mbi.biome
+                    public.{table} su,
+                    public.municipalities_biome_intersection mbi
                 WHERE 
-                    ST_IsValid(ST_CollectionExtract(ST_Intersection(su.geometry, mbi.geometry),3))
+                    su.geometry && mbi.geometry
+                    AND ST_IsValid(ST_CollectionExtract(ST_Intersection(su.geometry, mbi.geometry),3))
                     AND NOT ST_IsEmpty(ST_CollectionExtract(ST_Intersection(su.geometry, mbi.geometry),3))
-                    AND sub.biome = '{biome}';
+                    AND mbi.biome = '{biome}';
             """
 
             logger.debug(spatial_units_query)
