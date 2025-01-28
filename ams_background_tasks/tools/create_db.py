@@ -265,7 +265,7 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
     db.create_indexes(
         schema=schema,
         name=name,
-        columns=["geometry:gist"],
+        columns=["geometry:gist", "acronym:btree", "geocode:btree"],
         force_recreate=force_recreate,
     )
 
@@ -281,6 +281,13 @@ def create_states_table(db: DatabaseFacade, force_recreate: bool):
         schema=schema,
         name=name,
         columns=columns,
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["biome:btree"],
+        force_recreate=force_recreate,
     )
 
 
@@ -873,6 +880,8 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
         "priority INT4",
     ]
 
+    table_exists = db.table_exist(schema=schema, table=name)
+
     db.create_table(
         schema=schema,
         name=name,
@@ -880,22 +889,23 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    sql = f"""
-        INSERT INTO
-            {schema}.{name} (id, name, priority)
-            VALUES
-		        (1, 'Terra indígena', 0),
-		        (2, 'Unidade de conservação de proteção integral', 1),
-		        (3, 'Unidade de conservacão de uso sustentável (sem APA)', 2),
-		        (4, 'Território quilombola', 3),
-		        (5, 'Assentamento rural', 4),
-		        (6, 'Área de proteção ambiental', 5),
-		        (7, 'Propriedade privada (Dados do SIGEF)', 6),
-		        (8, 'Floresta pública não destinada', 7),
-		        (9, 'Área sem registro fundiário', 8);
-    """
+    if not table_exists or force_recreate:
+        sql = f"""
+            INSERT INTO
+                {schema}.{name} (id, name, priority)
+                VALUES
+		            (1, 'Terra indígena', 0),
+		            (2, 'Unidade de conservação de proteção integral', 1),
+		            (3, 'Unidade de conservacão de uso sustentável (sem APA)', 2),
+		            (4, 'Território quilombola', 3),
+		            (5, 'Assentamento rural', 4),
+		            (6, 'Área de proteção ambiental', 5),
+		            (7, 'Propriedade privada (Dados do SIGEF)', 6),
+		            (8, 'Floresta pública não destinada', 7),
+		            (9, 'Área sem registro fundiário', 8);
+        """
 
-    db.execute(sql=sql)
+        db.execute(sql=sql)
 
 
 def create_municipalities_group_tables(
@@ -940,6 +950,7 @@ def create_municipalities_group_tables(
             "FOREIGN KEY (group_id) REFERENCES public.municipalities_group (id)",
             "UNIQUE (group_id, geocode)",
         ],
+        force_recreate=force_recreate,
     )
 
     db.create_indexes(
@@ -948,96 +959,6 @@ def create_municipalities_group_tables(
         columns=["geocode:btree", "group_id:btree"],
         force_recreate=force_recreate,
     )
-
-    # priority municipalities
-    name = "municipalities_group"
-    sql = f"""
-        INSERT INTO {schema}.{name} (id, name) VALUES ('1', 'prioritários amz');
-    """
-
-    db.execute(sql)
-
-    name = "municipalities_group_members"
-    geocodes = [
-        "1505064",
-        "5101852",
-        "1100809",
-        "1505031",
-        "5106299",
-        "1400308",
-        "1100338",
-        "1200302",
-        "1506708",
-        "1302702",
-        "1100452",
-        "5105101",
-        "5107578",
-        "5108303",
-        "1302405",
-        "1507300",
-        "5103858",
-        "5103254",
-        "5108907",
-        "5106240",
-        "1200401",
-        "1502939",
-        "5106422",
-        "5106158",
-        "1300904",
-        "1505486",
-        "1303304",
-        "1503606",
-        "1500602",
-        "1300144",
-        "1503754",
-        "1500859",
-        "1508050",
-        "1302009",
-        "1508126",
-        "1505502",
-        "1400472",
-        "5100805",
-        "5107354",
-        "5101407",
-        "1504208",
-        "1505809",
-        "1200609",
-        "1300706",
-        "1506187",
-        "1504752",
-        "1302900",
-        "1506195",
-        "5107206",
-        "5106307",
-        "5107065",
-        "1100205",
-        "5105580",
-        "1301704",
-        "5105150",
-        "5103700",
-        "5103056",
-        "5103304",
-        "1200500",
-        "1200344",
-        "1100940",
-        "5103379",
-        "1508159",
-        "1507805",
-        "1504455",
-        "1504703",
-        "1506005",
-        "1502764",
-        "1505650",
-        "1503705",
-    ]
-    values = ",".join([f"(1,'{_}')" for _ in geocodes])
-
-    sql = f"""
-        INSERT INTO {schema}.{name} (group_id, geocode)
-        VALUES {values};
-    """
-
-    db.execute(sql)
 
 
 def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
