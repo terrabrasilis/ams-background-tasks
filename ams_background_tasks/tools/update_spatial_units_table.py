@@ -9,6 +9,7 @@ import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
+from ams_background_tasks.municipalities_groups import get_geocodes, list_groups
 from ams_background_tasks.tools.common import (
     BIOMES,
     CELLS,
@@ -83,6 +84,8 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
                 biome=_biome,
                 # truncate=truncate,
             )
+
+    update_municipalities_groups(db=db)
 
 
 def check_count_rows(db: DatabaseFacade):
@@ -206,6 +209,60 @@ def update_municipalities_table(
         VALUES (%s, '{biome}')
     """
     db.insert(query=insert_query, data=data)
+
+
+def update_municipalities_groups(db: DatabaseFacade):
+    """Update the municipalities groups."""
+    valid_geocodes = [
+        _[0] for _ in db.fetchall("SELECT geocode from public.municipalities")
+    ]
+
+    for group in list_groups():
+        table = "public.municipalities_group"
+        if db.count_rows(table=f"{table}", conditions=f"name='{group}'"):
+            continue
+
+        sql = f"""
+            INSERT INTO {table} (name) VALUES ('{group}');
+        """
+
+        db.execute(sql)
+
+        # getting group_id
+        sql = f"""
+            SELECT id from {table} WHERE name='{group}';
+        """
+
+        group_id = db.fetchone(query=sql)
+        assert group_id
+
+        logger.debug(group_id)
+
+        geocodes = get_geocodes(group=group)
+
+        invalid_geocodes = []
+        for geocode in geocodes:
+            if not geocode in valid_geocodes:
+                invalid_geocodes.append(geocode)
+
+        logger.debug("invalid geocodes %s", invalid_geocodes)
+
+        if len(invalid_geocodes) > 0:
+            logger.warning(
+                "there are invalid geocodes for the group %s: %s",
+                group,
+                invalid_geocodes,
+            )
+
+        values = ",".join([f"({group_id},'{_}')" for _ in geocodes])
+
+        table = "public.municipalities_group_members"
+        sql = f"""
+            INSERT INTO {table} (group_id, geocode)
+            VALUES {values};
+        """
+
+        db.execute(sql)
 
 
 def update_cells_table(
