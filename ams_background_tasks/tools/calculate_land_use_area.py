@@ -189,6 +189,8 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
         db.execute(sql=sql, log=False)
 
     with rio.open(land_use_image) as raster:
+        assert raster.nodata == 255
+
         for table, _ in read_spatial_units(db=db).items():
             # if table == "cs_5km":
             #    print(f"ignoring {table}")
@@ -242,7 +244,7 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
                     out_image, _ = mask(raster, geometry, crop=True)
                     out_image[0][out_image[0] == 255] = 0
                     unique, counts = np.unique(
-                        out_image[out_image > 0], return_counts=True
+                        out_image[0][out_image[0] > 0], return_counts=True
                     )
                     for land_use_id, count in tuple(
                         zip(unique.tolist(), counts.tolist())

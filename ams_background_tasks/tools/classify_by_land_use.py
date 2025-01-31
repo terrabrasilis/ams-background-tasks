@@ -275,6 +275,7 @@ def process_active_fires_land_structure(
     coord_list = list(zip(fires["geom"].x, fires["geom"].y))
 
     landuse_raster = rio.open(land_use_image)
+    assert landuse_raster.nodata == 255
 
     fires["value"] = list(landuse_raster.sample(coord_list))
     values: list = []
@@ -394,13 +395,15 @@ def process_deter_land_structure(
     sql = f"""
         SELECT gid, biome, geocode, geom
         FROM deter.tmp_data
-        WHERE biome='{biome}' AND geocode IS NOT NULL
+        WHERE biome='{biome}' AND geocode IS NOT NULL    
     """
+
     logger.debug(sql)
     deter = gpd.GeoDataFrame.from_postgis(sql=sql, con=db.conn, geom_col="geom")
     logger.debug("len(deter): %s", len(deter))
 
     landuse_raster = rio.open(land_use_image)
+    assert landuse_raster.nodata == 255
 
     values: list = []
     count_values: int = 0
@@ -411,7 +414,10 @@ def process_deter_land_structure(
             assert row.geocode
             geoms = [mapping(row.geom)]
             out_image, _ = mask(landuse_raster, geoms, crop=True)
-            unique, counts = np.unique(out_image[0], return_counts=True)
+            out_image[0][out_image[0] == 255] = 0
+            unique, counts = np.unique(
+                out_image[0][out_image[0] > 0], return_counts=True
+            )
             unique_counts = np.asarray((unique, counts)).T
             counts = pd.DataFrame(unique_counts)
             for _, count in counts.iterrows():
@@ -558,6 +564,7 @@ def process_risk_land_structure(
     coord_list = list(zip(risk["geom"].x, risk["geom"].y))
 
     landuse_raster = rio.open(land_use_image)
+    assert landuse_raster.nodata == 255
 
     risk["value"] = list(landuse_raster.sample(coord_list))
     values: list = []
