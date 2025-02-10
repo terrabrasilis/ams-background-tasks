@@ -192,10 +192,6 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
         assert raster.nodata == 255
 
         for table, _ in read_spatial_units(db=db).items():
-            # if table == "cs_5km":
-            #    print(f"ignoring {table}")
-            #    continue
-
             logger.info('calculating the land use are for "%s" spatial units', table)
 
             rows = db.count_rows(
