@@ -307,6 +307,41 @@ def classify_risk_by_land_use():
     ).execute({})
 
 
+@task(task_id="calculate-amz-land-use-area")
+def calculate_amz_land_use_area():
+    bash_command = (
+        f"ams-calculate-land-use-area {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')} "
+        " --biome='Amazônia'"
+        " --land-use-image=" + land_use_dir + "/Amazônia_land_use.tif"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id="ams-calculate-amz-land-use-area",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
+@task(task_id="calculate-cer-land-use-area")
+def calculate_cer_land_use_area():
+    bash_command = (
+        f"ams-calculate-land-use-area --biome='Cerrado'"
+        " --land-use-image=" + land_use_dir + "/Cerrado_land_use.tif"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id="ams-calculate-cer-land-use-area",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
 def _check_recreate_db():
     force_recreate = Variable.get("AMS_FORCE_RECREATE_DB") == "1"
 
@@ -349,6 +384,8 @@ with DAG(
     run_download_risk_file = download_risk_file()
     run_update_ibama_risk = update_ibama_risk()
     run_classify_risk = classify_risk_by_land_use()
+    run_calculate_amz_land_use_area = calculate_amz_land_use_area()
+    run_calculate_cer_land_use_area = calculate_cer_land_use_area()
 
     # RUNS
 
@@ -382,3 +419,9 @@ with DAG(
         run_classify_deter,
         run_classify_risk,
     ] >> run_finalize_classification
+
+    (
+        run_finalize_classification
+        >> run_calculate_amz_land_use_area
+        >> run_calculate_cer_land_use_area
+    )
