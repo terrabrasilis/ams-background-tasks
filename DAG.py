@@ -385,7 +385,7 @@ with DAG(
     run_update_ibama_risk = update_ibama_risk()
     run_classify_risk = classify_risk_by_land_use()
     run_calculate_amz_land_use_area = calculate_amz_land_use_area()
-    run_calculate_cer_land_use_area = calculate_amz_land_use_area()
+    run_calculate_cer_land_use_area = calculate_cer_land_use_area()
 
     # RUNS
 
