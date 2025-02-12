@@ -93,13 +93,13 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
             name=name,
             columns=[
                 "id serial NOT NULL PRIMARY KEY",
-                "suid int4",
+                "su_id varchar",
                 "land_use_id int4",
                 "counts int4",
                 "area double precision",
                 "biome varchar(254)",
                 "geocode varchar(80)",
-                "UNIQUE (suid, land_use_id, geocode, biome)",
+                "UNIQUE (su_id, land_use_id, geocode, biome)",
             ],
             force_recreate=force_recreate,
         )
@@ -108,7 +108,7 @@ def create_land_use_area_tables(db: DatabaseFacade, force_recreate: bool):
             schema=schema,
             name=name,
             columns=[
-                "suid:btree",
+                "su_id:btree",
                 "land_use_id:btree",
                 "biome:btree",
                 "geocode:btree",
@@ -182,7 +182,7 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
     def _insert_into_land_use_area(db: DatabaseFacade, table_prefix: str, values: list):
         sql = f"""
             INSERT INTO
-                public.{table_prefix}_land_use_area (suid, land_use_id, counts, area, biome, geocode)
+                public.{table_prefix}_land_use_area (su_id, land_use_id, counts, area, biome, geocode)
             VALUES {','.join(list(set(values)))};
         """
         logger.info("inserting into land_use_area")
@@ -191,11 +191,7 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
     with rio.open(land_use_image) as raster:
         assert raster.nodata == 255
 
-        for table, _ in read_spatial_units(db=db).items():
-            # if table == "cs_5km":
-            #    print(f"ignoring {table}")
-            #    continue
-
+        for table, col_id in read_spatial_units(db=db).items():
             logger.info('calculating the land use are for "%s" spatial units', table)
 
             rows = db.count_rows(
@@ -214,7 +210,7 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
 
             spatial_units_query = f"""
                 SELECT
-                    su.suid,
+                    su.{col_id},
                     mbi.geocode,
                     mbi.biome,
                     ST_Multi(ST_CollectionExtract(ST_Intersection(su.geometry, mbi.geometry), 3)) AS geom
@@ -249,13 +245,14 @@ def calculate_land_use_area(db: DatabaseFacade, land_use_image: Path, biome: str
                     for land_use_id, count in tuple(
                         zip(unique.tolist(), counts.tolist())
                     ):
-                        suid = row["suid"]
+                        su_id = row[col_id].replace("'", "''")
                         geocode = row["geocode"]
                         biome = row["biome"]
 
                         values.append(
-                            f"({suid}, {land_use_id}, {count}, {count * PIXEL_LAND_USE_AREA}, '{biome}', '{geocode}')"
+                            f"('{su_id}', {land_use_id}, {count}, {count * PIXEL_LAND_USE_AREA}, '{biome}', '{geocode}')"
                         )
+
                     if len(values) >= 1e4:  # optimizing insertion
                         _insert_into_land_use_area(
                             db=db, values=values, table_prefix=table
