@@ -20,18 +20,12 @@ from airflow.models import Variable
 from airflow.models.connection import Connection
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import (
-    BranchPythonOperator,
-    PythonVirtualenvOperator,
-    ShortCircuitOperator,
-)
+from airflow.operators.python import BranchPythonOperator, ShortCircuitOperator
 
 from common import *
 
 land_use_dir = project_dir + "/land_use"
 risk_dir = project_dir + "/risk"
-
-DAG_KEY = "ams-create-db"
 
 AMS_ALL_DATA_DB = None
 AMS_FORCE_RECREATE_DB = None
@@ -351,7 +345,10 @@ def _check_recreate_db():
 
 
 with DAG(
-    DAG_KEY, default_args=default_args, schedule_interval="0 2 * * *", catchup=False
+    "ams-create-db",
+    default_args=default_args,
+    schedule_interval="0 2 * * *",
+    catchup=False,
 ) as dag:
 
     run_check_variables = ShortCircuitOperator(
@@ -384,8 +381,6 @@ with DAG(
     run_download_risk_file = download_risk_file()
     run_update_ibama_risk = update_ibama_risk()
     run_classify_risk = classify_risk_by_land_use()
-    run_calculate_amz_land_use_area = calculate_amz_land_use_area()
-    run_calculate_cer_land_use_area = calculate_cer_land_use_area()
 
     # RUNS
 
@@ -420,8 +415,29 @@ with DAG(
         run_classify_risk,
     ] >> run_finalize_classification
 
+
+with DAG(
+    "ams-calculate-land-use-area",
+    default_args=default_args,
+    schedule_interval=None,
+    catchup=False,
+) as dag:
+
+    run_check_variables = ShortCircuitOperator(
+        task_id="check-variables",
+        provide_context=True,
+        python_callable=check_variables,
+        op_kwargs={},
+    )
+
+    run_update_environment = update_environment()
+
+    run_calculate_amz_land_use_area = calculate_amz_land_use_area()
+    run_calculate_cer_land_use_area = calculate_cer_land_use_area()
+
     (
-        run_finalize_classification
+        run_check_variables
+        >> run_update_environment
         >> run_calculate_amz_land_use_area
         >> run_calculate_cer_land_use_area
     )
