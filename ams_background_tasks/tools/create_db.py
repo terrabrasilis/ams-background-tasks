@@ -10,10 +10,13 @@ import click
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
+    AMS,
     CELL_5KM,
     CELL_25KM,
     CELL_150KM,
+    PPCDAM,
     is_valid_cell,
+    is_valid_land_use_type,
 )
 
 logger = get_logger(__name__, sys.stdout)
@@ -79,7 +82,8 @@ def main(db_url: str, force_recreate: bool):
     create_class_tables(db=db, force_recreate=force_recreate)
 
     # land use
-    create_land_use_table(db=db, force_recreate=force_recreate)
+    create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=AMS)
+    create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PPCDAM)
 
     # municipalities group
     create_municipalities_group_tables(db=db, force_recreate=force_recreate)
@@ -868,19 +872,21 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     db.execute(sql=sql)
 
 
-def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
-    """Create the public.land_use table."""
+def create_land_use_table(
+    db: DatabaseFacade, land_use_type=str, force_recreate: bool = False
+):
+    """Create the public.land_use_ams table."""
+    assert is_valid_land_use_type(land_use_type=land_use_type)
+
     schema = "public"
 
-    name = "land_use"
+    name = f"land_use_{land_use_type}"
 
     columns = [
         "id serial PRIMARY KEY",
         "name varchar(64)",
         "priority INT4",
     ]
-
-    table_exists = db.table_exist(schema=schema, table=name)
 
     db.create_table(
         schema=schema,
@@ -889,23 +895,54 @@ def create_land_use_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    if not table_exists or force_recreate:
-        sql = f"""
-            INSERT INTO
-                {schema}.{name} (id, name, priority)
-                VALUES
-		            (1, 'Terra indígena', 0),
-		            (2, 'Unidade de conservação de proteção integral', 1),
-		            (3, 'Unidade de conservacão de uso sustentável (sem APA)', 2),
-		            (4, 'Território quilombola', 3),
-		            (5, 'Assentamento rural', 4),
-		            (6, 'Área de proteção ambiental', 5),
-		            (7, 'Propriedade privada (Dados do SIGEF)', 6),
-		            (8, 'Floresta pública não destinada', 7),
-		            (9, 'Área sem registro fundiário', 8);
+    table_exists = db.table_exist(schema=schema, table=name)
+
+    if table_exists and not force_recreate:
+        return
+
+    land_use_categories = (
+        [
+            "Terra indígena",
+            "Unidade de conservação de proteção integral",
+            "Unidade de conservação de uso sustentável (sem APA)",
+            "Território quilombola",
+            "Assentamento rural",
+            "Área de proteção ambiental",
+            "Propriedade privada (Dados do SIGEF)",
+            "Floresta pública não destinada",
+            "Área sem registro fundiário",
+        ]
+        if land_use_type == AMS
+        else [
+            "Terra indígena",
+            "Unidade de conservação",
+            "Território quilombola",
+            "Assentamento rural",
+            "Área de proteção ambiental",
+            "Floresta pública não destinada",
+            "CAR sobreposto em terra indígena",
+            "CAR sobreposto em unidade de conservação",
+            "CAR sobreposto em território quilombola",
+            "CAR sobreposto em assentamento rural",
+            "CAR sobreposto em área de proteção ambiental",
+            "CAR sobreposto em floresta pública não destinada",
+            "Propriedade privada (Dados do CAR)",
+            "Área sem registro fundiário",
+        ]
+    )
+
+    values = [
+        f"({index+1}, '{value}', {index})"
+        for index, value in enumerate(land_use_categories)
+    ]
+
+    sql = f"""
+        INSERT INTO
+            {schema}.{name} (id, name, priority)
+        VALUES {",".join(values)};
         """
 
-        db.execute(sql=sql)
+    db.execute(sql=sql)
 
 
 def create_municipalities_group_tables(

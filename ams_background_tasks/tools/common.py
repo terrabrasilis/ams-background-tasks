@@ -41,6 +41,12 @@ INDICATORS = [
     RISK_INDICATOR,
 ]
 
+# land_use_type
+AMS = "ams"
+PPCDAM = "ppcdam"
+
+LAND_USE_TYPES = [AMS, PPCDAM]
+
 
 def is_valid_biome(biome: str):
     return biome in BIOMES
@@ -52,6 +58,10 @@ def is_valid_cell(cell: str):
 
 def is_valid_indicator(indicator: str):
     return indicator in INDICATORS
+
+
+def is_valid_land_use_type(land_use_type: str):
+    return land_use_type in LAND_USE_TYPES
 
 
 def get_prefix(is_temp: bool):
