@@ -91,9 +91,13 @@ def get_biome_acronym(biome: str):
 
 
 def recreate_spatial_table(
-    db: DatabaseFacade, spatial_unit: str, is_temp: bool, force_recreate: bool = True
+    db: DatabaseFacade,
+    spatial_unit: str,
+    is_temp: bool,
+    land_use_type: str,
+    force_recreate: bool = True,
 ):
-    table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use"
+    table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use_{land_use_type}"
 
     logger.info("recreating %s.", table)
 
@@ -163,7 +167,9 @@ def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
     )
 
 
-def reset_land_use_tables(db_url: str, is_temp: bool, force_recreate: bool):
+def reset_land_use_tables(
+    db_url: str, is_temp: bool, force_recreate: bool, land_use_type: str
+):
     db = DatabaseFacade.from_url(db_url=db_url)
     for spatial_unit in read_spatial_units(db=db):
         recreate_spatial_table(
@@ -171,6 +177,7 @@ def reset_land_use_tables(db_url: str, is_temp: bool, force_recreate: bool):
             spatial_unit=spatial_unit,
             is_temp=is_temp,
             force_recreate=force_recreate,
+            land_use_type=land_use_type,
         )
 
 
