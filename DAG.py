@@ -383,6 +383,7 @@ with DAG(
     schedule_interval="0 2 * * *",
     catchup=False,
     concurrency=3,
+    max_active_runs=1,
 ) as dag:
 
     run_check_variables = ShortCircuitOperator(
