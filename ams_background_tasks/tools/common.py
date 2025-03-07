@@ -24,7 +24,7 @@ PANTANAL = "Pantanal"
 BIOMES = [AMAZONIA, CERRADO, PANTANAL]
 
 # constants
-PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10 ** -6)
+PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
 
 # classnames
 ACTIVE_FIRES_CLASSNAME = "AF"
@@ -97,7 +97,11 @@ def recreate_spatial_table(
     land_use_type: str,
     force_recreate: bool = True,
 ):
-    table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use_{land_use_type}"
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    table = (
+        f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use{land_use_type_suffix}"
+    )
 
     logger.info("recreating %s.", table)
 

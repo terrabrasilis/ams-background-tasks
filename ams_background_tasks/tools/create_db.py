@@ -877,10 +877,11 @@ def create_land_use_table(
 ):
     """Create the public.land_use_ams table."""
     assert is_valid_land_use_type(land_use_type=land_use_type)
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
     schema = "public"
 
-    name = f"land_use_{land_use_type}"
+    name = f"land_use{land_use_type_suffix}"
 
     columns = [
         "id serial PRIMARY KEY",

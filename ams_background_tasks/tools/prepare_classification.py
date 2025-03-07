@@ -10,6 +10,7 @@ import click
 from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_INDICATOR,
+    AMS,
     DETER_INDICATOR,
     INDICATORS,
     LAND_USE_TYPES,
@@ -53,6 +54,8 @@ def main(
     logger.debug(db_url)
     assert db_url
 
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
     reset_land_use_tables(
         db_url=db_url, is_temp=True, force_recreate=True, land_use_type=land_use_type
     )
@@ -60,35 +63,35 @@ def main(
     if ACTIVE_FIRES_INDICATOR in indicator:
         create_land_structure_table(
             db_url=db_url,
-            table=f"tmp_fires_land_structure_{land_use_type}",
+            table=f"tmp_fires_land_structure{land_use_type_suffix}",
             force_recreate=True,
         )
         create_land_structure_table(
             db_url=db_url,
-            table=f"fires_land_structure_{land_use_type}",
+            table=f"fires_land_structure{land_use_type_suffix}",
             force_recreate=True,
         )
 
     if DETER_INDICATOR in indicator:
         create_land_structure_table(
             db_url=db_url,
-            table=f"tmp_deter_land_structure_{land_use_type}",
+            table=f"tmp_deter_land_structure{land_use_type_suffix}",
             force_recreate=True,
         )
         create_land_structure_table(
             db_url=db_url,
-            table=f"deter_land_structure_{land_use_type}",
+            table=f"deter_land_structure{land_use_type_suffix}",
             force_recreate=True,
         )
 
     if RISK_INDICATOR in indicator:
         create_land_structure_table(
             db_url=db_url,
-            table=f"tmp_risk_land_structure_{land_use_type}",
+            table=f"tmp_risk_land_structure{land_use_type_suffix}",
             force_recreate=True,
         )
         create_land_structure_table(
             db_url=db_url,
-            table=f"risk_land_structure_{land_use_type}",
+            table=f"risk_land_structure{land_use_type_suffix}",
             force_recreate=True,
         )

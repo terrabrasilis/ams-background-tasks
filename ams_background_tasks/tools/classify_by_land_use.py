@@ -23,6 +23,7 @@ from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
     AMAZONIA,
+    AMS,
     DETER_INDICATOR,
     INDICATORS,
     LAND_USE_TYPES,
@@ -35,7 +36,7 @@ from ams_background_tasks.tools.common import (
     read_spatial_units,
 )
 
-OPT_MAX_VALUES=5e4
+OPT_MAX_VALUES = 5e4
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -135,9 +136,10 @@ def insert_data_in_land_use_tables(
     def _insert_into_land_use(
         db: DatabaseFacade, spatial_unit: str, measure: str, log: bool, values: list
     ):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
         risk_column = ",risk" if risk else ""
         sql = f"""
-            INSERT INTO "{spatial_unit}_land_use_{land_use_type}" (
+            INSERT INTO "{spatial_unit}_land_use{land_use_type_suffix}" (
                 suid, land_use_id, classname, "date", {measure}, biome, geocode {risk_column}
             )
             VALUES {','.join(values)};
@@ -273,11 +275,14 @@ def process_active_fires_land_structure(
     def _insert_into_active_fires_land_structure(
         db: DatabaseFacade, table_prefix: str, values
     ):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
         sql = f"""
-            INSERT INTO {table_prefix}fires_land_structure_{land_use_type} (gid, biome, geocode, land_use_id, num_pixels)
+            INSERT INTO {table_prefix}fires_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
             VALUES {','.join(values)};
         """
-        logger.info("inserting into %sfires_land_structure_%s", table_prefix, land_use_type)
+        logger.info(
+            "inserting into %sfires_land_structure_%s", table_prefix, land_use_type
+        )
         db.execute(sql=sql, log=False)
 
     db = DatabaseFacade.from_url(db_url=db_url)
@@ -334,6 +339,8 @@ def process_active_fires_land_structure(
 def insert_fires_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: str):
     logger.info("Insert ACTIVE FIRES data in land use tables for each spatial units.")
 
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
     db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
@@ -350,7 +357,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
                 b.view_date AS date,
                 b.geom AS geometry
             FROM
-                {table_prefix}fires_land_structure_{land_use_type} a 
+                {table_prefix}fires_land_structure{land_use_type_suffix} a 
             INNER JOIN
                 fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
@@ -405,20 +412,22 @@ def process_deter_land_structure(
     def _insert_into_deter_land_structure(
         db: DatabaseFacade, table_prefix: str, values
     ):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
         sql = f"""
-            INSERT INTO {table_prefix}deter_land_structure_{land_use_type} (gid, biome, geocode, land_use_id, num_pixels)
+            INSERT INTO {table_prefix}deter_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
             VALUES {','.join(list(set(values)))};
         """
-        logger.info("inserting into %sdeter_land_structure_%s", table_prefix, land_use_type)
+        logger.info(
+            "inserting into %sdeter_land_structure%s",
+            table_prefix,
+            land_use_type_suffix,
+        )
         db.execute(sql=sql, log=False)
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
-
-    table = f"{table_prefix}deter_land_structure_{land_use_type}"
-
-    logger.info("filling %s.", table)
 
     sql = f"""
         SELECT gid, biome, geocode, geom
@@ -475,6 +484,8 @@ def process_deter_land_structure(
 def insert_deter_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: str):
     logger.info("Insert DETER data in land use tables for each spatial units.")
 
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
     db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
@@ -491,7 +502,7 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
                 b.date, 
                 b.geom AS geometry
             FROM 
-                {table_prefix}deter_land_structure_{land_use_type} a
+                {table_prefix}deter_land_structure{land_use_type_suffix} a
             INNER JOIN (
                 SELECT 
                     tb.gid, 
@@ -571,11 +582,15 @@ def process_risk_land_structure(
     biome: str,
 ):
     def _insert_into_risk_land_structure(db: DatabaseFacade, table_prefix: str, values):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
         sql = f"""
-            INSERT INTO {table_prefix}risk_land_structure_{land_use_type} (gid, biome, geocode, land_use_id, num_pixels)
+            INSERT INTO {table_prefix}risk_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
             VALUES {','.join(values)};
         """
-        logger.info("inserting into %srisk_land_structure_%s", table_prefix, land_use_type)
+        logger.info(
+            "inserting into %srisk_land_structure%s", table_prefix, land_use_type_suffix
+        )
         db.execute(sql=sql, log=False)
 
     db = DatabaseFacade.from_url(db_url=db_url)
@@ -635,6 +650,8 @@ def process_risk_land_structure(
 def insert_risk_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: str):
     logger.info("Insert RISK data in land use tables for each spatial units.")
 
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
     db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
@@ -652,7 +669,7 @@ def insert_risk_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: st
                 b.view_date AS date,
                 b.geom AS geometry
             FROM
-                {table_prefix}risk_land_structure_{land_use_type} a 
+                {table_prefix}risk_land_structure{land_use_type_suffix} a 
             INNER JOIN
                 public.last_risk_data b ON a.gid = b.id::text;
         """,

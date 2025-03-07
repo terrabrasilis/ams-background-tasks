@@ -40,6 +40,7 @@ def _get_biomes():
 
 # DAG: ams-create-db
 
+
 @task(task_id="update-environment")
 def update_environment():
     bash_command = f"pip install " + project_dir
@@ -262,7 +263,6 @@ def _classify_active_fires_by_land_use(land_use_type: str):
     ).execute({})
 
 
-
 @task(task_id="classify-fires-by-land-use-AMS")
 def classify_active_fires_by_land_use_ams():
     return _classify_active_fires_by_land_use(land_use_type="ams")
@@ -356,7 +356,6 @@ def _classify_risk_by_land_use(land_use_type: str):
     ).execute({})
 
 
-
 @task(task_id="classify-risk-by-land-use-AMS")
 def classify_risk_by_land_use_ams():
     return _classify_risk_by_land_use(land_use_type="ams")
@@ -368,6 +367,7 @@ def classify_risk_by_land_use_ppcdam():
 
 
 # others
+
 
 def _check_recreate_db():
     force_recreate = Variable.get("AMS_FORCE_RECREATE_DB") == "1"
@@ -401,7 +401,9 @@ with DAG(
     )
 
     run_skip = EmptyOperator(task_id="skip-create-db")
-    run_join = EmptyOperator(task_id="join-create-db", trigger_rule="none_failed_or_skipped")    
+    run_join = EmptyOperator(
+        task_id="join-create-db", trigger_rule="none_failed_or_skipped"
+    )
 
     # database creation
     run_create_db = create_db()
@@ -416,7 +418,7 @@ with DAG(
     run_update_cer_deter = update_cer_deter()
     run_download_risk_file = download_risk_file()
     run_update_ibama_risk = update_ibama_risk()
-    
+
     # preparing to classify
     run_prepare_classification = EmptyOperator(task_id="prepare-classification")
     run_prepare_classification_ams = prepare_classification_ams()
@@ -456,8 +458,11 @@ with DAG(
         run_update_cer_deter,
         run_update_ibama_risk,
     ] >> run_prepare_classification
-    
-    run_prepare_classification >> [run_prepare_classification_ams, run_prepare_classification_ppcdam]
+
+    run_prepare_classification >> [
+        run_prepare_classification_ams,
+        run_prepare_classification_ppcdam,
+    ]
 
     # ams
     run_prepare_classification_ams >> [

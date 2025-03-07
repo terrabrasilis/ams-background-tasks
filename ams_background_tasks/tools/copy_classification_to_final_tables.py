@@ -12,6 +12,7 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
+    AMS,
     DETER_INDICATOR,
     INDICATORS,
     LAND_USE_TYPES,
@@ -70,6 +71,8 @@ def main(
     logger.debug(db_url)
     assert db_url
 
+    logger.debug(indicators)
+
     percentage_calculation_for_areas(
         db_url=db_url, is_temp=True, land_use_type=land_use_type
     )
@@ -98,13 +101,15 @@ def percentage_calculation_for_areas(db_url: str, is_temp: bool, land_use_type: 
         tmpspatial_unit = f"{get_prefix(is_temp=is_temp)}{spatial_unit}"
         logger.info("processing %s", tmpspatial_unit)
 
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
         sql = f"""
-            UPDATE public."{tmpspatial_unit}_land_use_{land_use_type}"
-            SET percentage=public."{tmpspatial_unit}_land_use_{land_use_type}".area/su.area*100
+            UPDATE public."{tmpspatial_unit}_land_use{land_use_type_suffix}"
+            SET percentage=public."{tmpspatial_unit}_land_use{land_use_type_suffix}".area/su.area*100
             FROM public."{spatial_unit}" su
             WHERE
-                public."{tmpspatial_unit}_land_use_{land_use_type}".suid=su.suid
-                AND public."{tmpspatial_unit}_land_use_{land_use_type}".classname NOT IN (
+                public."{tmpspatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
+                AND public."{tmpspatial_unit}_land_use{land_use_type_suffix}".classname NOT IN (
                     '{ACTIVE_FIRES_CLASSNAME}','{RISK_CLASSNAME}'
                 )
         """
@@ -117,10 +122,14 @@ def copy_data_to_final_tables(
     logger.info("copying the new processed data to the final tables")
 
     if DETER_INDICATOR in indicators:
-        copy_deter_land_structure(db_url=db_url, all_data=all_data, land_use_type=land_use_type)
+        copy_deter_land_structure(
+            db_url=db_url, all_data=all_data, land_use_type=land_use_type
+        )
 
     if ACTIVE_FIRES_INDICATOR in indicators:
-        copy_fires_land_structure(db_url=db_url, all_data=all_data, land_use_type=land_use_type)
+        copy_fires_land_structure(
+            db_url=db_url, all_data=all_data, land_use_type=land_use_type
+        )
 
     if RISK_INDICATOR in indicators:
         copy_risk_land_structure(db_url=db_url, land_use_type=land_use_type)
@@ -128,7 +137,8 @@ def copy_data_to_final_tables(
     db = DatabaseFacade.from_url(db_url=db_url)
 
     for spatial_unit in read_spatial_units(db=db):
-        land_use_table = f"{spatial_unit}_land_use_{land_use_type}"
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+        land_use_table = f"{spatial_unit}_land_use{land_use_type_suffix}"
         tmp_land_use_table = f"tmp_{land_use_table}"
 
         logger.info("copying from %s to %s.", tmp_land_use_table, land_use_table)
@@ -137,7 +147,8 @@ def copy_data_to_final_tables(
 
 
 def copy_deter_land_structure(db_url: str, all_data: bool, land_use_type: str):
-    table = f"deter_land_structure_{land_use_type}"
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+    table = f"deter_land_structure{land_use_type_suffix}"
 
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
 
@@ -150,9 +161,9 @@ def copy_deter_land_structure(db_url: str, all_data: bool, land_use_type: str):
         # here, we expect deter.tmp_data to only have DETER data coming from the current table
         # update sequence value from the ams of table id
         sql = f"""
-            DELETE FROM deter_land_structure_{land_use_type} WHERE gid like '%_curr';
+            DELETE FROM deter_land_structure{land_use_type_suffix} WHERE gid like '%_curr';
             SELECT setval('public.deter_land_structure_id_seq', (
-                SELECT MAX(id) FROM public.deter_land_structure_{land_use_type})::integer, true
+                SELECT MAX(id) FROM public.deter_land_structure{land_use_type_suffix})::integer, true
             );
         """
         db.execute(sql=sql)
@@ -162,7 +173,8 @@ def copy_deter_land_structure(db_url: str, all_data: bool, land_use_type: str):
 
 
 def copy_fires_land_structure(db_url: str, all_data: bool, land_use_type: str):
-    table = f"fires_land_structure_{land_use_type}"
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+    table = f"fires_land_structure{land_use_type_suffix}"
 
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
 
@@ -176,7 +188,8 @@ def copy_fires_land_structure(db_url: str, all_data: bool, land_use_type: str):
 
 
 def copy_risk_land_structure(db_url: str, land_use_type: str):
-    table = f"risk_land_structure_{land_use_type}"
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+    table = f"risk_land_structure{land_use_type_suffix}"
 
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
 
@@ -188,13 +201,15 @@ def copy_risk_land_structure(db_url: str, land_use_type: str):
 
 def drop_tmp_tables(db_url: str, indicators: list, land_use_type: str):
     """Drop the temporary tables."""
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
     db = DatabaseFacade.from_url(db_url=db_url)
     for spatial_unit in read_spatial_units(db=db):
-        land_use_table = f"tmp_{spatial_unit}_land_use_{land_use_type}"
+        land_use_table = f"tmp_{spatial_unit}_land_use{land_use_type_suffix}"
         db.drop_table(table=land_use_table)
 
     if DETER_INDICATOR in indicators:
-        db.drop_table(table=f"tmp_deter_land_structure_{land_use_type}")
+        db.drop_table(table=f"tmp_deter_land_structure{land_use_type_suffix}")
 
     if ACTIVE_FIRES_INDICATOR in indicators:
-        db.drop_table(table=f"tmp_fires_land_structure_{land_use_type}")
+        db.drop_table(table=f"tmp_fires_land_structure{land_use_type_suffix}")
