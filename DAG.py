@@ -499,7 +499,8 @@ def calculate_amz_land_use_area():
     bash_command = (
         f"ams-calculate-land-use-area {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')} "
         " --biome='Amazônia'"
-        " --land-use-image=" + land_use_dir + "/Amazônia_land_use.tif"
+        " --land-use-type='ams'"
+        " --land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
@@ -516,7 +517,8 @@ def calculate_amz_land_use_area():
 def calculate_cer_land_use_area():
     bash_command = (
         f"ams-calculate-land-use-area --biome='Cerrado'"
-        " --land-use-image=" + land_use_dir + "/Cerrado_land_use.tif"
+        " --land-use-type='ams'"
+        " --land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
