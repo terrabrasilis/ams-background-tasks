@@ -24,7 +24,7 @@ PANTANAL = "Pantanal"
 BIOMES = [AMAZONIA, CERRADO, PANTANAL]
 
 # constants
-PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10 ** -6)
+PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
 
 # classnames
 ACTIVE_FIRES_CLASSNAME = "AF"
@@ -41,6 +41,12 @@ INDICATORS = [
     RISK_INDICATOR,
 ]
 
+# land_use_type
+AMS = "ams"
+PPCDAM = "ppcdam"
+
+LAND_USE_TYPES = [AMS, PPCDAM]
+
 
 def is_valid_biome(biome: str):
     return biome in BIOMES
@@ -52,6 +58,10 @@ def is_valid_cell(cell: str):
 
 def is_valid_indicator(indicator: str):
     return indicator in INDICATORS
+
+
+def is_valid_land_use_type(land_use_type: str):
+    return land_use_type in LAND_USE_TYPES
 
 
 def get_prefix(is_temp: bool):
@@ -81,9 +91,17 @@ def get_biome_acronym(biome: str):
 
 
 def recreate_spatial_table(
-    db: DatabaseFacade, spatial_unit: str, is_temp: bool, force_recreate: bool = True
+    db: DatabaseFacade,
+    spatial_unit: str,
+    is_temp: bool,
+    land_use_type: str,
+    force_recreate: bool = True,
 ):
-    table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use"
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    table = (
+        f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use{land_use_type_suffix}"
+    )
 
     logger.info("recreating %s.", table)
 
@@ -153,7 +171,9 @@ def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
     )
 
 
-def reset_land_use_tables(db_url: str, is_temp: bool, force_recreate: bool):
+def reset_land_use_tables(
+    db_url: str, is_temp: bool, force_recreate: bool, land_use_type: str
+):
     db = DatabaseFacade.from_url(db_url=db_url)
     for spatial_unit in read_spatial_units(db=db):
         recreate_spatial_table(
@@ -161,6 +181,7 @@ def reset_land_use_tables(db_url: str, is_temp: bool, force_recreate: bool):
             spatial_unit=spatial_unit,
             is_temp=is_temp,
             force_recreate=force_recreate,
+            land_use_type=land_use_type,
         )
 
 

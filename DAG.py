@@ -32,14 +32,13 @@ AMS_FORCE_RECREATE_DB = None
 AMS_BIOMES = None
 
 
-def _sleep():
-    sleep(random.random() * 20)
-
-
 def _get_biomes():
     return " ".join(
         [f"--biome={_}" for _ in Variable.get("AMS_BIOMES").split(";") if len(_) > 0]
     )
+
+
+# DAG: ams-create-db
 
 
 @task(task_id="update-environment")
@@ -182,77 +181,130 @@ def update_cer_deter():
     ).execute({})
 
 
-@task(task_id="prepare-classification")
-def prepare_classification():
-    bash_command = "ams-prepare-classification"
+# prepare classification
+
+
+def _prepare_classification(land_use_type: str):
+    bash_command = f"ams-prepare-classification --land-use-type {land_use_type}"
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-prepare-classification",
+        task_id=f"ams-prepare-classification-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
-        trigger_rule="none_failed_or_skipped",
     ).execute({})
 
 
-@task(task_id="classify-deter-by-land-use")
-def classify_deter_by_land_use():
+@task(task_id="prepare-classification-AMS")
+def prepare_classification_ams():
+    return _prepare_classification(land_use_type="ams")
+
+
+@task(task_id="prepare-classification-PPCDAM")
+def prepare_classification_ppcdam():
+    return _prepare_classification(land_use_type="ppcdam")
+
+
+# deter data classfication
+
+
+def _classify_deter_by_land_use(land_use_type: str):
     bash_command = (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
         " --indicator='deter'"
+        f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-classify-by-land-use",
+        task_id=f"ams-classify-deter-by-land-use-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
     ).execute({})
 
 
-@task(task_id="classify-fires-by-land-use")
-def classify_active_fires_by_land_use():
+@task(task_id="classify-deter-by-land-use-AMS")
+def classify_deter_by_land_use_ams():
+    return _classify_deter_by_land_use(land_use_type="ams")
+
+
+@task(task_id="classify-deter-by-land-use-PPCDAM")
+def classify_deter_by_land_use_ppcdam():
+    return _classify_deter_by_land_use(land_use_type="ppcdam")
+
+
+# active fires data classification
+
+
+def _classify_active_fires_by_land_use(land_use_type: str):
     bash_command = (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
         " --indicator='focos'"
+        f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-classify-by-land-use",
+        task_id=f"ams-classify-fires-by-land-use-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
     ).execute({})
 
 
-@task(task_id="finalize-classification")
-def finalize_classification():
+@task(task_id="classify-fires-by-land-use-AMS")
+def classify_active_fires_by_land_use_ams():
+    return _classify_active_fires_by_land_use(land_use_type="ams")
+
+
+@task(task_id="classify-fires-by-land-use-PPCDAM")
+def classify_active_fires_by_land_use_ppcdam():
+    return _classify_active_fires_by_land_use(land_use_type="ppcdam")
+
+
+# finalize classification
+
+
+def finalize_classification(land_use_type: str):
     bash_command = (
         f"ams-finalize-classification"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
+        f" --land-use-type={land_use_type}"
         " --drop-tmp"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-finalize-classification",
+        task_id=f"ams-finalize-classification-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
     ).execute({})
+
+
+@task(task_id="finalize-classification-AMS")
+def finalize_classification_ams():
+    return finalize_classification(land_use_type="ams")
+
+
+@task(task_id="finalize-classification-PPCDAM")
+def finalize_classification_ppcdam():
+    return finalize_classification(land_use_type="ppcdam")
+
+
+# risk
 
 
 @task(task_id="download-risk-file")
@@ -281,24 +333,165 @@ def update_ibama_risk():
     ).execute({})
 
 
-@task(task_id="classify-risk-by-land-use")
-def classify_risk_by_land_use():
+# risk data classification
+
+
+def _classify_risk_by_land_use(land_use_type: str):
     bash_command = (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia'"
         " --indicator='risco'"
+        f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-classify-by-land-use",
+        task_id=f"ams-classify-risk-by-land-use-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
     ).execute({})
+
+
+@task(task_id="classify-risk-by-land-use-AMS")
+def classify_risk_by_land_use_ams():
+    return _classify_risk_by_land_use(land_use_type="ams")
+
+
+@task(task_id="classify-risk-by-land-use-PPCDAM")
+def classify_risk_by_land_use_ppcdam():
+    return _classify_risk_by_land_use(land_use_type="ppcdam")
+
+
+# others
+
+
+def _check_recreate_db():
+    force_recreate = Variable.get("AMS_FORCE_RECREATE_DB") == "1"
+
+    if force_recreate:
+        return "create-db"
+    return "skip-create-db"
+
+
+with DAG(
+    "ams-create-db",
+    default_args=default_args,
+    schedule_interval="0 2 * * *",
+    catchup=False,
+    concurrency=3,
+    max_active_runs=1,
+) as dag:
+
+    run_check_variables = ShortCircuitOperator(
+        task_id="check-variables",
+        provide_context=True,
+        python_callable=check_variables,
+        op_kwargs={},
+    )
+
+    run_update_environment = update_environment()
+
+    run_check_recreate_db = BranchPythonOperator(
+        task_id="check-create-db",
+        python_callable=_check_recreate_db,
+    )
+
+    run_skip = EmptyOperator(task_id="skip-create-db")
+    run_join = EmptyOperator(
+        task_id="join-create-db", trigger_rule="none_failed_or_skipped"
+    )
+
+    # database creation
+    run_create_db = create_db()
+
+    # biomes and spatial units
+    run_update_biome = update_biome()
+    run_update_spatial_units = update_spatial_units()
+
+    # indicators
+    run_update_active_fires = update_active_fires()
+    run_update_amz_deter = update_amz_deter()
+    run_update_cer_deter = update_cer_deter()
+    run_download_risk_file = download_risk_file()
+    run_update_ibama_risk = update_ibama_risk()
+
+    # preparing to classify
+    run_prepare_classification = EmptyOperator(task_id="prepare-classification")
+    run_prepare_classification_ams = prepare_classification_ams()
+    run_prepare_classification_ppcdam = prepare_classification_ppcdam()
+
+    # classification
+    run_classify_deter_ams = classify_deter_by_land_use_ams()
+    run_classify_deter_ppcdam = classify_deter_by_land_use_ppcdam()
+
+    run_classify_active_fires_ams = classify_active_fires_by_land_use_ams()
+    run_classify_active_fires_ppcdam = classify_active_fires_by_land_use_ppcdam()
+
+    run_classify_risk_ams = classify_risk_by_land_use_ams()
+    run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam()
+
+    # finalize classification
+    run_finalize_classification_ams = finalize_classification_ams()
+    run_finalize_classification_ppcdam = finalize_classification_ppcdam()
+
+    # running
+
+    run_check_variables >> run_update_environment
+
+    run_update_environment >> run_check_recreate_db
+
+    run_check_recreate_db >> [run_create_db, run_skip]
+
+    run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
+    run_skip >> run_join
+
+    run_join >> [run_update_active_fires, run_update_amz_deter, run_download_risk_file]
+    run_update_amz_deter >> run_update_cer_deter
+    run_download_risk_file >> run_update_ibama_risk
+
+    [
+        run_update_active_fires,
+        run_update_cer_deter,
+        run_update_ibama_risk,
+    ] >> run_prepare_classification
+
+    run_prepare_classification >> [
+        run_prepare_classification_ams,
+        run_prepare_classification_ppcdam,
+    ]
+
+    # ams
+    run_prepare_classification_ams >> [
+        run_classify_active_fires_ams,
+        run_classify_deter_ams,
+        run_classify_risk_ams,
+    ]
+
+    [
+        run_classify_active_fires_ams,
+        run_classify_deter_ams,
+        run_classify_risk_ams,
+    ] >> run_finalize_classification_ams
+
+    # ppcdam
+    run_prepare_classification_ppcdam >> [
+        run_classify_active_fires_ppcdam,
+        run_classify_deter_ppcdam,
+        run_classify_risk_ppcdam,
+    ]
+
+    [
+        run_classify_active_fires_ppcdam,
+        run_classify_deter_ppcdam,
+        run_classify_risk_ppcdam,
+    ] >> run_finalize_classification_ppcdam
+
+
+# DAG: ams-calculate-land-use-area
 
 
 @task(task_id="calculate-amz-land-use-area")
@@ -334,86 +527,6 @@ def calculate_cer_land_use_area():
         env=env,
         append_env=True,
     ).execute({})
-
-
-def _check_recreate_db():
-    force_recreate = Variable.get("AMS_FORCE_RECREATE_DB") == "1"
-
-    if force_recreate:
-        return "create-db"
-    return "skip"
-
-
-with DAG(
-    "ams-create-db",
-    default_args=default_args,
-    schedule_interval="0 2 * * *",
-    catchup=False,
-) as dag:
-
-    run_check_variables = ShortCircuitOperator(
-        task_id="check-variables",
-        provide_context=True,
-        python_callable=check_variables,
-        op_kwargs={},
-    )
-
-    run_update_environment = update_environment()
-
-    run_check_recreate_db = BranchPythonOperator(
-        task_id="check-recreate-db",
-        python_callable=_check_recreate_db,
-    )
-
-    run_skip = EmptyOperator(task_id="skip")
-    run_join = EmptyOperator(task_id="join", trigger_rule="none_failed_or_skipped")
-
-    run_create_db = create_db()
-    run_update_biome = update_biome()
-    run_update_spatial_units = update_spatial_units()
-    run_update_active_fires = update_active_fires()
-    run_update_amz_deter = update_amz_deter()
-    run_update_cer_deter = update_cer_deter()
-    run_prepare_classification = prepare_classification()
-    run_classify_deter = classify_deter_by_land_use()
-    run_classify_active_fires = classify_active_fires_by_land_use()
-    run_finalize_classification = finalize_classification()
-    run_download_risk_file = download_risk_file()
-    run_update_ibama_risk = update_ibama_risk()
-    run_classify_risk = classify_risk_by_land_use()
-
-    # RUNS
-
-    run_check_variables >> run_update_environment
-
-    run_update_environment >> run_check_recreate_db
-
-    run_check_recreate_db >> [run_create_db, run_skip]
-
-    run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
-    run_skip >> run_join
-
-    run_join >> [run_update_active_fires, run_update_amz_deter, run_download_risk_file]
-    run_update_amz_deter >> run_update_cer_deter
-    run_download_risk_file >> run_update_ibama_risk
-
-    [
-        run_update_active_fires,
-        run_update_cer_deter,
-        run_update_ibama_risk,
-    ] >> run_prepare_classification
-
-    run_prepare_classification >> [
-        run_classify_active_fires,
-        run_classify_deter,
-        run_classify_risk,
-    ]
-
-    [
-        run_classify_active_fires,
-        run_classify_deter,
-        run_classify_risk,
-    ] >> run_finalize_classification
 
 
 with DAG(
