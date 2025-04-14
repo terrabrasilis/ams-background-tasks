@@ -1008,7 +1008,8 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
     if force_recreate:
         db.drop_table(f"{schema}.weekly_data", cascade=True)
 
-    name = "etl_log_ibama"
+    # common tables
+    name = "etl_log_risk"
     db.create_table(
         schema=schema,
         name=name,
@@ -1021,10 +1022,33 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "is_new boolean DEFAULT true",
             "created_at timestamp with time zone NOT NULL DEFAULT now()",
             "processed_at timestamp with time zone",
+            "source varchar",
         ],
         force_recreate=force_recreate,
     )
 
+    name = "risk_image_date"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar UNIQUE",
+            "expiration_date date",
+            "created_at date NOT NULL DEFAULT now()",
+            "risk_date date",
+            "source varchar",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["file_name:btree"],
+        force_recreate=force_recreate,
+    )
+
+    # ibama risk
     name = "matrix_ibama_1km"
     db.create_table(
         schema=schema,
@@ -1056,26 +1080,6 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
         force_recreate=force_recreate,
     )
 
-    name = "risk_ibama_date"
-    db.create_table(
-        schema=schema,
-        name=name,
-        columns=[
-            "id serial NOT NULL PRIMARY KEY",
-            "file_name varchar UNIQUE",
-            "expiration_date date",
-            "created_at date NOT NULL DEFAULT now()",
-            "risk_date date",
-        ],
-        force_recreate=force_recreate,
-    )
-    db.create_indexes(
-        schema=schema,
-        name=name,
-        columns=["file_name:btree"],
-        force_recreate=force_recreate,
-    )
-
     name = "weekly_data"
     db.create_table(
         schema=schema,
@@ -1087,7 +1091,7 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "risk double precision",
             "biome varchar(254)",
             "geocode varchar(80)",
-            "FOREIGN KEY (date_id) REFERENCES risk.risk_ibama_date (id)",
+            "FOREIGN KEY (date_id) REFERENCES risk.risk_image_date (id)",
             "FOREIGN KEY (geom_id) REFERENCES risk.matrix_ibama_1km (id)",
         ],
         force_recreate=force_recreate,
@@ -1102,3 +1106,5 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
         ],
         force_recreate=force_recreate,
     )
+
+    # inpe risk

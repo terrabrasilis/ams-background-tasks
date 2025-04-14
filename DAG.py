@@ -51,7 +51,6 @@ def update_environment():
 
 
 def check_variables():
-
     AMS_ALL_DATA_DB = Variable.get("AMS_ALL_DATA_DB")
     AMS_FORCE_RECREATE_DB = Variable.get("AMS_FORCE_RECREATE_DB")
     AMS_BIOMES = Variable.get("AMS_BIOMES")
@@ -307,14 +306,14 @@ def finalize_classification_ppcdam():
 # risk
 
 
-@task(task_id="download-risk-file")
-def download_risk_file():
+@task(task_id="download-ibama-risk-file")
+def download_ibama_risk_file():
     bash_command = (
-        "ams-download-risk-file --days-until-expiration=15 --save-dir=" + risk_dir
+        "ams-download-ibama-risk-file --days-until-expiration=15 --save-dir=" + risk_dir
     )
 
     return BashOperator(
-        task_id="ams-download-risk-file",
+        task_id="ams-download-ibama-risk-file",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_FTP_URL"]),
         append_env=True,
@@ -385,7 +384,6 @@ with DAG(
     concurrency=3,
     max_active_runs=1,
 ) as dag:
-
     run_check_variables = ShortCircuitOperator(
         task_id="check-variables",
         provide_context=True,
@@ -416,7 +414,7 @@ with DAG(
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
     run_update_cer_deter = update_cer_deter()
-    run_download_risk_file = download_risk_file()
+    run_download_ibama_risk_file = download_ibama_risk_file()
     run_update_ibama_risk = update_ibama_risk()
 
     # preparing to classify
@@ -449,9 +447,13 @@ with DAG(
     run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
     run_skip >> run_join
 
-    run_join >> [run_update_active_fires, run_update_amz_deter, run_download_risk_file]
+    run_join >> [
+        run_update_active_fires,
+        run_update_amz_deter,
+        run_download_ibama_risk_file,
+    ]
     run_update_amz_deter >> run_update_cer_deter
-    run_download_risk_file >> run_update_ibama_risk
+    run_download_ibama_risk_file >> run_update_ibama_risk
 
     [
         run_update_active_fires,
@@ -537,7 +539,6 @@ with DAG(
     schedule_interval=None,
     catchup=False,
 ) as dag:
-
     run_check_variables = ShortCircuitOperator(
         task_id="check-variables",
         provide_context=True,

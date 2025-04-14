@@ -14,11 +14,11 @@ from shapely.geometry import Point
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import (
-    AMAZONIA,
+from ams_background_tasks.tools.common import AMAZONIA, is_valid_biome
+from ams_background_tasks.tools.risk_utils import (
+    RISK_SRC_IBAMA,
     get_last_risk_file_info,
     get_risk_date_id,
-    is_valid_biome,
     mark_risk_file_as_used,
 )
 
@@ -104,7 +104,7 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
     db.execute(sql)
 
     # last risk file
-    risk_file, _ = get_last_risk_file_info(db=db, is_new=True)
+    risk_file, _ = get_last_risk_file_info(db=db, is_new=True, src=RISK_SRC_IBAMA)
 
     logger.info(risk_file)
 

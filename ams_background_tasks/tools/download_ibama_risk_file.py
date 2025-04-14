@@ -14,7 +14,12 @@ from dateutil.relativedelta import relativedelta
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.ftp_utils import FtpFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import get_last_risk_file_info
+from ams_background_tasks.tools.risk_utils import (
+    RISK_SRC_IBAMA,
+    get_last_risk_file_info,
+    write_expiration_date,
+    write_log,
+)
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -72,7 +77,9 @@ async def _download_risk_file(
     remote_risk_file: dict,
     output_file: Path,
 ):
-    last_risk_file, last_risk_file_date = get_last_risk_file_info(db=db)
+    last_risk_file, last_risk_file_date = get_last_risk_file_info(
+        db=db, src=RISK_SRC_IBAMA
+    )
 
     if last_risk_file and remote_risk_file["date"] <= last_risk_file_date:
         return 0, "There is no new file"
@@ -103,8 +110,14 @@ async def download_risk_file(
     if len(files) == 0:
         status = 0
         msg = "There is no file on ftp server."
-        _write_log(
-            db=db, msg=msg, status=status, file_date=None, file_name="", is_new=False
+        write_log(
+            db=db,
+            msg=msg,
+            status=status,
+            file_date=None,
+            file_name="",
+            is_new=False,
+            src="",
         )
         return
 
@@ -126,69 +139,22 @@ async def download_risk_file(
     file_date = remote_risk_file["date"]
     file_expiration_date = file_date + relativedelta(days=days_until_expiration)
 
-    _write_log(
+    write_log(
         db=db,
         msg=msg,
         status=status,
         file_date=remote_risk_file["date"],
         file_name=output_file,
         is_new=datetime.now().date() <= file_expiration_date,
+        src=RISK_SRC_IBAMA,
     )
 
     if status == 1:
-        _write_expiration_date(
+        write_expiration_date(
             db=db,
             status=status,
             file_name=output_file,
             file_date=file_date,
             file_expiration_date=file_expiration_date,
+            src=RISK_SRC_IBAMA,
         )
-
-
-def _write_log(
-    *,
-    db: DatabaseFacade,
-    msg: str,
-    status: int,
-    file_date: datetime,
-    file_name: str,
-    is_new: bool,
-):
-    """Write log to database."""
-    dt = (
-        file_date.strftime("%Y-%m-%d")
-        if file_date is not None
-        else datetime.now().strftime("%d_%m_%Y")
-    )
-
-    msg = msg.replace("'", '"')
-
-    sql = f"""
-        INSERT INTO risk.etl_log_ibama (file_name, process_status, process_message, file_date, is_new)
-        VALUES('{file_name}', {status}, '{msg}', '{dt}', {is_new});
-    """
-
-    db.execute(sql)
-
-
-def _write_expiration_date(
-    db: DatabaseFacade,
-    status: int,
-    file_date: datetime,
-    file_expiration_date: datetime,
-    file_name: str,
-):
-    """Write an expiration date only if has new risk data."""
-
-    assert status == 1
-    assert file_date
-    assert file_expiration_date
-
-    dt = file_expiration_date.strftime("%Y-%m-%d")
-
-    sql = f"""
-        INSERT INTO risk.risk_ibama_date (expiration_date,risk_date, file_name)
-        VALUES('{dt}','{file_date}', '{file_name}');
-    """
-
-    db.execute(sql)
