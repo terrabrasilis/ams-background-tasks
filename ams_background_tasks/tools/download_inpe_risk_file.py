@@ -1,4 +1,4 @@
-"""Retrieve the risk image from an ftp server."""
+"""Retrieve the risk image from a STAC server."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.risk_utils import (
     RISK_ASSET_NAME,
     RISK_SRC_INPE,
+    get_last_risk_file_info,
     write_expiration_date,
     write_log,
 )
@@ -57,12 +58,16 @@ logger = get_logger(__name__, sys.stdout)
     type=int,
     help="Number of days until the data expires.",
 )
+@click.option("--begin", required=True, type=str, help="YYYY-mm-dd")
+@click.option("--end", required=True, type=str, help="YYYY-mm-dd")
 def main(
     db_url: str,
     stac_api_url: str,
     collection: str,
     save_dir: str,
     days_until_expiration: int,
+    begin: str,
+    end: str,
 ):
     """Retrieve the risk image from a STAC server."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
@@ -77,12 +82,20 @@ def main(
     logger.debug(collection)
     assert collection
 
+    begin = datetime.strptime(begin, "%Y-%m-%d")
+    logger.debug(begin)
+
+    end = datetime.strptime(end, "%Y-%m-%d")
+    logger.debug(end)
+
     download_risk_file(
         db_url=db_url,
         stac_api_url=stac_api_url,
         collection=collection,
         save_dir=Path(save_dir),
         days_until_expiration=days_until_expiration,
+        beg=begin,
+        end=end,
     )
 
 
@@ -115,13 +128,10 @@ def download_risk_file(
     days_until_expiration: int,
     collection: str,
     save_dir: Path,
+    beg: datetime,
+    end: datetime,
 ):
     db = DatabaseFacade.from_url(db_url=db_url)
-
-    # looking for stac risk file
-    now = datetime.now()
-    beg = now - relativedelta(days=days_until_expiration - 1)
-    end = now
 
     items = _get_items(
         endpoint=f"{stac_api_url}/search",
@@ -136,19 +146,33 @@ def download_risk_file(
     last_date = None
     for item in items:
         properties = item["properties"]
-
-        cur_date = properties["datetime"]
-        last_date = cur_date if last_date is None else min(last_date, cur_date)
+        cur_date = datetime.strptime(properties["datetime"], "%Y-%m-%dT%H:%M:%SZ")
 
         for name, values in item["assets"].items():
             if name.lower() != RISK_ASSET_NAME.lower():
                 continue
-            candidates[cur_date] = values
 
-    if len(candidates) == 0:
+            candidates[cur_date] = values
+            last_date = cur_date if last_date is None else max(last_date, cur_date)
+
+    last_risk_file, last_risk_file_date = get_last_risk_file_info(
+        db=db, src=RISK_SRC_INPE
+    )
+
+    if (
+        last_risk_file
+        and last_date.date() <= last_risk_file_date
+        or len(candidates) == 0
+    ):
         msg = "There is no new file"
         write_log(
-            db=db, msg=msg, status=0, file_date=None, file_name="", is_new=False, src=""
+            db=db,
+            msg=msg,
+            status=0,
+            file_date=None,
+            file_name="",
+            is_new=False,
+            src=RISK_SRC_INPE,
         )
         return
 
@@ -165,8 +189,20 @@ def download_risk_file(
     status, msg = _download_asset(url=url, download_path=file_name)
     logger.debug(msg)
 
+    if not status:
+        write_log(
+            db=db,
+            msg=msg,
+            status=0,
+            file_date=None,
+            file_name="",
+            is_new=False,
+            src=RISK_SRC_INPE,
+        )
+        return
+
     file_date = last_date
-    file_expiration_date = cur_date + relativedelta(days=days_until_expiration)
+    file_expiration_date = file_date + relativedelta(days=days_until_expiration)
 
     write_log(
         db=db,
@@ -174,7 +210,7 @@ def download_risk_file(
         status=status,
         file_date=file_date,
         file_name=file_name,
-        is_new=datetime.now().date() <= file_expiration_date.date(),
+        is_new=last_date.date() <= file_expiration_date.date(),
         src=RISK_SRC_INPE,
     )
 
