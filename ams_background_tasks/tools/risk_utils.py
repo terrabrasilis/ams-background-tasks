@@ -12,10 +12,10 @@ logger = get_logger(__name__, sys.stdout)
 
 
 # risk asset
-RISK_ASSET_NAME = "Risco"
+RISK_ASSET_NAME = "XGBoost"
 
 RISK_SRC_IBAMA = "ibama"
-RISK_SRC_INPE = "ibama"
+RISK_SRC_INPE = "inpe"
 RISK_SRCS = [RISK_SRC_IBAMA, RISK_SRC_INPE]
 
 
@@ -28,7 +28,7 @@ def get_last_risk_file_info(db: DatabaseFacade, src: str, is_new: bool = None):
 
     sql = f"""
         SELECT file_name, file_date FROM risk.etl_log_risk
-        WHERE process_status=1 AND src='{src}' {_filter}
+        WHERE process_status=1 AND source='{src}' {_filter}
         ORDER BY created_at DESC LIMIT 1;
     """
 
@@ -73,12 +73,12 @@ def write_log(
     src: str,
 ):
     """Write log to database."""
-    assert src in RISK_SRCS
+    assert not src or src in RISK_SRCS
 
     dt = (
         file_date.strftime("%Y-%m-%d")
         if file_date is not None
-        else datetime.now().strftime("%d_%m_%Y")
+        else datetime.now().strftime("%Y-%m-%d")
     )
 
     msg = msg.replace("'", '"')
