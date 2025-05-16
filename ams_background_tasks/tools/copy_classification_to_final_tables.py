@@ -16,8 +16,11 @@ from ams_background_tasks.tools.common import (
     DETER_INDICATOR,
     INDICATORS,
     LAND_USE_TYPES,
-    RISK_CLASSNAME,
-    RISK_INDICATOR,
+    RISK_IBAMA_CLASSNAME,
+    RISK_IBAMA_INDICATOR,
+    RISK_INPE_CLASSNAME,
+    RISK_INPE_INDICATOR,
+    RISK_SCALE_FACTOR,
     create_land_structure_table,
     get_prefix,
     read_spatial_units,
@@ -76,9 +79,14 @@ def main(
     percentage_calculation_for_areas(
         db_url=db_url, is_temp=True, land_use_type=land_use_type
     )
+
+    if RISK_INPE_INDICATOR in indicators:
+        normalize_inpe_risk(db_url=db_url, is_temp=True, land_use_type=land_use_type)
+
     reset_land_use_tables(
         db_url=db_url, is_temp=False, force_recreate=True, land_use_type=land_use_type
     )
+
     copy_data_to_final_tables(
         db_url=db_url,
         all_data=all_data,
@@ -110,9 +118,54 @@ def percentage_calculation_for_areas(db_url: str, is_temp: bool, land_use_type: 
             WHERE
                 public."{tmpspatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
                 AND public."{tmpspatial_unit}_land_use{land_use_type_suffix}".classname NOT IN (
-                    '{ACTIVE_FIRES_CLASSNAME}','{RISK_CLASSNAME}'
+                    '{ACTIVE_FIRES_CLASSNAME}','{RISK_IBAMA_CLASSNAME}', '{RISK_INPE_CLASSNAME}'
                 )
         """
+        db.execute(sql)
+
+
+def normalize_inpe_risk(db_url: str, is_temp: bool, land_use_type: str):
+    logger.info("normalizing inpe risk values")
+
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    for spatial_unit in read_spatial_units(db=db):
+        tmpspatial_unit = f"{get_prefix(is_temp=is_temp)}{spatial_unit}"
+        logger.info("processing %s", tmpspatial_unit)
+
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+        sql = f"""
+            WITH suid_totals AS (
+                SELECT
+                    suid,
+                    SUM(risk) AS total_risk
+                FROM public."{tmpspatial_unit}_land_use{land_use_type_suffix}"
+                GROUP BY suid
+            ),
+            max_total AS (
+                SELECT MAX(total_risk) AS max_risk FROM suid_totals
+            ),
+            normalized_risk AS (
+                SELECT
+                    l.id,
+                    CASE
+                        WHEN s.total_risk > 0 AND m.max_risk > 0 THEN
+                            (l.risk / s.total_risk) * (s.total_risk / m.max_risk) * {RISK_SCALE_FACTOR}
+                        ELSE 0
+                    END AS score
+                FROM public."{tmpspatial_unit}_land_use{land_use_type_suffix}" l
+                JOIN suid_totals s ON l.suid = s.suid
+                CROSS JOIN max_total m
+            )
+            UPDATE public."{tmpspatial_unit}_land_use{land_use_type_suffix}"
+            SET score = n.score
+            FROM normalized_risk n
+            WHERE public."{tmpspatial_unit}_land_use{land_use_type_suffix}".id = n.id;
+        """
+
+        logger.debug(sql)
+
         db.execute(sql)
 
 
@@ -131,7 +184,7 @@ def copy_data_to_final_tables(
             db_url=db_url, all_data=all_data, land_use_type=land_use_type
         )
 
-    if RISK_INDICATOR in indicators:
+    if RISK_IBAMA_INDICATOR in indicators or RISK_INPE_INDICATOR in indicators:
         copy_risk_land_structure(db_url=db_url, land_use_type=land_use_type)
 
     db = DatabaseFacade.from_url(db_url=db_url)

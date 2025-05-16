@@ -25,20 +25,26 @@ BIOMES = [AMAZONIA, CERRADO, PANTANAL]
 
 # constants
 PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
+RISK_SCALE_FACTOR = 1
 
 # classnames
 ACTIVE_FIRES_CLASSNAME = "AF"
-RISK_CLASSNAME = "RK"
+RISK_IBAMA_CLASSNAME = "RK"
+RISK_INPE_CLASSNAME = "RI"
 
 # indicators
 DETER_INDICATOR = "deter"
 ACTIVE_FIRES_INDICATOR = "focos"
-RISK_INDICATOR = "risco"
+RISK_IBAMA_INDICATOR = "risco"
+RISK_INPE_INDICATOR = "risco-inpe"
+
+RISK_INDICATORS = [RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR]
 
 INDICATORS = [
     DETER_INDICATOR,
     ACTIVE_FIRES_INDICATOR,
-    RISK_INDICATOR,
+    RISK_IBAMA_INDICATOR,
+    RISK_INPE_INDICATOR,
 ]
 
 # land_use_type
@@ -118,6 +124,7 @@ def recreate_spatial_table(
             "percentage double precision",
             "counts int4",
             "risk double precision NOT NULL DEFAULT 0.0",
+            "score double precision NOT NULL DEFAULT 0.0",
             "geocode character varying(80)",
             "biome character varying(254)",
         ],
