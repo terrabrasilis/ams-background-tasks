@@ -135,8 +135,6 @@ def update_risk_file(
 
     db.truncate(table=f"{schema}.{risk_tmp}", cascade=True)
 
-    print(len(dfr))
-
     values = []
     for _, row in dfr.iterrows():
         values.append(
@@ -175,8 +173,8 @@ def update_risk_file(
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
-    table1 = f"{schema}.{risk_data}"
-    table2 = f"{schema}.{risk_geom}"
+    table1 = f"{schema}.{risk_data}"  # risk_data_inpe
+    table2 = f"{schema}.{risk_geom}"  # risk_matrix_inpe
 
     sql = f"""
         UPDATE {table1} AS rk
