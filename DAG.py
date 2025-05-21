@@ -21,6 +21,7 @@ from airflow.models.connection import Connection
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import BranchPythonOperator, ShortCircuitOperator
+from dateutil.relativedelta import relativedelta
 
 from common import *
 
@@ -332,6 +333,43 @@ def update_ibama_risk():
     ).execute({})
 
 
+@task(task_id="download-inpe-risk-file")
+def download_inpe_risk_file():
+    beg = datetime.now() - relativedelta(days=15)
+    end = datetime.now()
+
+    bash_command = (
+        "ams-download-inpe-risk-file"
+        # f" --stac-api-url={Variable.get('AMS_STAC_API_URL')}"
+        # f" --collection={Variable.get('AMS_STAC_COLLECTION')}"
+        f" --save-dir={risk_dir}"
+        f" --days-until-expiration=15"
+        f" --begin={beg.strftime('%Y-%m-%d')}"
+        f" --end={end.strftime('%Y-%m-%d')}"
+    )
+
+    return BashOperator(
+        task_id="ams-download-inpe-risk-file",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(
+            ["AMS_DB_URL", "AMS_STAC_API_URL", "AMS_STAC_COLLECTION"]
+        ),
+        append_env=True,
+    ).execute({})
+
+
+@task(task_id="update-inpe-risk")
+def update_inpe_risk():
+    bash_command = "ams-update-inpe --risk-threshold=0. --biome='Amazônia'"
+
+    return BashOperator(
+        task_id="ams-update-inpe-risk",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+    ).execute({})
+
+
 # risk data classification
 
 
@@ -340,7 +378,8 @@ def _classify_risk_by_land_use(land_use_type: str):
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia'"
-        " --indicator='risco'"
+        # " --indicator='risco'"
+        " --indicator='risco-inpe'"
         f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
     )
@@ -414,8 +453,10 @@ with DAG(
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
     run_update_cer_deter = update_cer_deter()
-    run_download_ibama_risk_file = download_ibama_risk_file()
-    run_update_ibama_risk = update_ibama_risk()
+    # run_download_ibama_risk_file = download_ibama_risk_file()
+    run_download_risk_file = download_inpe_risk_file()
+    # run_update_ibama_risk = update_ibama_risk()
+    run_update_risk = update_inpe_risk()
 
     # preparing to classify
     run_prepare_classification = EmptyOperator(task_id="prepare-classification")
@@ -450,15 +491,15 @@ with DAG(
     run_join >> [
         run_update_active_fires,
         run_update_amz_deter,
-        run_download_ibama_risk_file,
+        run_download_risk_file,
     ]
     run_update_amz_deter >> run_update_cer_deter
-    run_download_ibama_risk_file >> run_update_ibama_risk
+    run_download_risk_file >> run_update_risk
 
     [
         run_update_active_fires,
         run_update_cer_deter,
-        run_update_ibama_risk,
+        run_update_risk,
     ] >> run_prepare_classification
 
     run_prepare_classification >> [

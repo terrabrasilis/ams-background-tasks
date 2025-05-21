@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 import requests
+from dateutil.parser import isoparse
 from dateutil.relativedelta import relativedelta
 
 from ams_background_tasks.database_utils import DatabaseFacade
@@ -105,10 +106,10 @@ def _get_items(endpoint: str, params: dict = None):
 
     response = requests.get(endpoint, params=params, timeout=120)
     if response.status_code == 200:
-        return response.json()
+        return response.json()["features"]
 
     logger.error(response.text)
-    return None
+    return []
 
 
 def _download_asset(url: str, download_path: Path):
@@ -136,17 +137,18 @@ def download_risk_file(
     items = _get_items(
         endpoint=f"{stac_api_url}/search",
         params={
-            "collection_id": collection,
-            "beg": beg.strftime("%Y-%m-%d"),
-            "end": end.strftime("%Y-%m-%d"),
+            "collections": collection,
+            "datetime_range": f"{beg.isoformat()}/{end.isoformat()}",
         },
     )
+
+    logger.debug(RISK_ASSET_NAME)
 
     candidates = {}
     last_date = None
     for item in items:
         properties = item["properties"]
-        cur_date = datetime.strptime(properties["datetime"], "%Y-%m-%dT%H:%M:%SZ")
+        cur_date = isoparse(properties["datetime"])
 
         for name, values in item["assets"].items():
             if name.lower() != RISK_ASSET_NAME.lower():
@@ -155,13 +157,15 @@ def download_risk_file(
             candidates[cur_date] = values
             last_date = cur_date if last_date is None else max(last_date, cur_date)
 
+    logger.debug(last_date)
+
     last_risk_file, last_risk_file_date = get_last_risk_file_info(
         db=db, src=RISK_SRC_INPE
     )
 
     if (
-        last_risk_file
-        and last_date.date() <= last_risk_file_date
+        last_date is None
+        or (last_risk_file and last_date.date() <= last_risk_file_date)
         or len(candidates) == 0
     ):
         msg = "There is no new file"
