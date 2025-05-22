@@ -88,6 +88,8 @@ Setup the following variables:
 2) `AMS_FORCE_RECREATE_DB`: the expected values are 0 or 1. When enabled, it forces the recreation of the AMS database. Example: AMS_FORCE_RECREATE_DB=1
 3) `AMS_ALL_DATA_DB`: the expected values are 0 or 1. When enabled, it updates all data, including historical data. Example: AMS_ALL_DATA_DB=1
 4) `AMS_BIOMES`: a list of biomes separated by semicolons. Example: AMS_BIOMES="AmazÃ´nia;Cerrado;".
+5) `AMS_STAC_API_URL`: the STAC API url to retrieve the risk image. Example: AMS_STAC_API_URL=https://terrabrasilis.dpi.inpe.br/stac-api/v1/
+6) `AMS_STAC_COLLECTION`: the STAC collection name. Example: AMS_STAC_COLLECTION=collection1
 
 #### Files and Volumes
 
