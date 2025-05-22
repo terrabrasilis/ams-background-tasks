@@ -121,6 +121,7 @@ def update_risk_file(
     dfr = gpd.GeoDataFrame()
     with rio.open(risk_file) as dataset:
         val = dataset.read(dataset.meta.get("count"))
+        logger.info("reading band %s", dataset.meta.get("count"))
 
         _indices = np.where(val > risk_threshold)
         indices = list(zip(_indices[0], _indices[1]))

@@ -11,6 +11,7 @@ sys.path.append(project_dir)
 
 import random
 from datetime import datetime
+from pathlib import Path
 from time import sleep
 
 from airflow import DAG
@@ -55,19 +56,21 @@ def check_variables():
     AMS_ALL_DATA_DB = Variable.get("AMS_ALL_DATA_DB")
     AMS_FORCE_RECREATE_DB = Variable.get("AMS_FORCE_RECREATE_DB")
     AMS_BIOMES = Variable.get("AMS_BIOMES")
+    AMS_STAC_API_URL = Variable.get("AMS_STAC_API_URL")
+    AMS_STAC_COLLECTION = Variable.get("AMS_STAC_COLLECTION")
 
     ams_db_url = BaseHook.get_connection("AMS_DB_URL")
     ams_aux_db_url = BaseHook.get_connection("AMS_AUX_DB_URL")
     ams_af_db_url = BaseHook.get_connection("AMS_AF_DB_URL")
     ams_amz_deter_b_db_url = BaseHook.get_connection("AMS_AMZ_DETER_B_DB_URL")
     ams_cer_deter_b_db_url = BaseHook.get_connection("AMS_CER_DETER_B_DB_URL")
-    ams_ftp_url = BaseHook.get_connection("AMS_FTP_URL")
+    # ams_ftp_url = BaseHook.get_connection("AMS_FTP_URL")
 
     if not ams_db_url and not ams_db_url.get_uri():
         raise Exception("Missing ams_db_url airflow conection configuration.")
 
-    if not ams_ftp_url and not ams_ftp_url.get_uri():
-        raise Exception("Missing ams_ftp_url airflow conection configuration.")
+    # if not ams_ftp_url and not ams_ftp_url.get_uri():
+    #    raise Exception("Missing ams_ftp_url airflow conection configuration.")
 
     if not ams_aux_db_url and not ams_aux_db_url.get_uri():
         raise Exception("Missing ams_aux_db_url airflow conection configuration.")
@@ -93,6 +96,12 @@ def check_variables():
 
     if not AMS_BIOMES:
         raise Exception("Missing AMS_BIOMES airflow variable.")
+
+    if not AMS_STAC_API_URL:
+        raise Exception("Missing AMS_STAC_API_URL airflow variable.")
+
+    if not AMS_STAC_COLLECTION:
+        raise Exception("Missing AMS_STAC_COLLECTION airflow variable.")
 
     return True
 
@@ -335,32 +344,32 @@ def update_ibama_risk():
 
 @task(task_id="download-inpe-risk-file")
 def download_inpe_risk_file():
-    beg = datetime.now() - relativedelta(days=15)
-    end = datetime.now()
+    beg = (datetime.now() - relativedelta(days=15)).strftime("%Y-%m-%d")
+    end = datetime.now().strftime("%Y-%m-%d")
+
+    Path(risk_dir).mkdir(parents=False, exist_ok=True)
 
     bash_command = (
         "ams-download-inpe-risk-file"
-        # f" --stac-api-url={Variable.get('AMS_STAC_API_URL')}"
-        # f" --collection={Variable.get('AMS_STAC_COLLECTION')}"
+        f" --stac-api-url={Variable.get('AMS_STAC_API_URL')}"
+        f" --collection={Variable.get('AMS_STAC_COLLECTION')}"
         f" --save-dir={risk_dir}"
         f" --days-until-expiration=15"
-        f" --begin={beg.strftime('%Y-%m-%d')}"
-        f" --end={end.strftime('%Y-%m-%d')}"
+        f" --begin='{beg}'"
+        f" --end='{end}'"
     )
 
     return BashOperator(
         task_id="ams-download-inpe-risk-file",
         bash_command=bash_command,
-        env=get_conn_secrets_uri(
-            ["AMS_DB_URL", "AMS_STAC_API_URL", "AMS_STAC_COLLECTION"]
-        ),
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
         append_env=True,
     ).execute({})
 
 
 @task(task_id="update-inpe-risk")
 def update_inpe_risk():
-    bash_command = "ams-update-inpe --risk-threshold=0. --biome='Amazônia'"
+    bash_command = "ams-update-inpe-risk --risk-threshold=0. --biome='Amazônia'"
 
     return BashOperator(
         task_id="ams-update-inpe-risk",
