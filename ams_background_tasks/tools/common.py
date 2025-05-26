@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from urllib.parse import urlparse, urlunparse
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
@@ -190,3 +191,18 @@ def reset_land_use_tables(
             force_recreate=force_recreate,
             land_use_type=land_use_type,
         )
+
+
+def parse_url(url):
+    parsed_url = urlparse(url)
+    fixed_url = "/".join(part for part in parsed_url.path.split("/") if part)
+    return urlunparse(
+        (
+            parsed_url.scheme,
+            parsed_url.netloc,
+            fixed_url,
+            parsed_url.params,
+            parsed_url.query,
+            parsed_url.fragment,
+        )
+    )

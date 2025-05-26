@@ -12,7 +12,7 @@ logger = get_logger(__name__, sys.stdout)
 
 
 # risk asset
-RISK_ASSET_NAME = "XGBoost"
+RISK_ASSET_NAME = "XGBOOST25K"
 
 RISK_SRC_IBAMA = "ibama"
 RISK_SRC_INPE = "inpe"

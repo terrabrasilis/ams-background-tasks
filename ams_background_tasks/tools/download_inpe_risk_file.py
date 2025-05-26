@@ -14,6 +14,7 @@ from dateutil.relativedelta import relativedelta
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
+from ams_background_tasks.tools.common import parse_url
 from ams_background_tasks.tools.risk_utils import (
     RISK_ASSET_NAME,
     RISK_SRC_INPE,
@@ -135,7 +136,7 @@ def download_risk_file(
     db = DatabaseFacade.from_url(db_url=db_url)
 
     items = _get_items(
-        endpoint=f"{stac_api_url}/search",
+        endpoint=parse_url(f"{stac_api_url}/search"),
         params={
             "collections": collection,
             "datetime_range": f"{beg.isoformat()}/{end.isoformat()}",
@@ -151,6 +152,8 @@ def download_risk_file(
         cur_date = isoparse(properties["datetime"])
 
         for name, values in item["assets"].items():
+            logger.debug("processing asset %s", name)
+
             if name.lower() != RISK_ASSET_NAME.lower():
                 continue
 
