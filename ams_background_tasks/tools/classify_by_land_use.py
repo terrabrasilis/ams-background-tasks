@@ -28,8 +28,11 @@ from ams_background_tasks.tools.common import (
     INDICATORS,
     LAND_USE_TYPES,
     PIXEL_LAND_USE_AREA,
-    RISK_CLASSNAME,
-    RISK_INDICATOR,
+    RISK_IBAMA_CLASSNAME,
+    RISK_IBAMA_INDICATOR,
+    RISK_INDICATORS,
+    RISK_INPE_CLASSNAME,
+    RISK_INPE_INDICATOR,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
@@ -37,6 +40,7 @@ from ams_background_tasks.tools.common import (
 )
 
 OPT_MAX_VALUES = 5e4
+RISK_INPE_SCALE_FACTOR = 1e5
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -115,11 +119,12 @@ def main(
             land_use_type=land_use_type,
         )
 
-    if AMAZONIA in list(biome) and indicator == RISK_INDICATOR:
+    if AMAZONIA in list(biome) and indicator in RISK_INDICATORS:
         process_risk(
             db_url=db_url,
             land_use_dir=Path(land_use_dir),
             land_use_type=land_use_type,
+            indicator=indicator,
         )
 
 
@@ -148,14 +153,18 @@ def insert_data_in_land_use_tables(
         logger.info("inserting data into %s_land_use_%s", spatial_unit, land_use_type)
         db.execute(sql=sql, log=log)
 
+    logger.debug(indicator)
+
     assert is_valid_indicator(indicator=indicator)
 
     measure = None
     multiplier = 1.0
-    if indicator is DETER_INDICATOR:
+    if indicator == DETER_INDICATOR:
         measure = "area"
         multiplier = PIXEL_LAND_USE_AREA
-    elif indicator is ACTIVE_FIRES_INDICATOR or indicator is RISK_INDICATOR:
+    elif indicator == ACTIVE_FIRES_INDICATOR or indicator is RISK_IBAMA_INDICATOR:
+        measure = "counts"
+    elif indicator == RISK_INPE_INDICATOR:
         measure = "counts"
     else:
         assert False
@@ -554,7 +563,9 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
     )
 
 
-def process_risk(db_url: str, land_use_dir: Path, land_use_type: str):
+def process_risk(db_url: str, land_use_dir: Path, land_use_type: str, indicator: str):
+    assert indicator in RISK_INDICATORS
+
     biome = AMAZONIA
 
     land_use_image = land_use_dir / land_use_type / f"{biome}_land_use.tif"
@@ -567,10 +578,11 @@ def process_risk(db_url: str, land_use_dir: Path, land_use_type: str):
         land_use_image=land_use_image,
         land_use_type=land_use_type,
         biome=biome,
+        indicator=indicator,
     )
 
     insert_risk_in_land_use_tables(
-        db_url=db_url, is_temp=True, land_use_type=land_use_type
+        db_url=db_url, is_temp=True, land_use_type=land_use_type, indicator=indicator
     )
 
 
@@ -580,6 +592,7 @@ def process_risk_land_structure(
     land_use_type: str,
     db_url: str,
     biome: str,
+    indicator: str,
 ):
     def _insert_into_risk_land_structure(db: DatabaseFacade, table_prefix: str, values):
         land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
@@ -593,17 +606,24 @@ def process_risk_land_structure(
         )
         db.execute(sql=sql, log=False)
 
+    assert indicator in RISK_INDICATORS
+
     db = DatabaseFacade.from_url(db_url=db_url)
+
+    risk_geom = (
+        "risk_matrix_inpe" if indicator == RISK_INPE_INDICATOR else "matrix_ibama_1km"
+    )
+    risk_data = "risk_data_inpe" if indicator == RISK_INPE_INDICATOR else "weekly_data"
 
     table_prefix = get_prefix(is_temp=is_temp)
 
     sql = f"""
-        SELECT rmi.id as gid, rwd.biome, rwd.geocode, rmi.geom
-        FROM risk.matrix_ibama_1km rmi
+        SELECT rmi.id as gid, rwd.biome, rwd.geocode, rmi.geom, rwd.risk
+        FROM risk.{risk_geom} rmi
         JOIN
-            risk.weekly_data rwd
+            risk.{risk_data} rwd
             ON rwd.geom_id=rmi.id
-        WHERE rwd.biome='{biome}'
+        WHERE rwd.biome='{biome}' AND rwd.geocode IS NOT NULL
     """
 
     logger.debug(sql)
@@ -647,10 +667,23 @@ def process_risk_land_structure(
     # assert count_values > 0
 
 
-def insert_risk_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: str):
+def insert_risk_in_land_use_tables(
+    db_url: str, is_temp: bool, land_use_type: str, indicator: str
+):
     logger.info("Insert RISK data in land use tables for each spatial units.")
 
+    logger.debug(indicator)
+
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    risk_view = (
+        "last_risk_data_inpe" if indicator == RISK_INPE_INDICATOR else "last_risk_data"
+    )
+    risk_classname = (
+        RISK_INPE_CLASSNAME
+        if indicator == RISK_INPE_INDICATOR
+        else RISK_IBAMA_CLASSNAME
+    )
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
@@ -664,14 +697,14 @@ def insert_risk_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: st
                 a.num_pixels,
                 a.biome,
                 a.geocode,
-                '{RISK_CLASSNAME}' as classname,
+                '{risk_classname}' as classname,
                 b.risk,
                 b.view_date AS date,
                 b.geom AS geometry
             FROM
                 {table_prefix}risk_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                public.last_risk_data b ON a.gid = b.id::text;
+                public.{risk_view} b ON a.gid = b.id::text;
         """,
         con=db.conn,
         geom_col="geometry",
@@ -679,7 +712,7 @@ def insert_risk_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: st
     )
 
     insert_data_in_land_use_tables(
-        indicator=RISK_INDICATOR,
+        indicator=indicator,
         db=db,
         data=data,
         table_prefix=table_prefix,

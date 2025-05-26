@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from urllib.parse import urlparse, urlunparse
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
@@ -25,20 +26,26 @@ BIOMES = [AMAZONIA, CERRADO, PANTANAL]
 
 # constants
 PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
+RISK_SCALE_FACTOR = 1
 
 # classnames
 ACTIVE_FIRES_CLASSNAME = "AF"
-RISK_CLASSNAME = "RK"
+RISK_IBAMA_CLASSNAME = "RK"
+RISK_INPE_CLASSNAME = "RI"
 
 # indicators
 DETER_INDICATOR = "deter"
 ACTIVE_FIRES_INDICATOR = "focos"
-RISK_INDICATOR = "risco"
+RISK_IBAMA_INDICATOR = "risco"
+RISK_INPE_INDICATOR = "risco-inpe"
+
+RISK_INDICATORS = [RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR]
 
 INDICATORS = [
     DETER_INDICATOR,
     ACTIVE_FIRES_INDICATOR,
-    RISK_INDICATOR,
+    RISK_IBAMA_INDICATOR,
+    RISK_INPE_INDICATOR,
 ]
 
 # land_use_type
@@ -118,6 +125,7 @@ def recreate_spatial_table(
             "percentage double precision",
             "counts int4",
             "risk double precision NOT NULL DEFAULT 0.0",
+            "score double precision NOT NULL DEFAULT 0.0",
             "geocode character varying(80)",
             "biome character varying(254)",
         ],
@@ -185,44 +193,16 @@ def reset_land_use_tables(
         )
 
 
-def get_last_risk_file_info(db: DatabaseFacade, is_new: bool = None):
-    """Return the information about the last downloaded risk file (path and date)."""
-
-    _filter = ""
-    if is_new is not None:
-        _filter = f" AND is_new={is_new}"
-
-    sql = f"""
-        SELECT file_name, file_date FROM risk.etl_log_ibama
-        WHERE process_status=1 {_filter}
-        ORDER BY created_at DESC LIMIT 1;
-    """
-
-    res = db.fetchone(query=sql)
-
-    if not res:
-        return None, None
-
-    return res[0], res[1]
-
-
-def get_risk_date_id(db: DatabaseFacade, file_name: str):
-    """Return the date_if of the risk file."""
-
-    sql = f"""
-        SELECT id FROM risk.risk_ibama_date
-        WHERE file_name='{file_name}';
-    """
-
-    return db.fetchone(query=sql)
-
-
-def mark_risk_file_as_used(db: DatabaseFacade, file_name: str):
-    """Mark the risk file as used (is_new=False)"""
-    sql = f"""
-        UPDATE risk.etl_log_ibama
-        SET is_new=False, processed_at=now()
-        WHERE file_name='{file_name}'
-    """
-
-    db.execute(sql)
+def parse_url(url):
+    parsed_url = urlparse(url)
+    fixed_url = "/".join(part for part in parsed_url.path.split("/") if part)
+    return urlunparse(
+        (
+            parsed_url.scheme,
+            parsed_url.netloc,
+            fixed_url,
+            parsed_url.params,
+            parsed_url.query,
+            parsed_url.fragment,
+        )
+    )
