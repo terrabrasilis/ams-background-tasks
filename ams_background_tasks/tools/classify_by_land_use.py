@@ -698,7 +698,7 @@ def insert_risk_in_land_use_tables(
                 a.biome,
                 a.geocode,
                 '{risk_classname}' as classname,
-                b.risk,
+                b.risk + random() * 1e-6 AS risk,
                 b.view_date AS date,
                 b.geom AS geometry
             FROM
