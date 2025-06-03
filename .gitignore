@@ -169,4 +169,6 @@ cython_debug/
 *.bkp
 
 #project files
-land_use/*.tif
+land_use/
+old_land_use/
+risk/
