@@ -344,7 +344,7 @@ def update_ibama_risk():
 
 @task(task_id="download-inpe-risk-file")
 def download_inpe_risk_file():
-    beg = (datetime.now() - relativedelta(days=15)).strftime("%Y-%m-%d")
+    beg = (datetime.now() - relativedelta(days=30)).strftime("%Y-%m-%d")
     end = datetime.now().strftime("%Y-%m-%d")
 
     Path(risk_dir).mkdir(parents=False, exist_ok=True)
