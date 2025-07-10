@@ -179,6 +179,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
         AS $BODY$
                     DECLARE
                         effective_publish_date date;
+                        min_score float;
 
                     BEGIN
                         IF isAuthenticated THEN
@@ -188,6 +189,12 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             INTO effective_publish_date
                             FROM deter.deter_publish_date dpd
                             WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                        END IF;
+
+                        IF clsname = 'RI' THEN
+                            min_score := 0.01;
+                        ELSE
+                            min_score := 0;
                         END IF;
 
                         RETURN QUERY
@@ -219,6 +226,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 AND mlu.date > enddate
                                 AND mlu.date <= startdate
                                 AND mlu.risk >= riskThreshold
+                                AND mlu.score >= min_score
                                 AND ('ALL' = ANY (biomes) OR mlu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR mlu.geocode =
                                     ANY(
@@ -328,6 +336,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
         AS $BODY$
                     DECLARE
                         effective_publish_date date;
+                        min_score float;
 
                     BEGIN
 
@@ -338,6 +347,12 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             INTO effective_publish_date
                             FROM deter.deter_publish_date dpd
                             WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                        END IF;
+
+                        IF clsname = 'RI' THEN
+                            min_score := 0.01;
+                        ELSE
+                            min_score := 0;
                         END IF;
 
                         RETURN QUERY
@@ -367,6 +382,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                 AND slu.date > enddate
                                 AND slu.date <= startdate
                                 AND slu.risk >= riskThreshold
+                                AND slu.score >= min_score
                                 AND ('ALL' = ANY (biomes) OR slu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR slu.geocode =
                                     ANY(
@@ -480,6 +496,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
         AS $BODY$
                         DECLARE
                             effective_publish_date date;
+                            min_score float;                            
 
                         BEGIN
                                 IF isAuthenticated THEN
@@ -489,6 +506,12 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                     INTO effective_publish_date
                                     FROM deter.deter_publish_date dpd
                                     WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                                END IF;
+
+                                IF clsname = 'RI' THEN
+                                    min_score := 0.01;
+                                ELSE
+                                    min_score := 0;
                                 END IF;                        
 
                                 RETURN QUERY
@@ -518,6 +541,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                             AND cls.date > enddate
                                             AND cls.date <= startdate
                                             AND cls.risk >= riskThreshold
+                                            AND cls.score >= min_score
                                             AND ('ALL' = ANY (biomes) OR cls.biome = ANY (biomes))
                                             AND (municipality_group_name = 'ALL' OR cls.geocode =
                                                 ANY(

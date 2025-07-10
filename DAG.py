@@ -6,6 +6,10 @@ import sys
 
 project_dir = str(pathlib.Path(__file__).parent.resolve().absolute())
 
+venv_dir = pathlib.Path(f"/tmp/venvs/")
+venv_dir.mkdir(exist_ok=True, parents=False)
+venv_path = venv_dir / pathlib.Path(project_dir).name
+
 # Loading project dir files
 sys.path.append(project_dir)
 
@@ -45,7 +49,8 @@ def _get_biomes():
 
 @task(task_id="update-environment")
 def update_environment():
-    bash_command = f"pip install " + project_dir
+    bash_command = f"python3 -m venv {venv_path} && " if not venv_path.exists() else ""
+    bash_command += f"source {venv_path}/bin/activate && " f"pip install " + project_dir
 
     return BashOperator(
         task_id="update-environment", bash_command=bash_command
@@ -108,7 +113,8 @@ def check_variables():
 
 @task(task_id="create-db")
 def create_db():
-    bash_command = f"ams-create-db {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')}"
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-create-db {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')}"
 
     return BashOperator(
         task_id="ams-create-db",
@@ -120,9 +126,12 @@ def create_db():
 
 @task(task_id="update-biome")
 def update_biome():
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-update-biome {_get_biomes()}"
+
     return BashOperator(
         task_id="ams-update-biome",
-        bash_command=f"ams-update-biome {_get_biomes()}",
+        bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
         append_env=True,
     ).execute({})
@@ -130,9 +139,12 @@ def update_biome():
 
 @task(task_id="update-spatial-units")
 def update_spatial_units():
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-update-spatial-units {_get_biomes()}"
+
     return BashOperator(
         task_id="ams-update-spatial-units",
-        bash_command=f"ams-update-spatial-units {_get_biomes()}",
+        bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
         append_env=True,
     ).execute({})
@@ -140,7 +152,8 @@ def update_spatial_units():
 
 @task(task_id="update-active-fires")
 def update_active_fires():
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-update-active-fires {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
         f"{_get_biomes()}"
     )
@@ -154,7 +167,8 @@ def update_active_fires():
 
 @task(task_id="update-amz-deter")
 def update_amz_deter():
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --truncate"
@@ -173,7 +187,8 @@ def update_amz_deter():
 
 @task(task_id="update-cer-deter")
 def update_cer_deter():
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Cerrado'"
@@ -194,7 +209,8 @@ def update_cer_deter():
 
 
 def _prepare_classification(land_use_type: str):
-    bash_command = f"ams-prepare-classification --land-use-type {land_use_type}"
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-prepare-classification --land-use-type {land_use_type}"
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
@@ -220,7 +236,8 @@ def prepare_classification_ppcdam():
 
 
 def _classify_deter_by_land_use(land_use_type: str):
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
@@ -253,7 +270,8 @@ def classify_deter_by_land_use_ppcdam():
 
 
 def _classify_active_fires_by_land_use(land_use_type: str):
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia' --biome='Cerrado'"
@@ -286,7 +304,8 @@ def classify_active_fires_by_land_use_ppcdam():
 
 
 def finalize_classification(land_use_type: str):
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-finalize-classification"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         f" --land-use-type={land_use_type}"
@@ -318,7 +337,8 @@ def finalize_classification_ppcdam():
 
 @task(task_id="download-ibama-risk-file")
 def download_ibama_risk_file():
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         "ams-download-ibama-risk-file --days-until-expiration=15 --save-dir=" + risk_dir
     )
 
@@ -332,7 +352,8 @@ def download_ibama_risk_file():
 
 @task(task_id="update-ibama-risk")
 def update_ibama_risk():
-    bash_command = "ams-update-ibama-risk --risk-threshold=0.85 --biome='Amazônia'"
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += "ams-update-ibama-risk --risk-threshold=0.85 --biome='Amazônia'"
 
     return BashOperator(
         task_id="ams-update-ibama-risk",
@@ -349,7 +370,8 @@ def download_inpe_risk_file():
 
     Path(risk_dir).mkdir(parents=False, exist_ok=True)
 
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         "ams-download-inpe-risk-file"
         f" --stac-api-url={Variable.get('AMS_STAC_API_URL')}"
         f" --collection={Variable.get('AMS_STAC_COLLECTION')}"
@@ -369,7 +391,8 @@ def download_inpe_risk_file():
 
 @task(task_id="update-inpe-risk")
 def update_inpe_risk():
-    bash_command = "ams-update-inpe-risk --risk-threshold=0. --biome='Amazônia'"
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += "ams-update-inpe-risk --risk-threshold=0. --biome='Amazônia'"
 
     return BashOperator(
         task_id="ams-update-inpe-risk",
@@ -383,7 +406,8 @@ def update_inpe_risk():
 
 
 def _classify_risk_by_land_use(land_use_type: str):
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia'"
@@ -548,7 +572,8 @@ with DAG(
 
 @task(task_id="calculate-amz-land-use-area")
 def calculate_amz_land_use_area():
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-calculate-land-use-area {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')} "
         " --biome='Amazônia'"
         " --land-use-type='ams'"
@@ -567,7 +592,8 @@ def calculate_amz_land_use_area():
 
 @task(task_id="calculate-cer-land-use-area")
 def calculate_cer_land_use_area():
-    bash_command = (
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
         f"ams-calculate-land-use-area --biome='Cerrado'"
         " --land-use-type='ams'"
         " --land-use-dir=" + land_use_dir
