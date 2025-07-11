@@ -1,0 +1,11 @@
+ams_background_tasks/
+ams_background_tasks.egg-info/
+build/
+config/
+land_use/
+notebooks/
+old_land_use/
+plugins/
+__pycache__/
+risk/
+.git/
