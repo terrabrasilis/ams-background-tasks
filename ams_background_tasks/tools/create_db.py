@@ -152,7 +152,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
     if force_recreate:
         sql = """
             DROP FUNCTION IF EXISTS public.ams_get_municipalities(
-                character varying, date, date, date, integer[], character varying[]
+                character varying, date, date, date, integer[], character varying[], character varying, character varying[], double precision, boolean
             );
         """
         db.execute(sql=sql)
@@ -166,11 +166,11 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	        geocodes character varying[],
+	            geocodes character varying[],
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -179,6 +179,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
         AS $BODY$
                     DECLARE
                         effective_publish_date date;
+                        min_score float;
 
                     BEGIN
                         IF isAuthenticated THEN
@@ -190,6 +191,12 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
                         END IF;
 
+                        IF clsname = 'RI' THEN
+                            min_score := 0.01;
+                        ELSE
+                            min_score := 0;
+                        END IF;
+
                         RETURN QUERY
                         SELECT 
                             mun.suid AS suid, 
@@ -199,7 +206,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             mlu_j.date AS date, 
                             COALESCE(mlu_j.perc, 0) AS percentage, 
                             COALESCE(mlu_j.total, 0) AS area, 
-                            COALESCE(mlu_j.counts, 0) AS counts
+                            COALESCE(mlu_j.counts, 0) AS counts,
+                            COALESCE(mlu_j.score, 0) AS score
                         FROM public."municipalities" mun
                         INNER JOIN (
                             SELECT 
@@ -208,15 +216,17 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 MAX(mlu.date) AS date, 
                                 SUM(mlu.percentage) AS perc, 
                                 SUM(mlu.area) AS total, 
-                                SUM(mlu.counts) AS counts
+                                SUM(mlu.counts) AS counts,
+                                SUM(mlu.score) AS score
                             FROM public."municipalities_land_use" mlu
                             WHERE
-                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK'))
+                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
                                 AND mlu.land_use_id = ANY (land_use_ids)
                                 AND mlu.classname = clsname
                                 AND mlu.date > enddate
                                 AND mlu.date <= startdate
                                 AND mlu.risk >= riskThreshold
+                                AND mlu.score >= min_score
                                 AND ('ALL' = ANY (biomes) OR mlu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR mlu.geocode =
                                     ANY(
@@ -299,7 +309,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
     if force_recreate:
         sql = """
             DROP FUNCTION IF EXISTS public.ams_get_states(
-                character varying, date, date, date, integer[], character varying[]
+                character varying, date, date, date, integer[], character varying[], character varying, character varying[], double precision, boolean
             );
         """
         db.execute(sql=sql)
@@ -313,11 +323,11 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	        geocodes character varying[],
+	            geocodes character varying[],
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -326,6 +336,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
         AS $BODY$
                     DECLARE
                         effective_publish_date date;
+                        min_score float;
 
                     BEGIN
 
@@ -338,6 +349,12 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
                         END IF;
 
+                        IF clsname = 'RI' THEN
+                            min_score := 0.01;
+                        ELSE
+                            min_score := 0;
+                        END IF;
+
                         RETURN QUERY
                         SELECT
                             sta.suid AS suid, 
@@ -347,7 +364,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             slu_j.date AS date, 
                             COALESCE(slu_j.perc, 0) AS percentage, 
                             COALESCE(slu_j.total, 0) AS area, 
-                            COALESCE(slu_j.counts, 0) AS counts
+                            COALESCE(slu_j.counts, 0) AS counts,
+                            COALESCE(slu_j.score, 0) AS score
                         FROM public."states" sta
                         INNER JOIN (
                             SELECT slu.suid, 
@@ -355,14 +373,16 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    MAX(slu.date) AS date, 
                                    SUM(slu.percentage) AS perc, 
                                    SUM(slu.area) AS total, 
-                                   SUM(slu.counts) AS counts
+                                   SUM(slu.counts) AS counts,
+                                   SUM(slu.score) AS score
                             FROM public."states_land_use" slu
-                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK'))
+                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
                                 AND slu.land_use_id = ANY (land_use_ids)
                                 AND slu.classname = clsname
                                 AND slu.date > enddate
                                 AND slu.date <= startdate
                                 AND slu.risk >= riskThreshold
+                                AND slu.score >= min_score
                                 AND ('ALL' = ANY (biomes) OR slu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR slu.geocode =
                                     ANY(
@@ -443,13 +463,13 @@ def create_cell_table(db: DatabaseFacade, cell: str, force_recreate: bool):
 
 
 def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
-    """Create the get_cs_{25|50}km_function."""
+    """Create the get_cs_{5|25|50}km_function."""
     assert is_valid_cell(cell=cell)
 
     if force_recreate:
         sql = f"""
             DROP FUNCTION IF EXISTS public.ams_get_cs_{cell}(
-                character varying, date, date, date, integer[], character varying[]
+                character varying, date, date, date, integer[], character varying[], character varying, character varying[], double precision, boolean
             );
         """
         db.execute(sql=sql)
@@ -463,11 +483,11 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 land_use_ids integer[],
                 biomes character varying[],
                 municipality_group_name character varying,
-	        geocodes character varying[],
+	            geocodes character varying[],
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False
         )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint) 
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -476,6 +496,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
         AS $BODY$
                         DECLARE
                             effective_publish_date date;
+                            min_score float;                            
 
                         BEGIN
                                 IF isAuthenticated THEN
@@ -485,6 +506,12 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                     INTO effective_publish_date
                                     FROM deter.deter_publish_date dpd
                                     WHERE ('ALL' = ANY(biomes) OR dpd.biome = ANY(biomes));
+                                END IF;
+
+                                IF clsname = 'RI' THEN
+                                    min_score := 0.01;
+                                ELSE
+                                    min_score := 0;
                                 END IF;                        
 
                                 RETURN QUERY
@@ -496,7 +523,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                         cls_j.date AS date, 
                                         COALESCE(cls_j.perc, 0) AS percentage, 
                                         COALESCE(cls_j.total, 0) AS area, 
-                                        COALESCE(cls_j.counts, 0) AS counts
+                                        COALESCE(cls_j.counts, 0) AS counts,
+                                        COALESCE(cls_j.score, 0) AS score
                                 FROM public."cs_{cell}" cel
                                 LEFT JOIN (
                                         SELECT cls.suid, 
@@ -504,14 +532,16 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                MAX(cls.date) AS date, 
                                                SUM(cls.percentage) AS perc, 
                                                SUM(cls.area) AS total, 
-                                               SUM(cls.counts) AS counts
+                                               SUM(cls.counts) AS counts,
+                                               SUM(cls.score) AS score
                                         FROM public."cs_{cell}_land_use" cls
-                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK'))
+                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
                                             AND cls.land_use_id = ANY (land_use_ids)
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
                                             AND cls.date <= startdate
                                             AND cls.risk >= riskThreshold
+                                            AND cls.score >= min_score
                                             AND ('ALL' = ANY (biomes) OR cls.biome = ANY (biomes))
                                             AND (municipality_group_name = 'ALL' OR cls.geocode =
                                                 ANY(
@@ -831,7 +861,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (3, 'CS', 'DETER Corte seletivo', 2),
             (4, 'MN', 'DETER Mineração', 3),
             (5, 'AF', 'Focos (Programa Queimadas)', 4),
-            (6, 'RK', 'Risco de desmatamento (IBAMA)', 5);
+            (6, 'RK', 'Risco de desmatamento (IBAMA)', 5),
+            (7, 'RI', 'Risco de desmatamento', 6);
     """
 
     db.execute(sql=sql)
@@ -855,18 +886,19 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     sql = f"""
         INSERT INTO
             {schema}.{name} (id, name, group_id, biome)
-            VALUES
-                (1, 'DESMATAMENTO_CR', 1, 'Amazônia'),
-                (2, 'DESMATAMENTO_VEG', 1, 'Amazônia'),
-                (3, 'CICATRIZ_DE_QUEIMADA', 2, 'Amazônia'),
-                (4, 'DEGRADACAO', 2, 'Amazônia'),
-                (5, 'CS_DESORDENADO', 3, 'Amazônia'),
-                (6, 'CS_GEOMETRICO', 3, 'Amazônia'),
-                (7, 'MINERACAO', 4, 'Amazônia'),
-                (8, 'FOCOS', 5, 'Amazônia'),
-                (9, 'RISCO', 6, 'Amazônia'),
-                (10, 'DESMATAMENTO_CR', 1, 'Cerrado'),
-                (11, 'FOCOS', 5, 'Cerrado');
+        VALUES
+            (1, 'DESMATAMENTO_CR', 1, 'Amazônia'),
+            (2, 'DESMATAMENTO_VEG', 1, 'Amazônia'),
+            (3, 'CICATRIZ_DE_QUEIMADA', 2, 'Amazônia'),
+            (4, 'DEGRADACAO', 2, 'Amazônia'),
+            (5, 'CS_DESORDENADO', 3, 'Amazônia'),
+            (6, 'CS_GEOMETRICO', 3, 'Amazônia'),
+            (7, 'MINERACAO', 4, 'Amazônia'),
+            (8, 'FOCOS', 5, 'Amazônia'),
+            (9, 'RISCO_IBAMA', 6, 'Amazônia'),
+            (10, 'DESMATAMENTO_CR', 1, 'Cerrado'),
+            (11, 'FOCOS', 5, 'Cerrado'),
+            (12, 'RISCO', 7, 'Amazônia');
     """
 
     db.execute(sql=sql)
@@ -1007,8 +1039,12 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
 
     if force_recreate:
         db.drop_table(f"{schema}.weekly_data", cascade=True)
+        db.drop_table(f"{schema}.etl_log_risk", cascade=True)
+        db.drop_table(f"{schema}.risk_image_date", cascade=True)
+        db.drop_table(f"{schema}.risk_matrix_inpe", cascade=True)
 
-    name = "etl_log_ibama"
+    # common tables
+    name = "etl_log_risk"
     db.create_table(
         schema=schema,
         name=name,
@@ -1021,10 +1057,33 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "is_new boolean DEFAULT true",
             "created_at timestamp with time zone NOT NULL DEFAULT now()",
             "processed_at timestamp with time zone",
+            "source varchar",
         ],
         force_recreate=force_recreate,
     )
 
+    name = "risk_image_date"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar UNIQUE",
+            "expiration_date date",
+            "created_at date NOT NULL DEFAULT now()",
+            "risk_date date",
+            "source varchar",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["file_name:btree"],
+        force_recreate=force_recreate,
+    )
+
+    # ibama risk
     name = "matrix_ibama_1km"
     db.create_table(
         schema=schema,
@@ -1056,26 +1115,6 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
         force_recreate=force_recreate,
     )
 
-    name = "risk_ibama_date"
-    db.create_table(
-        schema=schema,
-        name=name,
-        columns=[
-            "id serial NOT NULL PRIMARY KEY",
-            "file_name varchar UNIQUE",
-            "expiration_date date",
-            "created_at date NOT NULL DEFAULT now()",
-            "risk_date date",
-        ],
-        force_recreate=force_recreate,
-    )
-    db.create_indexes(
-        schema=schema,
-        name=name,
-        columns=["file_name:btree"],
-        force_recreate=force_recreate,
-    )
-
     name = "weekly_data"
     db.create_table(
         schema=schema,
@@ -1087,8 +1126,67 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "risk double precision",
             "biome varchar(254)",
             "geocode varchar(80)",
-            "FOREIGN KEY (date_id) REFERENCES risk.risk_ibama_date (id)",
+            "FOREIGN KEY (date_id) REFERENCES risk.risk_image_date (id)",
             "FOREIGN KEY (geom_id) REFERENCES risk.matrix_ibama_1km (id)",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=[
+            "date_id:btree",
+            "biome:btree",
+            "geocode:btree",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    # inpe risk
+    name = "risk_matrix_inpe"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "geom geometry(Point, 4674)",
+        ],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["geom:gist"],
+        force_recreate=force_recreate,
+    )
+
+    name = "risk_tmp_inpe"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=["geometry geometry(Point, 4674)", "data real"],
+        force_recreate=force_recreate,
+    )
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=["geometry:gist"],
+        force_recreate=force_recreate,
+    )
+
+    name = "risk_data_inpe"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "date_id int4",
+            "geom_id int4",
+            "risk double precision",
+            "biome varchar(254)",
+            "geocode varchar(80)",
+            "FOREIGN KEY (date_id) REFERENCES risk.risk_image_date (id)",
+            "FOREIGN KEY (geom_id) REFERENCES risk.risk_matrix_inpe (id)",
         ],
         force_recreate=force_recreate,
     )

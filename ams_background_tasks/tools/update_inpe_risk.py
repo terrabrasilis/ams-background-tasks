@@ -1,4 +1,4 @@
-"""Update the ibama risk indicator."""
+"""Update the inpe risk indicator."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import AMAZONIA, is_valid_biome
 from ams_background_tasks.tools.risk_utils import (
-    RISK_SRC_IBAMA,
+    RISK_SRC_INPE,
     get_last_risk_file_info,
     get_risk_date_id,
     mark_risk_file_as_used,
@@ -55,18 +55,21 @@ def main(db_url: str, risk_threshold: float, srid: str, biome: str):
     )
 
 
-def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
+def update_risk_file(
+    db_url: str, risk_threshold: float, srid: str, biome: str
+):  # pylint:disable=too-many-statements
     """Update the ibama risk indicator."""
     assert biome == AMAZONIA
 
     schema = "risk"
-    risk_tmp_table = "weekly_ibama_tmp"
-    risk_geom_table = "matrix_ibama_1km"
-    risk_data = "weekly_data"
+    risk_tmp = "risk_tmp_inpe"
+    risk_geom = "risk_matrix_inpe"
+    risk_data = "risk_data_inpe"
+    risk_date = "risk_image_date"
 
-    def _insert_into_ibama_tmp(values: list):
+    def _insert_into_tmp(values: list):
         sql = f"""
-            INSERT INTO {schema}.{risk_tmp_table} (geometry, data)
+            INSERT INTO {schema}.{risk_tmp} (geometry, data)
             VALUES {','.join(values)};
         """
         db.execute(sql=sql, log=False)
@@ -74,7 +77,7 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
     db = DatabaseFacade.from_url(db_url=db_url)
 
     # creating view
-    view = "public.last_risk_data"
+    view = "public.last_risk_data_inpe"
 
     sql = f"DROP VIEW IF EXISTS {view}"
     db.execute(sql)
@@ -87,14 +90,14 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
             wd.risk,
             dt.risk_date AS view_date
         FROM
-            risk.weekly_data wd,
-            risk.risk_ibama_date dt,
-            risk.matrix_ibama_1km geo
+            risk.{risk_data} wd,
+            risk.{risk_date} dt,
+            risk.{risk_geom} geo
         WHERE
             wd.date_id = (
-                SELECT risk_ibama_date.id
-                FROM risk.risk_ibama_date
-                ORDER BY risk_ibama_date.expiration_date DESC
+                SELECT {risk_date}.id
+                FROM risk.{risk_date}
+                ORDER BY {risk_date}.expiration_date DESC
                 LIMIT 1
             )
             AND wd.geom_id=geo.id
@@ -104,8 +107,7 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
     db.execute(sql)
 
     # last risk file
-    risk_file, _ = get_last_risk_file_info(db=db, is_new=True, src=RISK_SRC_IBAMA)
-
+    risk_file, _ = get_last_risk_file_info(db=db, is_new=True, src=RISK_SRC_INPE)
     logger.info(risk_file)
 
     if risk_file is None or not Path(risk_file).exists():
@@ -115,10 +117,11 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
     risk_date_id = get_risk_date_id(db=db, file_name=risk_file)
     assert risk_date_id
 
-    # updating the weekly_ibama_tmp table
+    # updating the tmp table
     dfr = gpd.GeoDataFrame()
     with rio.open(risk_file) as dataset:
-        val = dataset.read(1)
+        val = dataset.read(dataset.meta.get("count"))
+        logger.info("reading band %s", dataset.meta.get("count"))
 
         _indices = np.where(val > risk_threshold)
         indices = list(zip(_indices[0], _indices[1]))
@@ -129,9 +132,9 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
         v = [val[x, y] for x, y in indices]
 
         dfr = gpd.GeoDataFrame({"geometry": geometry, "data": v}, crs=dataset.crs)
-        dfr.to_crs(crs=srid, inplace=True)
+        dfr = dfr.to_crs(crs=srid)
 
-    db.truncate(table=f"{schema}.{risk_tmp_table}", cascade=True)
+    db.truncate(table=f"{schema}.{risk_tmp}", cascade=True)
 
     values = []
     for _, row in dfr.iterrows():
@@ -139,19 +142,18 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
             f"(ST_PointFromText('{row['geometry'].wkt}',{srid}),{row['data']})"
         )
         if len(values) > 1e5:
-            _insert_into_ibama_tmp(values=values)
+            _insert_into_tmp(values=values)
             values = []
 
     if len(values) > 0:
-        _insert_into_ibama_tmp(values=values)
+        _insert_into_tmp(values=values)
 
-    # updating the matrix_ibama_1km table
-    db.truncate(table=f"{schema}.{risk_geom_table}", cascade=True, restart=True)
+    db.truncate(table=f"{schema}.{risk_geom}", cascade=True, restart=True)
 
     sql = f"""
-        INSERT INTO {schema}.{risk_geom_table}(geom)
+        INSERT INTO {schema}.{risk_geom}(geom)
         SELECT risk_tmp.geometry
-        FROM {schema}.{risk_tmp_table} as risk_tmp, public.biome_border as border
+        FROM {schema}.{risk_tmp} as risk_tmp, public.biome_border as border
         WHERE ST_Intersects(risk_tmp.geometry, border.geom) AND border.biome='{biome}';
     """
 
@@ -163,7 +165,7 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
     sql = f"""
         INSERT INTO {schema}.{risk_data} (date_id, geom_id, risk, biome)
         SELECT {risk_date_id}, geom.id, risk_tmp.data, '{biome}'
-        FROM {schema}.{risk_tmp_table} risk_tmp, {schema}.{risk_geom_table} geom
+        FROM {schema}.{risk_tmp} risk_tmp, {schema}.{risk_geom} geom
         WHERE ST_Equals(risk_tmp.geometry, geom.geom);
     """
 
@@ -172,8 +174,8 @@ def update_risk_file(db_url: str, risk_threshold: float, srid: str, biome: str):
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
-    table1 = f"{schema}.{risk_data}"
-    table2 = f"{schema}.{risk_geom_table}"
+    table1 = f"{schema}.{risk_data}"  # risk_data_inpe
+    table2 = f"{schema}.{risk_geom}"  # risk_matrix_inpe
 
     sql = f"""
         UPDATE {table1} AS rk
