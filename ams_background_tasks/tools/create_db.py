@@ -226,7 +226,6 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 AND mlu.date > enddate
                                 AND mlu.date <= startdate
                                 AND mlu.risk >= riskThreshold
-                                AND mlu.score >= min_score
                                 AND ('ALL' = ANY (biomes) OR mlu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR mlu.geocode =
                                     ANY(
@@ -241,6 +240,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                    OR mlu.geocode = ANY(geocodes)   
                                )
                             GROUP BY mlu.suid, mlu.classname
+                            HAVING SUM(mlu.score) >= min_score
                         ) AS mlu_j
                         ON mun.suid = mlu_j.suid
                         ORDER BY COALESCE(mlu_j.perc, 0) DESC;
@@ -382,7 +382,6 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                 AND slu.date > enddate
                                 AND slu.date <= startdate
                                 AND slu.risk >= riskThreshold
-                                AND slu.score >= min_score
                                 AND ('ALL' = ANY (biomes) OR slu.biome = ANY (biomes))
                                 AND (municipality_group_name = 'ALL' OR slu.geocode =
                                     ANY(
@@ -397,6 +396,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    OR slu.geocode = ANY(geocodes)
                                )
                             GROUP BY slu.suid, slu.classname
+                            HAVING SUM(slu.score) >= min_score
                         ) AS slu_j
                         ON sta.suid = slu_j.suid
                         ORDER BY COALESCE(slu_j.perc, 0) DESC;
@@ -540,8 +540,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
                                             AND cls.date <= startdate
-                                            AND cls.risk >= riskThreshold
-                                            AND cls.score >= min_score
+                                            AND cls.risk >= riskThreshold                                            
                                             AND ('ALL' = ANY (biomes) OR cls.biome = ANY (biomes))
                                             AND (municipality_group_name = 'ALL' OR cls.geocode =
                                                 ANY(
@@ -557,6 +556,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                             )
 
                                         GROUP BY cls.suid, cls.classname
+                                        HAVING SUM(cls.score) >= min_score
                                 ) AS cls_j
                                 ON cel.suid = cls_j.suid
                                 ORDER BY COALESCE(cls_j.perc, 0) DESC;
