@@ -21,8 +21,11 @@ CELLS = [CELL_5KM, CELL_25KM, CELL_150KM]
 AMAZONIA = "Amazônia"
 CERRADO = "Cerrado"
 PANTANAL = "Pantanal"
+CAATINGA = "Caatinga"
+MATA_ATLANTICA = "Mata Atlântica"
+PAMPA = "Pampa"
 
-BIOMES = [AMAZONIA, CERRADO, PANTANAL]
+BIOMES = [AMAZONIA, CERRADO, PANTANAL, CAATINGA, MATA_ATLANTICA, PAMPA]
 
 # constants
 PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
@@ -94,6 +97,9 @@ def get_biome_acronym(biome: str):
         AMAZONIA: "amz",
         CERRADO: "cer",
         PANTANAL: "pan",
+        CAATINGA: "caa",
+        MATA_ATLANTICA: "maa",
+        PAMPA: "pap",
     }[biome]
 
 
