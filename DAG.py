@@ -28,6 +28,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import BranchPythonOperator, ShortCircuitOperator
 from dateutil.relativedelta import relativedelta
 
+from ams_background_tasks.tools.common import BIOMES
 from common import *
 
 land_use_dir = project_dir + "/land_use"
@@ -42,6 +43,10 @@ def _get_biomes():
     return " ".join(
         [f"--biome={_}" for _ in Variable.get("AMS_BIOMES").split(";") if len(_) > 0]
     )
+
+
+def _get_all_biomes():
+    return " ".join([f"--biome='{_}'" for _ in BIOMES])
 
 
 # DAG: ams-create-db
@@ -127,7 +132,7 @@ def create_db():
 @task(task_id="update-biome")
 def update_biome():
     bash_command = f"source {venv_path}/bin/activate && "
-    bash_command += f"ams-update-biome {_get_biomes()}"
+    bash_command += f"ams-update-biome {_get_all_biomes()}"
 
     return BashOperator(
         task_id="ams-update-biome",
@@ -140,7 +145,7 @@ def update_biome():
 @task(task_id="update-spatial-units")
 def update_spatial_units():
     bash_command = f"source {venv_path}/bin/activate && "
-    bash_command += f"ams-update-spatial-units {_get_biomes()}"
+    bash_command += f"ams-update-spatial-units {_get_all_biomes()}"
 
     return BashOperator(
         task_id="ams-update-spatial-units",
@@ -155,7 +160,7 @@ def update_active_fires():
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-update-active-fires {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
-        f"{_get_biomes()}"
+        f"{_get_all_biomes()}"
     )
     return BashOperator(
         task_id="ams-update-active-fires",
@@ -272,12 +277,12 @@ def classify_deter_by_land_use_ppcdam():
 def _classify_active_fires_by_land_use(land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
-        f"ams-classify-by-land-use"
-        f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Amazônia' --biome='Cerrado'"
-        " --indicator='focos'"
-        f" --land-use-type={land_use_type}"
-        " --land-use-dir=" + land_use_dir
+        f"ams-classify-by-land-use "
+        f"{('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
+        f"{_get_all_biomes()} "
+        "--indicator='focos' "
+        f"--land-use-type={land_use_type} "
+        "--land-use-dir=" + land_use_dir
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
@@ -570,12 +575,12 @@ with DAG(
 # DAG: ams-calculate-land-use-area
 
 
-@task(task_id="calculate-amz-land-use-area")
-def calculate_amz_land_use_area():
+@task(task_id="calculate-biomes-land-use-area")
+def calculate_biomes_land_use_area():
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-calculate-land-use-area {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')} "
-        " --biome='Amazônia'"
+        f"{_get_all_biomes()}"
         " --land-use-type='ams'"
         " --land-use-dir=" + land_use_dir
     )
@@ -583,26 +588,7 @@ def calculate_amz_land_use_area():
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-calculate-amz-land-use-area",
-        bash_command=bash_command,
-        env=env,
-        append_env=True,
-    ).execute({})
-
-
-@task(task_id="calculate-cer-land-use-area")
-def calculate_cer_land_use_area():
-    bash_command = f"source {venv_path}/bin/activate && "
-    bash_command += (
-        f"ams-calculate-land-use-area --biome='Cerrado'"
-        " --land-use-type='ams'"
-        " --land-use-dir=" + land_use_dir
-    )
-
-    env = get_conn_secrets_uri(["AMS_DB_URL"])
-
-    return BashOperator(
-        task_id="ams-calculate-cer-land-use-area",
+        task_id="ams-calculate-biomes-land-use-area",
         bash_command=bash_command,
         env=env,
         append_env=True,
@@ -624,12 +610,6 @@ with DAG(
 
     run_update_environment = update_environment()
 
-    run_calculate_amz_land_use_area = calculate_amz_land_use_area()
-    run_calculate_cer_land_use_area = calculate_cer_land_use_area()
+    run_calculate_land_use_area = calculate_biomes_land_use_area()
 
-    (
-        run_check_variables
-        >> run_update_environment
-        >> run_calculate_amz_land_use_area
-        >> run_calculate_cer_land_use_area
-    )
+    (run_check_variables >> run_update_environment >> run_calculate_land_use_area)

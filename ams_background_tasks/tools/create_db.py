@@ -898,7 +898,11 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (9, 'RISCO_IBAMA', 6, 'Amazônia'),
             (10, 'DESMATAMENTO_CR', 1, 'Cerrado'),
             (11, 'FOCOS', 5, 'Cerrado'),
-            (12, 'RISCO', 7, 'Amazônia');
+            (12, 'RISCO', 7, 'Amazônia'),
+            (13, 'FOCOS', 5, 'Pantanal'),
+            (14, 'FOCOS', 5, 'Caatinga'),
+            (15, 'FOCOS', 5, 'Mata Atlântica'),
+            (16, 'FOCOS', 5, 'Pampa');
     """
 
     db.execute(sql=sql)

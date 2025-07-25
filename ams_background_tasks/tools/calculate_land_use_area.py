@@ -81,7 +81,7 @@ def main(
 
         assert is_valid_biome(biome=_biome)
 
-        land_use_image = Path(land_use_dir) / land_use_type / f"{_biome}_land_use.tif"
+        land_use_image = Path(land_use_dir) / land_use_type / "land_use.tif"
         logger.debug(land_use_image)
         assert Path(land_use_image).exists()
 
