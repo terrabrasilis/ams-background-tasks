@@ -124,6 +124,8 @@ def _update_deter_table(
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
+    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = off);")
+
     # creating sql view for the external database
     view = f"public.{get_biome_acronym(biome=biome)}_{name}"
     logger.info("creating the sql view %s.", view)
@@ -240,6 +242,8 @@ def _update_deter_table(
         """
 
         db.execute(sql)
+
+    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = on);")
 
 
 def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bool):
