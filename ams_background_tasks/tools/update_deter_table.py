@@ -211,7 +211,7 @@ def _update_deter_table(
     years = db.fetchall(f"""
         SELECT DISTINCT EXTRACT(YEAR FROM date)::int AS year
         FROM {table}
-        WHERE biome = '{biome}'
+        WHERE biome='{biome}'
         ORDER BY year;
     """)
 
@@ -238,7 +238,6 @@ def _update_deter_table(
                 dt.gid = a.gid
                 AND dt.biome='{biome}';
         """
-        print(sql)
 
         db.execute(sql)
 
