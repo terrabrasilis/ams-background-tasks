@@ -208,27 +208,38 @@ def _update_deter_table(
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
-    sql = f"""
-        UPDATE {table} AS dt
-        SET geocode=a.geocode, mun=a.name
-        FROM (
-            SELECT 
-                dt2.gid, mun.geocode, mun.name
-            FROM 
-                {table} AS dt2
-            JOIN 
-                public.municipalities mun 
-                ON dt2.geom && mun.geometry
-                AND ST_Within(ST_PointOnSurface(dt2.geom), mun.geometry)
-            WHERE
-                dt2.biome='{biome}'
-        ) AS a
-        WHERE 
-            dt.gid = a.gid
-            AND dt.biome='{biome}';
-    """
+    years = db.fetchall(f"""
+        SELECT DISTINCT EXTRACT(YEAR FROM date)::int AS year
+        FROM {table}
+        WHERE biome='{biome}'
+        ORDER BY year;
+    """)
 
-    db.execute(sql)
+    years = [_[0] for _ in years]
+
+    for year in years:
+        sql = f"""
+            UPDATE {table} AS dt
+            SET geocode=a.geocode, mun=a.name
+            FROM (
+                SELECT 
+                    dt2.gid, mun.geocode, mun.name
+                FROM 
+                    {table} AS dt2
+                JOIN 
+                    public.municipalities mun 
+                    ON dt2.geom && mun.geometry
+                    AND ST_Within(ST_PointOnSurface(dt2.geom), mun.geometry)
+                WHERE
+                    dt2.biome='{biome}'
+                    AND EXTRACT(YEAR FROM dt2.date)::int = {year}
+            ) AS a
+            WHERE 
+                dt.gid = a.gid
+                AND dt.biome='{biome}';
+        """
+
+        db.execute(sql)
 
 
 def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bool):
