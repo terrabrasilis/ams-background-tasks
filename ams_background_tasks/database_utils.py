@@ -74,6 +74,9 @@ class DatabaseFacade(BaseModel):
         self.conn.cursor().execute(sql)
         self.conn.commit()
 
+    def commit(self):
+        self.conn.commit()
+
     def create_schema(self, name: str, comment: str = "", force_recreate: bool = False):
         """Create a schema."""
         sql = ""
@@ -149,6 +152,31 @@ class DatabaseFacade(BaseModel):
                 method=method,
                 column=col,
                 force_recreate=force_recreate,
+            )
+
+    def drop_index(
+        self,
+        schema: str,
+        name: str,
+    ):
+        """Create an index."""
+        index = f"{schema}.{name}"
+
+        sql = f"DROP INDEX IF EXISTS {index};"
+
+        self.execute(sql)
+
+    def drop_indexes(
+        self,
+        schema: str,
+        name: str,
+        columns: list,
+    ):
+        """Create an index for each column."""
+        for col in columns:
+            self.drop_index(
+                schema=schema,
+                name=f"{name}_{col.replace(',', '_')}_idx",
             )
 
     def fetchall(self, query):
