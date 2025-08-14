@@ -1,5 +1,7 @@
 """Municipalities groups."""
 
+from ams_background_tasks.database_utils import DatabaseFacade
+
 MUNICIPALITIES_GROUPS = {
     "prioritários amz": [
         "1505064",
@@ -477,12 +479,34 @@ MUNICIPALITIES_GROUPS = {
 }
 
 
-def list_groups():
-    """List the municipalities groups."""
-    return list(MUNICIPALITIES_GROUPS.keys())
+class MunicipalitiesGroupHandler:
+    """Handler."""
 
+    groups: dict = {}
 
-def get_geocodes(group: str):
-    """Return the geocodes of the given group."""
-    assert group in MUNICIPALITIES_GROUPS
-    return MUNICIPALITIES_GROUPS[group]
+    def __init__(self, db_url: str):
+        db = DatabaseFacade.from_url(db_url=db_url)
+
+        self.groups["user-defined"] = MUNICIPALITIES_GROUPS
+        self.groups["state"] = {}
+
+        states = db.fetchall("SELECT DISTINCT nm_uf FROM public.municipio_test;")
+        states = [_[0] for _ in states]
+
+        for state in states:
+            geocodes = db.fetchall(
+                f"SELECT geocodigo FROM public.municipio_test WHERE nm_uf='{state}';"
+            )
+            geocodes = [_[0] for _ in geocodes]
+            self.groups["state"][f"{state}"] = geocodes
+
+    def list_groups(self):
+        """List the municipalities groups."""
+        groups = [("user-defined", _) for _ in list(self.groups["user-defined"].keys())]
+        groups = groups + [("state", _) for _ in list(self.groups["state"].keys())]
+        return groups
+
+    def get_geocodes(self, gkey: str, group: str):
+        """Return the geocodes of the given group."""
+        assert group in self.groups[gkey]
+        return self.groups[gkey][group]

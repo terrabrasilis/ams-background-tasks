@@ -1002,6 +1002,7 @@ def create_municipalities_group_tables(
         columns=[
             "id serial NOT NULL PRIMARY KEY",
             "name varchar(150) UNIQUE",
+            "type varchar(16) NOT NULL",
         ],
     )
 

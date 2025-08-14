@@ -9,7 +9,7 @@ import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.municipalities_groups import get_geocodes, list_groups
+from ams_background_tasks.municipalities_groups import MunicipalitiesGroupHandler
 from ams_background_tasks.tools.common import (
     BIOMES,
     CELLS,
@@ -85,7 +85,7 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
                 # truncate=truncate,
             )
 
-    update_municipalities_groups(db=db)
+    update_municipalities_groups(db_url=db_url, aux_db_url=aux_db_url)
 
 
 def check_count_rows(db: DatabaseFacade):
@@ -211,19 +211,23 @@ def update_municipalities_table(
     db.insert(query=insert_query, data=data)
 
 
-def update_municipalities_groups(db: DatabaseFacade):
+def update_municipalities_groups(db_url: str, aux_db_url: str):
     """Update the municipalities groups."""
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    mgh = MunicipalitiesGroupHandler(db_url=aux_db_url)
+
     valid_geocodes = [
         _[0] for _ in db.fetchall("SELECT geocode from public.municipalities")
     ]
 
-    for group in list_groups():
+    for gkey, group in mgh.list_groups():
         table = "public.municipalities_group"
         if db.count_rows(table=f"{table}", conditions=f"name='{group}'"):
             continue
 
         sql = f"""
-            INSERT INTO {table} (name) VALUES ('{group}');
+            INSERT INTO {table} (name, type) VALUES ('{group}', '{gkey}');
         """
 
         db.execute(sql)
@@ -238,7 +242,7 @@ def update_municipalities_groups(db: DatabaseFacade):
 
         logger.debug(group_id)
 
-        geocodes = get_geocodes(group=group)
+        geocodes = mgh.get_geocodes(gkey=gkey, group=group)
 
         invalid_geocodes = []
         for geocode in geocodes:
