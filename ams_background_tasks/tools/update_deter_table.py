@@ -110,6 +110,38 @@ def update_deter(
         )
 
 
+def _prepare_table_before_updating(db: DatabaseFacade, name: str):
+    # disable autovacuum
+    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = off);")
+
+    # drop indexes
+    columns = [
+        "classname",
+        "date",
+        "biome",
+        "geocode",
+        "geom",
+    ]
+
+    db.drop_indexes(schema="deter", name=name, columns=columns)
+
+
+def _prepare_table_after_updating(db: DatabaseFacade, name: str):
+    # enable autovacuum
+    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = on);")
+
+    # recreate indexes
+    columns = [
+        "classname:btree",
+        "date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "geom:gist",
+    ]
+
+    db.create_indexes(schema="deter", name=name, columns=columns, force_recreate=False)
+
+
 def _update_deter_table(
     *,
     db_url: str,
@@ -124,7 +156,7 @@ def _update_deter_table(
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
-    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = off);")
+    _prepare_table_before_updating(db=db, name=name)
 
     # creating sql view for the external database
     view = f"public.{get_biome_acronym(biome=biome)}_{name}"
@@ -210,12 +242,14 @@ def _update_deter_table(
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
-    years = db.fetchall(f"""
+    years = db.fetchall(
+        f"""
         SELECT DISTINCT EXTRACT(YEAR FROM date)::int AS year
         FROM {table}
         WHERE biome='{biome}'
         ORDER BY year;
-    """)
+    """
+    )
 
     years = [_[0] for _ in years]
 
@@ -243,7 +277,7 @@ def _update_deter_table(
 
         db.execute(sql)
 
-    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = on);")
+    _prepare_table_after_updating(db=db, name=name)
 
 
 def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bool):
