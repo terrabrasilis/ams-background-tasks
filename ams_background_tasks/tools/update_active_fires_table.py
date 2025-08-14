@@ -63,7 +63,7 @@ def _prepare_table_before_updating(db: DatabaseFacade):
     name = "active_fires"
 
     # disable autovacuum
-    db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = off);")
+    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = off);")
 
     # drop indexes
     columns = [
@@ -81,7 +81,7 @@ def _prepare_table_after_updating(db: DatabaseFacade):
     name = "active_fires"
 
     # enable autovacuum
-    db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = on);")
+    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = on);")
 
     # recreate indexes
     columns = [
