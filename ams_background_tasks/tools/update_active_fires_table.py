@@ -101,7 +101,7 @@ def update_active_fires_table(
 
     db = DatabaseFacade.from_url(db_url=db_url)
 
-    _prepare_table_before_updating(db=db)
+    # _prepare_table_before_updating(db=db)
 
     # creating a sql view for the external database
     logger.info("creating the sql view")
@@ -178,4 +178,4 @@ def update_active_fires_table(
 
     db.execute(sql)
 
-    _prepare_table_after_updating(db=db)
+    # _prepare_table_after_updating(db=db)
