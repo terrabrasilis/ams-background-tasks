@@ -58,10 +58,50 @@ def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple):
     )
 
 
+def _prepare_table_before_updating(db: DatabaseFacade):
+    schema = "fires"
+    name = "active_fires"
+
+    # disable autovacuum
+    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = off);")
+
+    # drop indexes
+    columns = [
+        "view_date",
+        "biome",
+        "geocode",
+        "geom",
+    ]
+
+    db.drop_indexes(schema=schema, name=name, columns=columns)
+
+
+def _prepare_table_after_updating(db: DatabaseFacade):
+    schema = "fires"
+    name = "active_fires"
+
+    # enable autovacuum
+    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = on);")
+
+    # recreate indexes
+    columns = [
+        "view_date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "geom:gist",
+    ]
+
+    db.create_indexes(schema=schema, name=name, columns=columns, force_recreate=False)
+
+
 def update_active_fires_table(
     db_url: str, af_db_url: str, all_data: bool, biome_list: list
 ):
     logger.info("updating the active_fires table")
+
+    db = DatabaseFacade.from_url(db_url=db_url)
+
+    # _prepare_table_before_updating(db=db)
 
     # creating a sql view for the external database
     logger.info("creating the sql view")
@@ -85,7 +125,6 @@ def update_active_fires_table(
         AS remote_data(id integer, uuid character varying(254), view_date date, satelite character varying(254), estado character varying(254), municipio character varying(254), biome character varying(254), geom geometry(Point,4674));
     """
 
-    db = DatabaseFacade.from_url(db_url=db_url)
     db.execute(sql)
 
     # inserting data
@@ -138,3 +177,5 @@ def update_active_fires_table(
     """
 
     db.execute(sql)
+
+    # _prepare_table_after_updating(db=db)

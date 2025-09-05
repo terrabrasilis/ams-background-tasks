@@ -74,6 +74,9 @@ class DatabaseFacade(BaseModel):
         self.conn.cursor().execute(sql)
         self.conn.commit()
 
+    def commit(self):
+        self.conn.commit()
+
     def create_schema(self, name: str, comment: str = "", force_recreate: bool = False):
         """Create a schema."""
         sql = ""

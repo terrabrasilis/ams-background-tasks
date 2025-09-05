@@ -257,7 +257,7 @@ def process_active_fires(
         logger.info("processing biome %s", biome)
         assert is_valid_biome(biome=biome)
 
-        land_use_image = land_use_dir / land_use_type / f"{biome}_land_use.tif"
+        land_use_image = land_use_dir / land_use_type / "land_use.tif"
         logger.debug(land_use_image)
         assert land_use_image.exists()
 
@@ -393,7 +393,7 @@ def process_deter(
         logger.info("processing biome %s", biome)
         assert is_valid_biome(biome=biome)
 
-        land_use_image = land_use_dir / land_use_type / f"{biome}_land_use.tif"
+        land_use_image = land_use_dir / land_use_type / "land_use.tif"
         logger.debug(land_use_image)
         assert land_use_image.exists()
 
@@ -568,7 +568,7 @@ def process_risk(db_url: str, land_use_dir: Path, land_use_type: str, indicator:
 
     biome = AMAZONIA
 
-    land_use_image = land_use_dir / land_use_type / f"{biome}_land_use.tif"
+    land_use_image = land_use_dir / land_use_type / "land_use.tif"
     logger.debug(land_use_image)
     assert land_use_image.exists()
 
