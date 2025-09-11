@@ -456,7 +456,7 @@ def _check_recreate_db():
 with DAG(
     "ams-create-db",
     default_args=default_args,
-    schedule_interval="0 2 * * *",
+    schedule_interval="0 4 * * *",
     catchup=False,
     concurrency=3,
     max_active_runs=1,
