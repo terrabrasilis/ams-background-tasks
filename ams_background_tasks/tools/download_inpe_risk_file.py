@@ -90,8 +90,10 @@ def main(
     end = datetime.strptime(end, "%Y-%m-%d")
     logger.debug(end)
 
+    db = DatabaseFacade.create(db_url=db_url)
+
     download_risk_file(
-        db_url=db_url,
+        db=db,
         stac_api_url=stac_api_url,
         collection=collection,
         save_dir=Path(save_dir),
@@ -99,6 +101,8 @@ def main(
         beg=begin,
         end=end,
     )
+
+    db.commit()
 
 
 def _get_items(endpoint: str, params: dict = None):
@@ -125,7 +129,7 @@ def _download_asset(url: str, download_path: Path):
 
 
 def download_risk_file(
-    db_url: str,
+    db: DatabaseFacade,
     stac_api_url: str,
     days_until_expiration: int,
     collection: str,
@@ -133,8 +137,6 @@ def download_risk_file(
     beg: datetime,
     end: datetime,
 ):
-    db = DatabaseFacade.from_url(db_url=db_url)
-
     items = _get_items(
         endpoint=parse_url(f"{stac_api_url}/search"),
         params={

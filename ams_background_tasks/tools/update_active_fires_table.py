@@ -41,7 +41,14 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--biome", type=click.Choice(BIOMES), required=True, help="Biome.", multiple=True
 )
-def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple):
+@click.option(
+    "--limit",
+    required=False,
+    type=int,
+    default=0,
+    help="Restrict the number of rows to update (test purpose).",
+)
+def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
     """Update the active fires table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
@@ -53,55 +60,23 @@ def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple):
 
     logger.debug(all_data)
 
+    db = DatabaseFacade.create(db_url=db_url)
+
     update_active_fires_table(
-        db_url=db_url, af_db_url=af_db_url, all_data=all_data, biome_list=list(biome)
+        db=db,
+        af_db_url=af_db_url,
+        all_data=all_data,
+        biome_list=list(biome),
+        limit=limit,
     )
 
-
-def _prepare_table_before_updating(db: DatabaseFacade):
-    schema = "fires"
-    name = "active_fires"
-
-    # disable autovacuum
-    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = off);")
-
-    # drop indexes
-    columns = [
-        "view_date",
-        "biome",
-        "geocode",
-        "geom",
-    ]
-
-    db.drop_indexes(schema=schema, name=name, columns=columns)
-
-
-def _prepare_table_after_updating(db: DatabaseFacade):
-    schema = "fires"
-    name = "active_fires"
-
-    # enable autovacuum
-    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = on);")
-
-    # recreate indexes
-    columns = [
-        "view_date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
-
-    db.create_indexes(schema=schema, name=name, columns=columns, force_recreate=False)
+    db.commit()
 
 
 def update_active_fires_table(
-    db_url: str, af_db_url: str, all_data: bool, biome_list: list
+    db: DatabaseFacade, af_db_url: str, all_data: bool, biome_list: list, limit: int
 ):
     logger.info("updating the active_fires table")
-
-    db = DatabaseFacade.from_url(db_url=db_url)
-
-    # _prepare_table_before_updating(db=db)
 
     # creating a sql view for the external database
     logger.info("creating the sql view")
@@ -140,6 +115,8 @@ def update_active_fires_table(
     else:
         by_date = f"a.view_date > (SELECT MAX(view_date) FROM {table})"
 
+    limit_sql = f"LIMIT {limit}" if limit > 0 else ""
+
     sql = f"""
         INSERT INTO {table} (
             id, uuid, view_date, satelite, estado, municipio, biome, geom
@@ -147,6 +124,7 @@ def update_active_fires_table(
         SELECT a.id, a.uuid, a.view_date, a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
+        {limit_sql};
     """
 
     db.execute(sql)
@@ -177,5 +155,3 @@ def update_active_fires_table(
     """
 
     db.execute(sql)
-
-    # _prepare_table_after_updating(db=db)

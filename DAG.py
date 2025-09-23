@@ -160,7 +160,8 @@ def update_active_fires():
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-update-active-fires {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
-        f"{_get_all_biomes()}"
+        f"{_get_all_biomes()} "
+        f"--limit={Variable.get('AMS_LIMIT', 0)}"
     )
     return BashOperator(
         task_id="ams-update-active-fires",
@@ -176,7 +177,7 @@ def update_amz_deter():
     bash_command += (
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Amazônia' --truncate"
+        f" --biome='Amazônia' --truncate --limit={Variable.get('AMS_LIMIT', 0)}"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL"])
@@ -196,7 +197,7 @@ def update_cer_deter():
     bash_command += (
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Cerrado'"
+        f" --biome='Cerrado' --limit={Variable.get('AMS_LIMIT', 0)}"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_CER_DETER_B_DB_URL"])
@@ -204,6 +205,24 @@ def update_cer_deter():
 
     return BashOperator(
         task_id="ams-update-cer-deter",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
+@task(task_id="finalize-deter-update")
+def finalize_deter_update():
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-finalize-deter-update"
+        f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id=f"ams-finalize-deter-update",
         bash_command=bash_command,
         env=env,
         append_env=True,
@@ -274,7 +293,7 @@ def classify_deter_by_land_use_ppcdam():
 # active fires data classification
 
 
-def _classify_active_fires_by_land_use(land_use_type: str):
+def _classify_fires_by_land_use(land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-classify-by-land-use "
@@ -296,45 +315,65 @@ def _classify_active_fires_by_land_use(land_use_type: str):
 
 
 @task(task_id="classify-fires-by-land-use-AMS")
-def classify_active_fires_by_land_use_ams():
-    return _classify_active_fires_by_land_use(land_use_type="ams")
+def classify_fires_by_land_use_ams():
+    return _classify_fires_by_land_use(land_use_type="ams")
 
 
 @task(task_id="classify-fires-by-land-use-PPCDAM")
-def classify_active_fires_by_land_use_ppcdam():
-    return _classify_active_fires_by_land_use(land_use_type="ppcdam")
+def classify_fires_by_land_use_ppcdam():
+    return _classify_fires_by_land_use(land_use_type="ppcdam")
 
 
 # finalize classification
 
 
-def finalize_classification(land_use_type: str):
+def finalize_classification(land_use_type: str, indicator: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-finalize-classification"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         f" --land-use-type={land_use_type}"
-        " --drop-tmp"
+        f" --indicator={indicator}"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"ams-finalize-classification-{land_use_type}",
+        task_id=f"ams-finalize-classification-{indicator}-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
     ).execute({})
 
 
-@task(task_id="finalize-classification-AMS")
-def finalize_classification_ams():
-    return finalize_classification(land_use_type="ams")
+@task(task_id="finalize-classification-deter-AMS")
+def finalize_classification_deter_ams():
+    return finalize_classification(land_use_type="ams", indicator="deter")
 
 
-@task(task_id="finalize-classification-PPCDAM")
-def finalize_classification_ppcdam():
-    return finalize_classification(land_use_type="ppcdam")
+@task(task_id="finalize-classification-deter-PPCDAM")
+def finalize_classification_deter_ppcdam():
+    return finalize_classification(land_use_type="ppcdam", indicator="deter")
+
+
+@task(task_id="finalize-classification-fires-AMS")
+def finalize_classification_fires_ams():
+    return finalize_classification(land_use_type="ams", indicator="focos")
+
+
+@task(task_id="finalize-classification-fires-PPCDAM")
+def finalize_classification_fires_ppcdam():
+    return finalize_classification(land_use_type="ppcdam", indicator="focos")
+
+
+@task(task_id="finalize-classification-risk-AMS")
+def finalize_classification_risk_ams():
+    return finalize_classification(land_use_type="ams", indicator="risco")
+
+
+@task(task_id="finalize-classification-risk-PPCDAM")
+def finalize_classification_risk_ppcdam():
+    return finalize_classification(land_use_type="ppcdam", indicator="risco")
 
 
 # risk
@@ -416,8 +455,7 @@ def _classify_risk_by_land_use(land_use_type: str):
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia'"
-        # " --indicator='risco'"
-        " --indicator='risco-inpe'"
+        " --indicator='risco'"
         f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
     )
@@ -456,9 +494,9 @@ def _check_recreate_db():
 with DAG(
     "ams-create-db",
     default_args=default_args,
-    schedule_interval="0 2 * * *",
+    schedule_interval=None,  # "0 2 * * *",
     catchup=False,
-    concurrency=3,
+    concurrency=1,
     max_active_runs=1,
 ) as dag:
     run_check_variables = ShortCircuitOperator(
@@ -491,13 +529,13 @@ with DAG(
     run_update_active_fires = update_active_fires()
     run_update_amz_deter = update_amz_deter()
     run_update_cer_deter = update_cer_deter()
+    run_finalize_deter_update = finalize_deter_update()
     # run_download_ibama_risk_file = download_ibama_risk_file()
     run_download_risk_file = download_inpe_risk_file()
     # run_update_ibama_risk = update_ibama_risk()
     run_update_risk = update_inpe_risk()
 
     # preparing to classify
-    run_prepare_classification = EmptyOperator(task_id="prepare-classification")
     run_prepare_classification_ams = prepare_classification_ams()
     run_prepare_classification_ppcdam = prepare_classification_ppcdam()
 
@@ -505,15 +543,21 @@ with DAG(
     run_classify_deter_ams = classify_deter_by_land_use_ams()
     run_classify_deter_ppcdam = classify_deter_by_land_use_ppcdam()
 
-    run_classify_active_fires_ams = classify_active_fires_by_land_use_ams()
-    run_classify_active_fires_ppcdam = classify_active_fires_by_land_use_ppcdam()
+    run_classify_fires_ams = classify_fires_by_land_use_ams()
+    run_classify_fires_ppcdam = classify_fires_by_land_use_ppcdam()
 
     run_classify_risk_ams = classify_risk_by_land_use_ams()
     run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam()
 
     # finalize classification
-    run_finalize_classification_ams = finalize_classification_ams()
-    run_finalize_classification_ppcdam = finalize_classification_ppcdam()
+    run_finalize_classification_deter_ams = finalize_classification_deter_ams()
+    run_finalize_classification_deter_ppcdam = finalize_classification_deter_ppcdam()
+
+    run_finalize_classification_fires_ams = finalize_classification_fires_ams()
+    run_finalize_classification_fires_ppcdam = finalize_classification_fires_ppcdam()
+
+    run_finalize_classification_risk_ams = finalize_classification_risk_ams()
+    run_finalize_classification_risk_ppcdam = finalize_classification_risk_ppcdam()
 
     # running
 
@@ -526,51 +570,37 @@ with DAG(
     run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
     run_skip >> run_join
 
-    run_join >> [
-        run_update_active_fires,
-        run_update_amz_deter,
-        run_download_risk_file,
+    run_join2 = EmptyOperator(task_id="join-prepare-classification")
+
+    (
+        run_join
+        >> [run_prepare_classification_ams, run_prepare_classification_ppcdam]
+        >> run_join2
+    )
+
+    run_join2 >> [run_download_risk_file, run_update_active_fires, run_update_amz_deter]
+    # run_join2 >> [run_update_amz_deter]
+
+    (
+        run_download_risk_file
+        >> run_update_risk
+        >> [run_classify_risk_ams, run_classify_risk_ppcdam]
+    )
+    run_classify_risk_ams >> run_finalize_classification_risk_ams
+    run_classify_risk_ppcdam >> run_finalize_classification_risk_ppcdam
+
+    run_update_active_fires >> [
+        run_classify_fires_ams,
+        run_classify_fires_ppcdam,
     ]
-    run_update_amz_deter >> run_update_cer_deter
-    run_download_risk_file >> run_update_risk
+    run_classify_fires_ams >> run_finalize_classification_fires_ams
+    run_classify_fires_ppcdam >> run_finalize_classification_fires_ppcdam
 
-    [
-        run_update_active_fires,
-        run_update_cer_deter,
-        run_update_risk,
-    ] >> run_prepare_classification
+    run_update_amz_deter >> run_update_cer_deter >> run_finalize_deter_update
 
-    run_prepare_classification >> [
-        run_prepare_classification_ams,
-        run_prepare_classification_ppcdam,
-    ]
-
-    # ams
-    run_prepare_classification_ams >> [
-        run_classify_active_fires_ams,
-        run_classify_deter_ams,
-        run_classify_risk_ams,
-    ]
-
-    [
-        run_classify_active_fires_ams,
-        run_classify_deter_ams,
-        run_classify_risk_ams,
-    ] >> run_finalize_classification_ams
-
-    # ppcdam
-    run_prepare_classification_ppcdam >> [
-        run_classify_active_fires_ppcdam,
-        run_classify_deter_ppcdam,
-        run_classify_risk_ppcdam,
-    ]
-
-    [
-        run_classify_active_fires_ppcdam,
-        run_classify_deter_ppcdam,
-        run_classify_risk_ppcdam,
-    ] >> run_finalize_classification_ppcdam
-
+    run_finalize_deter_update >> [run_classify_deter_ams, run_classify_deter_ppcdam]
+    run_classify_deter_ams >> run_finalize_classification_deter_ams
+    run_classify_deter_ppcdam >> run_finalize_classification_deter_ppcdam
 
 # DAG: ams-calculate-land-use-area
 

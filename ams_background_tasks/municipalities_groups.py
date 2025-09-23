@@ -484,17 +484,15 @@ class MunicipalitiesGroupHandler:
 
     groups: dict = {}
 
-    def __init__(self, db_url: str):
-        db = DatabaseFacade.from_url(db_url=db_url)
-
+    def __init__(self, aux_db: DatabaseFacade):
         self.groups["user-defined"] = MUNICIPALITIES_GROUPS
         self.groups["state"] = {}
 
-        states = db.fetchall("SELECT DISTINCT nm_uf FROM public.municipio_test;")
+        states = aux_db.fetchall("SELECT DISTINCT nm_uf FROM public.municipio_test;")
         states = [_[0] for _ in states]
 
         for state in states:
-            geocodes = db.fetchall(
+            geocodes = aux_db.fetchall(
                 f"SELECT geocodigo FROM public.municipio_test WHERE nm_uf='{state}';"
             )
             geocodes = [_[0] for _ in geocodes]

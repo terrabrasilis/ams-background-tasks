@@ -43,7 +43,7 @@ def main(db_url: str, force_recreate: bool):
     logger.debug(db_url)
     assert db_url
 
-    db = DatabaseFacade.from_url(db_url=db_url)
+    db = DatabaseFacade.create(db_url=db_url)
 
     db.create_postgis_extension()
     db.create_dblink_extension()
@@ -90,6 +90,8 @@ def main(db_url: str, force_recreate: bool):
 
     # risk
     create_risk_tables(db=db, force_recreate=force_recreate)
+
+    db.commit()
 
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
@@ -651,7 +653,7 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     )
 
 
-def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
+def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
     """Create the deter.tmp_data table."""
     columns = [
         "gid varchar(254) NOT NULL",
@@ -689,24 +691,29 @@ def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
 
 def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
     """Create the deter.[deter, deter_auth, deter_history] tables."""
-    # deter, deter_auth, deter_history
-    names = ("deter", "deter_auth", "deter_history")
-    for name in names:
-        _create_deter_table(db=db, name=name, force_recreate=force_recreate)
+    for prefix in ("", "tmp_"):
+        force_recreate = len(prefix) > 0
 
-    # deter_publish_date
-    db.create_table(
-        schema="deter",
-        name="deter_publish_date",
-        columns=[
-            "date date",
-            "biome varchar(254)",
-        ],
-        force_recreate=force_recreate,
-    )
+        # deter, deter_auth, deter_history
+        names = ("deter", "deter_auth", "deter_history")
+        for name in names:
+            _create_deter_table(
+                db=db, name=f"{prefix}{name}", force_recreate=force_recreate
+            )
+
+        # deter_publish_date
+        db.create_table(
+            schema="deter",
+            name=f"{prefix}deter_publish_date",
+            columns=[
+                "date date",
+                "biome varchar(254)",
+            ],
+            force_recreate=force_recreate,
+        )
 
     # tmp_data
-    _create_tmp_data_table(db=db, force_recreate=force_recreate)
+    _create_deter_tmp_data_table(db=db, force_recreate=force_recreate)
 
 
 def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False):

@@ -56,7 +56,21 @@ logger = logging.getLogger(__name__)
     default=False,
     help="If True, truncate the table before update.",
 )
-def main(db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate: bool):
+@click.option(
+    "--limit",
+    required=False,
+    type=int,
+    default=0,
+    help="Restrict the number of rows to update (test purpose).",
+)
+def main(
+    db_url: str,
+    deter_b_db_url: str,
+    biome: str,
+    all_data: bool,
+    truncate: bool,
+    limit: int,
+):
     """Update the DETER tables from official databases using SQL views."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
@@ -68,23 +82,35 @@ def main(db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate:
     logger.debug(deter_b_db_url)
     assert deter_b_db_url
 
+    db = DatabaseFacade.create(db_url=db_url)
+
     update_deter(
-        db_url=db_url,
+        db=db,
         deter_b_db_url=deter_b_db_url,
         biome=biome,
         all_data=all_data,
         truncate=truncate,
+        limit=limit,
     )
 
     update_publish_date(
-        db_url=db_url, deter_db_url=deter_b_db_url, biome=biome, truncate=truncate
+        db=db,
+        name="tmp_deter_publish_date",
+        deter_db_url=deter_b_db_url,
+        biome=biome,
+        truncate=truncate,
     )
 
-    create_tmp_table(db_url=db_url, all_data=all_data, truncate=truncate, biome=biome)
+    db.commit()
 
 
 def update_deter(
-    db_url: str, deter_b_db_url: str, biome: str, all_data: bool, truncate: bool
+    db: DatabaseFacade,
+    deter_b_db_url: str,
+    biome: str,
+    all_data: bool,
+    truncate: bool,
+    limit: int,
 ):
     """Update the DETER tables (deter, deter_auth, deter_history)."""
     tables = (
@@ -99,18 +125,22 @@ def update_deter(
         else ("deter_ams", "deter_auth_ams")
     )
 
+    prefix = "tmp_"
+
     for index, name in enumerate(tables):
         _update_deter_table(
-            db_url=db_url,
-            deter_b_db_url=deter_b_db_url,
+            db=db,
             name=name,
+            deter_b_db_url=deter_b_db_url,
             ext_table=ext_tables[index],
             biome=biome,
             truncate=truncate,
+            prefix=prefix,
+            limit=limit,
         )
 
 
-def _prepare_table_before_updating(db: DatabaseFacade, name: str):
+def _optimize_for_update(db: DatabaseFacade, name: str):
     # disable autovacuum
     db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = off);")
 
@@ -126,7 +156,7 @@ def _prepare_table_before_updating(db: DatabaseFacade, name: str):
     db.drop_indexes(schema="deter", name=name, columns=columns)
 
 
-def _prepare_table_after_updating(db: DatabaseFacade, name: str):
+def _finalize_update(db: DatabaseFacade, name: str):
     # enable autovacuum
     db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = on);")
 
@@ -144,19 +174,21 @@ def _prepare_table_after_updating(db: DatabaseFacade, name: str):
 
 def _update_deter_table(
     *,
-    db_url: str,
+    db: DatabaseFacade,
     deter_b_db_url: str,
     name: str,
     biome: str,
     truncate: bool,
     ext_table: str,
+    prefix: str,
+    limit: int,
 ):
     """Update the deter.{name} table."""
+    name = f"{prefix}{name}"
+
     logger.info("updating the deter.%s table", name)
 
-    db = DatabaseFacade.from_url(db_url=db_url)
-
-    _prepare_table_before_updating(db=db, name=name)
+    _optimize_for_update(db=db, name=name)
 
     # creating sql view for the external database
     view = f"public.{get_biome_acronym(biome=biome)}_{name}"
@@ -169,7 +201,7 @@ def _update_deter_table(
     dbl_cred = f"'hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text"
     dbl_sel = ""
 
-    if name in {"deter", "deter_auth"}:
+    if name in {f"{prefix}deter", f"{prefix}deter_auth"}:
         dbl_sel = f"""
             'SELECT gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite, areatotalkm, areamunkm, areauckm, mun, uf, uc, geom, month_year FROM public.{ext_table}'::text
         """
@@ -224,6 +256,8 @@ def _update_deter_table(
     if truncate:
         db.truncate(table=table)
 
+    limit_sql = f"LIMIT {limit}" if limit > 0 else ""
+
     sql = f"""
         INSERT INTO deter.{name}(
             gid, origin_gid, classname, quadrant, orbitpoint, date, sensor, satellite,
@@ -234,7 +268,8 @@ def _update_deter_table(
             deter.areamunkm, deter.areauckm, deter.mun, deter.uf, deter.uc, deter.geom, deter.month_year,
             '{biome}'::text as biome
         FROM {view} as deter, public.biome_border as border
-        WHERE ST_Within(deter.geom, border.geom) AND border.biome='{biome}';
+        WHERE ST_Within(deter.geom, border.geom) AND border.biome='{biome}'
+        {limit_sql};
     """
 
     db.execute(sql)
@@ -277,15 +312,14 @@ def _update_deter_table(
 
         db.execute(sql)
 
-    _prepare_table_after_updating(db=db, name=name)
+    _finalize_update(db=db, name=name)
 
 
-def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bool):
+def update_publish_date(
+    db: DatabaseFacade, name: str, deter_db_url: str, biome: str, truncate: bool
+):
     """Update the deter.deter_publish_date."""
-    db = DatabaseFacade.from_url(db_url=db_url)
     user, password, host, port, db_name = get_connection_components(db_url=deter_db_url)
-
-    name = "deter_publish_date"
 
     # creating sql view for the external database
     view = f"public.{get_biome_acronym(biome=biome)}_{name}"
@@ -304,9 +338,9 @@ def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bo
     db.execute(sql)
 
     # inserting data
-    logger.info("inserting data from view deter.deter_publish_date")
+    logger.info("inserting data from view deter.%s", name)
 
-    table = "deter.deter_publish_date"
+    table = f"deter.{name}"
 
     if truncate:
         db.truncate(table=table)
@@ -322,37 +356,3 @@ def update_publish_date(db_url: str, deter_db_url: str, biome: str, truncate: bo
     """
 
     db.execute(sql)
-
-
-def create_tmp_table(db_url: str, all_data: bool, truncate: bool, biome: str):
-    """Create a temporary table with DETER alerts to ensure gist index creation."""
-    db = DatabaseFacade.from_url(db_url=db_url)
-
-    name = "tmp_data"
-    table = f"deter.{name}"
-
-    if truncate:
-        db.truncate(table=table)
-
-    union = ""
-    if all_data:
-        union = f"""
-            UNION
-            SELECT gid, classname, date, areamunkm, geom, geocode, biome
-            FROM deter.deter_history
-            WHERE biome = '{biome}'
-        """
-
-    sql = f"""
-        INSERT INTO {table} (
-            gid, classname, date, areamunkm, geom, geocode, biome
-        )
-        SELECT gid, classname, date, areamunkm, geom, geocode, biome
-        FROM deter.deter_auth
-        WHERE biome = '{biome}'
-        {union}            
-    """
-
-    db.execute(sql=sql)
-
-    logger.info("The DETER temporary table has been created.")

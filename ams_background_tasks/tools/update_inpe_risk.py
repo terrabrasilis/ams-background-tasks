@@ -50,13 +50,15 @@ def main(db_url: str, risk_threshold: float, srid: str, biome: str):
     assert is_valid_biome(biome=biome)
     assert biome == AMAZONIA
 
-    update_risk_file(
-        db_url=db_url, risk_threshold=risk_threshold, srid=srid, biome=biome
-    )
+    db = DatabaseFacade.create(db_url=db_url)
+
+    update_risk_file(db=db, risk_threshold=risk_threshold, srid=srid, biome=biome)
+
+    db.commit()
 
 
 def update_risk_file(
-    db_url: str, risk_threshold: float, srid: str, biome: str
+    db: DatabaseFacade, risk_threshold: float, srid: str, biome: str
 ):  # pylint:disable=too-many-statements
     """Update the ibama risk indicator."""
     assert biome == AMAZONIA
@@ -73,8 +75,6 @@ def update_risk_file(
             VALUES {','.join(values)};
         """
         db.execute(sql=sql, log=False)
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     # creating view
     view = "public.last_risk_data_inpe"

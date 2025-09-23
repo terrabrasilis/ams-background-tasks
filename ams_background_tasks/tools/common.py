@@ -39,8 +39,8 @@ RISK_INPE_CLASSNAME = "RI"
 # indicators
 DETER_INDICATOR = "deter"
 ACTIVE_FIRES_INDICATOR = "focos"
-RISK_IBAMA_INDICATOR = "risco"
-RISK_INPE_INDICATOR = "risco-inpe"
+RISK_IBAMA_INDICATOR = "risco-ibama"
+RISK_INPE_INDICATOR = "risco"
 
 RISK_INDICATORS = [RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR]
 
@@ -151,11 +151,9 @@ def recreate_spatial_table(
     )
 
 
-def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
+def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: bool):
     logger.info("creating %s.", table)
     logger.debug("%s:%s", "force_recreate", force_recreate)
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     db.create_table(
         schema="public",
@@ -186,9 +184,10 @@ def create_land_structure_table(db_url: str, table: str, force_recreate: bool):
 
 
 def reset_land_use_tables(
-    db_url: str, is_temp: bool, force_recreate: bool, land_use_type: str
+    db: DatabaseFacade, is_temp: bool, force_recreate: bool, land_use_type: str
 ):
-    db = DatabaseFacade.from_url(db_url=db_url)
+    assert is_temp
+
     for spatial_unit in read_spatial_units(db=db):
         recreate_spatial_table(
             db=db,
@@ -197,6 +196,31 @@ def reset_land_use_tables(
             force_recreate=force_recreate,
             land_use_type=land_use_type,
         )
+
+
+def delete_land_use_tables(
+    db: DatabaseFacade, land_use_type: str, is_temp: bool, indicator: str
+):
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    classnames = ",".join(get_classnames_from_indicator(db=db, indicator=indicator))
+
+    for spatial_unit in read_spatial_units(db=db):
+        table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use{land_use_type_suffix}"
+        sql = f"DELETE FROM public.{table} WHERE classname IN ('{classnames}');"
+        db.execute(sql=sql, log=True)
+
+
+def get_classnames_from_indicator(db: DatabaseFacade, indicator: str):
+    sql = f"""
+        SELECT name FROM public.class_group
+	    WHERE LOWER(title) like '{indicator}%';
+    """
+    classnames = db.fetchall(sql)
+
+    logger.debug(classnames)
+
+    return [_[0] for _ in classnames]
 
 
 def parse_url(url):
