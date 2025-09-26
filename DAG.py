@@ -1,6 +1,5 @@
 """A DAG to create the AMS database."""
 
-import os
 import pathlib
 import sys
 
@@ -491,10 +490,58 @@ def _check_recreate_db():
     return "skip-create-db"
 
 
+def _need_update_indicator(indicator: str):
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-need-update-indicator --indicator={indicator}"
+
+    return BashOperator(
+        task_id=f"ams-need-update-{indicator}",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+    ).execute({})
+
+
+def decide_update_indicator(**context):
+    indicator = context["indicator"]
+
+    bash_result = context["ti"].xcom_pull(task_ids=f"need-update-{indicator}")
+
+    bash_result = bash_result.strip().lower()
+
+    if bash_result == "true":
+        if indicator == "deter":
+            return "update-amz-deter"
+        elif indicator == "fires":
+            return "update-active-fires"
+        elif indicator == "risk":
+            return "download-inpe-risk-file"
+        assert False
+
+    return f"skip-update-{indicator}"
+
+
+@task(task_id="need-update-deter")
+def need_update_deter():
+    return _need_update_indicator(indicator="deter")
+
+
+@task(task_id="need-update-fires")
+def need_update_fires():
+    return _need_update_indicator(indicator="fires")
+
+
+@task(task_id="need-update-risk")
+def need_update_risk():
+    return _need_update_indicator(indicator="risk")
+
+
 with DAG(
     "ams-create-db",
     default_args=default_args,
-    schedule_interval=None,  # "0 2 * * *",
+    schedule_interval=None,  # "0 4 * * *",
     catchup=False,
     concurrency=1,
     max_active_runs=1,
@@ -578,8 +625,65 @@ with DAG(
         >> run_join2
     )
 
-    run_join2 >> [run_download_risk_file, run_update_active_fires, run_update_amz_deter]
-    # run_join2 >> [run_update_amz_deter]
+    run_check_update_deter = need_update_deter()
+    run_check_update_fires = need_update_fires()
+    run_check_update_risk = need_update_risk()
+
+    run_join2 >> [run_check_update_risk, run_check_update_deter, run_check_update_fires]
+
+    decide_deter = BranchPythonOperator(
+        task_id="decide-update-deter",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "deter",
+        },
+    )
+
+    (
+        run_check_update_deter
+        >> decide_deter
+        >> [
+            run_update_amz_deter,
+            EmptyOperator(task_id="skip-update-deter"),
+        ]
+    )
+
+    decide_fires = BranchPythonOperator(
+        task_id="decide-update-fires",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "fires",
+        },
+    )
+
+    (
+        run_check_update_fires
+        >> decide_fires
+        >> [
+            run_update_active_fires,
+            EmptyOperator(task_id="skip-update-fires"),
+        ]
+    )
+
+    decide_risk = BranchPythonOperator(
+        task_id="decide-update-risk",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "risk",
+        },
+    )
+
+    (
+        run_check_update_risk
+        >> decide_risk
+        >> [
+            run_download_risk_file,
+            EmptyOperator(task_id="skip-update-risk"),
+        ]
+    )
 
     (
         run_download_risk_file

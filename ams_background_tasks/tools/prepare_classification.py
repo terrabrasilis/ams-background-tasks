@@ -86,4 +86,8 @@ def main(
         force_recreate=False,
     )
 
+    reset_land_use_tables(
+        db=db, is_temp=False, force_recreate=False, land_use_type=land_use_type
+    )
+
     db.commit()

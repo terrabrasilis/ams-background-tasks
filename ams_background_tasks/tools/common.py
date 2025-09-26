@@ -186,8 +186,6 @@ def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: 
 def reset_land_use_tables(
     db: DatabaseFacade, is_temp: bool, force_recreate: bool, land_use_type: str
 ):
-    assert is_temp
-
     for spatial_unit in read_spatial_units(db=db):
         recreate_spatial_table(
             db=db,
