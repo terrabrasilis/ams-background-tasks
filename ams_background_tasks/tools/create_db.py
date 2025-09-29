@@ -39,7 +39,7 @@ logger = get_logger(__name__, sys.stdout)
 )
 def main(db_url: str, force_recreate: bool):
     """Create the AMS database."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
@@ -90,6 +90,9 @@ def main(db_url: str, force_recreate: bool):
 
     # risk
     create_risk_tables(db=db, force_recreate=force_recreate)
+
+    # processing
+    create_processing_table(db=db, force_recreate=force_recreate)
 
     db.commit()
 
@@ -916,7 +919,7 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
 
 
 def create_land_use_table(
-    db: DatabaseFacade, land_use_type=str, force_recreate: bool = False
+    db: DatabaseFacade, land_use_type: str, force_recreate: bool = False
 ):
     """Create the public.land_use_ams table."""
     assert is_valid_land_use_type(land_use_type=land_use_type)
@@ -1209,6 +1212,42 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "date_id:btree",
             "biome:btree",
             "geocode:btree",
+        ],
+        force_recreate=force_recreate,
+    )
+
+
+def create_processing_table(db: DatabaseFacade, force_recreate: bool):
+    schema = "public"
+    name = "processing"
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id SERIAL NOT NULL PRIMARY KEY",
+            "date DATE NOT NULL",
+            "indicator VARCHAR(40) NOT NULL",
+            "process VARCHAR(100) NOT NULL",
+            "start TIMESTAMP NOT NULL",
+            "end TIMESTAMP",
+            "status VARCHAR(20) DEFAULT 'pending'",
+            "CONSTRAINT valid_dates CHECK (end IS NULL OR end > start)",
+            "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam'))",
+            "CONSTRAINT valid_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))",
+        ],
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=[
+            "indicator:btree",
+            "date:btree",
+            "process:btree",
+            "start:btree",
+            "end:btree",
+            "status:btree",
         ],
         force_recreate=force_recreate,
     )

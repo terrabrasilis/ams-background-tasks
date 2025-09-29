@@ -23,6 +23,7 @@ from ams_background_tasks.tools.common import (
     RISK_SCALE_FACTOR,
     create_land_structure_table,
     delete_land_use_tables,
+    finalize_processing,
     get_prefix,
     read_spatial_units,
 )
@@ -94,6 +95,13 @@ def main(
 
     if drop_tmp:
         drop_tmp_tables(db=db, indicator=indicator, land_use_type=land_use_type)
+
+    finalize_processing(
+        db=db,
+        indicator=indicator,
+        process=f"classification-{land_use_type}",
+        status="completed",
+    )
 
     db.commit()
 

@@ -8,6 +8,7 @@ import os
 import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
+from ams_background_tasks.tools.common import DETER_INDICATOR, finalize_processing
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,10 @@ def main(db_url: str, all_data: bool):
         db.copy_table(src=f"deter.{prefix}{table}", dst=f"deter.{table}")
 
     create_tmp_table(db=db, all_data=all_data, truncate=True)
+
+    finalize_processing(
+        db=db, indicator=DETER_INDICATOR, process="update", status="completed"
+    )
 
     db.commit()
 

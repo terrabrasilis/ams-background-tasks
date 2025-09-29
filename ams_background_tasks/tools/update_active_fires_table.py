@@ -11,7 +11,12 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
-from ams_background_tasks.tools.common import BIOMES
+from ams_background_tasks.tools.common import (
+    ACTIVE_FIRES_INDICATOR,
+    BIOMES,
+    create_processing,
+    finalize_processing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +55,11 @@ logger = logging.getLogger(__name__)
 )
 def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
     """Update the active fires table."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
-    af_db_url = os.getenv("AMS_AF_DB_URL") if not af_db_url else af_db_url
+    af_db_url = os.getenv("AMS_AF_DB_URL", "") if not af_db_url else af_db_url
     logger.debug(af_db_url)
     assert af_db_url
 
@@ -62,12 +67,20 @@ def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
 
     db = DatabaseFacade.create(db_url=db_url)
 
+    create_processing(
+        db=db, indicator=ACTIVE_FIRES_INDICATOR, process="update", status="processing"
+    )
+
     update_active_fires_table(
         db=db,
         af_db_url=af_db_url,
         all_data=all_data,
         biome_list=list(biome),
         limit=limit,
+    )
+
+    finalize_processing(
+        db=db, indicator=ACTIVE_FIRES_INDICATOR, process="update", status="completed"
     )
 
     db.commit()

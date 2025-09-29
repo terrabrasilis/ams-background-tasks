@@ -177,6 +177,7 @@ def update_amz_deter():
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         f" --biome='Amazônia' --truncate --limit={Variable.get('AMS_LIMIT', 0)}"
+        f" --create-processing-flag"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL"])
@@ -538,9 +539,23 @@ def need_update_risk():
     return _need_update_indicator(indicator="risk")
 
 
+def send_process_status(context):
+    dag_id = context["dag_run"].dag_id
+    execution_date = context["execution_date"]
+    exception = context.get("exception", "Unknown error")
+
+    print(dag_id, execution_date, exception)
+    return
+
+
 with DAG(
     "ams-create-db",
-    default_args=default_args,
+    default_args=default_args.copy().update(
+        {
+            "on_failure_callback": send_process_status,
+            "on_success_callback": send_process_status,
+        }
+    ),
     schedule_interval=None,  # "0 4 * * *",
     catchup=False,
     concurrency=1,

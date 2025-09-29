@@ -15,7 +15,7 @@ from ams_background_tasks.log import get_logger
 logger = get_logger(__name__, sys.stdout)
 
 
-def get_connection_components(db_url: str):
+def get_connection_components(db_url: str) -> tuple:
     parsed_url = urlparse(db_url)
 
     user = parsed_url.username
@@ -176,7 +176,7 @@ class DatabaseFacade(BaseModel):
         self,
         schema: str,
         name: str,
-        columns: tuple,
+        columns: list,
         force_recreate: bool,
         with_commit: bool = False,
     ):

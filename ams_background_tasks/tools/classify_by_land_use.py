@@ -33,6 +33,7 @@ from ams_background_tasks.tools.common import (
     RISK_INDICATORS,
     RISK_INPE_CLASSNAME,
     RISK_INPE_INDICATOR,
+    create_processing,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
@@ -92,7 +93,7 @@ def main(
     assert all_data
     assert is_valid_indicator(indicator=indicator)
 
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
@@ -172,6 +173,13 @@ def insert_data_in_land_use_tables(
         measure = "counts"
     else:
         assert False
+
+    create_processing(
+        db=db,
+        indicator=indicator,
+        process=f"classification-{land_use_type}",
+        status="processing",
+    )
 
     for spatial_unit in read_spatial_units(db=db):
         tmpspatial_unit = f"{table_prefix}{spatial_unit}"

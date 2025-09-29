@@ -38,7 +38,7 @@ def main(
     land_use_type: str,
 ):
     """Prepare the database to perform the classification."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 

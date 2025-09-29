@@ -14,7 +14,13 @@ from shapely.geometry import Point
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import AMAZONIA, is_valid_biome
+from ams_background_tasks.tools.common import (
+    AMAZONIA,
+    RISK_INPE_INDICATOR,
+    create_processing,
+    finalize_processing,
+    is_valid_biome,
+)
 from ams_background_tasks.tools.risk_utils import (
     RISK_SRC_INPE,
     get_last_risk_file_info,
@@ -43,7 +49,7 @@ logger = get_logger(__name__, sys.stdout)
 @click.option("--biome", type=str, required=True, help="Biome.")
 def main(db_url: str, risk_threshold: float, srid: str, biome: str):
     """Update the ibama risk indicator."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
@@ -52,7 +58,15 @@ def main(db_url: str, risk_threshold: float, srid: str, biome: str):
 
     db = DatabaseFacade.create(db_url=db_url)
 
+    create_processing(
+        db=db, indicator=RISK_INPE_INDICATOR, process="update", status="processing"
+    )
+
     update_risk_file(db=db, risk_threshold=risk_threshold, srid=srid, biome=biome)
+
+    finalize_processing(
+        db=db, indicator=RISK_INPE_INDICATOR, process="update", status="completed"
+    )
 
     db.commit()
 

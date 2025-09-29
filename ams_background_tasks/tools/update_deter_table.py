@@ -15,6 +15,8 @@ from ams_background_tasks.tools.common import (
     AMAZONIA,
     BIOMES,
     CERRADO,
+    DETER_INDICATOR,
+    create_processing,
     get_biome_acronym,
 )
 
@@ -63,6 +65,13 @@ logger = logging.getLogger(__name__)
     default=0,
     help="Restrict the number of rows to update (test purpose).",
 )
+@click.option(
+    "create-processing-flag",
+    required=True,
+    is_flag=True,
+    default=False,
+    help="If true, create a process in the processing table.",
+)
 def main(
     db_url: str,
     deter_b_db_url: str,
@@ -70,19 +79,25 @@ def main(
     all_data: bool,
     truncate: bool,
     limit: int,
+    create_processing_flag: bool,
 ):
     """Update the DETER tables from official databases using SQL views."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
     deter_b_db_url = (
-        os.getenv("AMS_DETER_B_DB_URL") if not deter_b_db_url else deter_b_db_url
+        os.getenv("AMS_DETER_B_DB_URL", "") if not deter_b_db_url else deter_b_db_url
     )
     logger.debug(deter_b_db_url)
     assert deter_b_db_url
 
     db = DatabaseFacade.create(db_url=db_url)
+
+    if create_processing_flag:
+        create_processing(
+            db=db, indicator=DETER_INDICATOR, process="update", status="processing"
+        )
 
     update_deter(
         db=db,

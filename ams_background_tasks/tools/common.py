@@ -234,3 +234,30 @@ def parse_url(url):
             parsed_url.fragment,
         )
     )
+
+
+def create_processing(
+    db: DatabaseFacade, indicator: str, process: str, status: str = "pending"
+):
+    schema = "public"
+    name = "processing"
+
+    sql = f"""
+        INSERT INTO {schema}.{name} (date, start, indicator, process, status)
+        VALUES (CURRENT_DATE, NOW(), {indicator}, '{process}' '{status}');
+    """
+
+    db.execute(sql=sql)
+
+
+def finalize_processing(db: DatabaseFacade, indicator: str, process: str, status: str):
+    schema = "public"
+    name = "processing"
+
+    sql = f"""
+        UPDATE {schema}.{name}
+        SET end=NOW(), status='{status}'
+        WHERE id=(SELECT MAX(id) FROM {schema}.{name} WHERE indicator='{indicator}' AND process='{process}');
+    """
+
+    db.execute(sql=sql)
