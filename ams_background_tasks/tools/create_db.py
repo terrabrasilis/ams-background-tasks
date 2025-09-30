@@ -1229,13 +1229,14 @@ def create_processing_table(db: DatabaseFacade, force_recreate: bool):
             "date DATE NOT NULL",
             "indicator VARCHAR(40) NOT NULL",
             "process VARCHAR(100) NOT NULL",
-            "start TIMESTAMP NOT NULL",
-            "end TIMESTAMP",
+            "start_process TIMESTAMP NOT NULL",
+            "end_process TIMESTAMP",
             "status VARCHAR(20) DEFAULT 'pending'",
-            "CONSTRAINT valid_dates CHECK (end IS NULL OR end > start)",
+            "CONSTRAINT valid_dates CHECK (end_process IS NULL OR end_process > start_process)",
             "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam'))",
             "CONSTRAINT valid_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))",
         ],
+        force_recreate=force_recreate,
     )
 
     db.create_indexes(
@@ -1245,8 +1246,8 @@ def create_processing_table(db: DatabaseFacade, force_recreate: bool):
             "indicator:btree",
             "date:btree",
             "process:btree",
-            "start:btree",
-            "end:btree",
+            "start_process:btree",
+            "end_process:btree",
             "status:btree",
         ],
         force_recreate=force_recreate,

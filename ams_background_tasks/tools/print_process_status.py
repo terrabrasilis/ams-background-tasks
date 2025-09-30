@@ -29,16 +29,9 @@ logger = get_logger(__name__, sys.stdout)
     type=click.DateTime(formats=["%Y-%m-%d %H:%M:%S"]),
     help="Datetime of processing start.",
 )
-@click.option(
-    "--end",
-    required=True,
-    type=click.DateTime(formats=["%Y-%m-%d %H:%M:%S"]),
-    help="Datetime of processing end.",
-)
 def main(
     db_url: str,
     start: datetime,
-    end: datetime,
 ):
     """Print the last database update status."""
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
@@ -56,21 +49,20 @@ def main(
         if "ibama" in indicator:
             continue
 
-        res["indicator"] = {}
+        res[indicator] = {}
         for process in ["update", "classification-ams", "classification-ppcdam"]:
             sql = f"""
-                SELECT id from {schema}.{name}
+                SELECT status from {schema}.{name}
                 WHERE
                     indicator='{indicator}'
                     AND process='{process}'
-                    AND status='completed'
-                    AND start>='{start.strftime("%Y-%m-%d %H:%M:%S")}'
-                    AND end<='{end.strftime("%Y-%m-%d %H:%M:%S")}'
-                    LIMIT 1;
+                    AND start_process>='{start.strftime("%Y-%m-%d %H:%M:%S")}'
+                ORDER BY start_process DESC
+                LIMIT 1;
             """
 
             _res = db.fetchone(query=sql)
 
-            res["indicator"][process] = _res is not None
+            res[indicator][process] = _res is not None and _res == "completed"
 
     print(json.dumps(res))

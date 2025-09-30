@@ -243,8 +243,8 @@ def create_processing(
     name = "processing"
 
     sql = f"""
-        INSERT INTO {schema}.{name} (date, start, indicator, process, status)
-        VALUES (CURRENT_DATE, NOW(), {indicator}, '{process}' '{status}');
+        INSERT INTO {schema}.{name} (date, start_process, indicator, process, status)
+        VALUES (CURRENT_DATE, STATEMENT_TIMESTAMP(), '{indicator}', '{process}', '{status}');
     """
 
     db.execute(sql=sql)
@@ -256,7 +256,7 @@ def finalize_processing(db: DatabaseFacade, indicator: str, process: str, status
 
     sql = f"""
         UPDATE {schema}.{name}
-        SET end=NOW(), status='{status}'
+        SET end_process=STATEMENT_TIMESTAMP(), status='{status}'
         WHERE id=(SELECT MAX(id) FROM {schema}.{name} WHERE indicator='{indicator}' AND process='{process}');
     """
 

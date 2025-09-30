@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
     help="Restrict the number of rows to update (test purpose).",
 )
 @click.option(
-    "create-processing-flag",
+    "--create-processing-flag",
     required=True,
     is_flag=True,
     default=False,
