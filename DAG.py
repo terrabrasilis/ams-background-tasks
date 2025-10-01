@@ -24,6 +24,7 @@ from airflow.hooks.base import BaseHook
 from airflow.models import Variable
 from airflow.models.connection import Connection
 from airflow.operators.bash import BashOperator
+from airflow.operators.email import EmailOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import (
     BranchPythonOperator,
@@ -75,6 +76,7 @@ def check_variables(**context):
     AMS_BIOMES = Variable.get("AMS_BIOMES")
     AMS_STAC_API_URL = Variable.get("AMS_STAC_API_URL")
     AMS_STAC_COLLECTION = Variable.get("AMS_STAC_COLLECTION")
+    AMS_EMAIL_TO = Variable.get("AMS_EMAIL_TO")
 
     ams_db_url = BaseHook.get_connection("AMS_DB_URL")
     ams_aux_db_url = BaseHook.get_connection("AMS_AUX_DB_URL")
@@ -119,6 +121,9 @@ def check_variables(**context):
 
     if not AMS_STAC_COLLECTION:
         raise Exception("Missing AMS_STAC_COLLECTION airflow variable.")
+
+    if not AMS_EMAIL_TO:
+        raise Exception("Missing AMS_EMAIL_TO airflow variable.")
 
     return True
 
@@ -537,18 +542,25 @@ def need_update_risk(dag):
     return _need_update_indicator(dag=dag, indicator="risk")
 
 
-def send_process_status(**context):
+def prepare_status_email(**context):
     bash_result = context["ti"].xcom_pull(task_ids=f"retrieve-process-status")
-    print(json.loads(bash_result))
 
-    # try:
-    #
-    #    dag = context["dag"]
-    #    process_status_task = dag.get_task("retrieve-process-status")
-    #    ti = context["task_instance"]
-    #    ti.xcom_push(key="retrieve-process-status", value=True)
-    # except Exception as e:
-    #    logging.error(f"Erro no callback: {e}")
+    res = json.loads(bash_result)
+
+    context["ti"].xcom_push(key="email_subject", value=res["subject"])
+    context["ti"].xcom_push(key="email_html_content", value=res["html_content"])
+
+    print(context)
+
+
+def send_status_email():
+    return EmailOperator(
+        task_id="send-status-email",
+        mime_charset="utf-8",
+        to=Variable.get("AMS_EMAIL_TO"),
+        subject="{{ ti.xcom_pull(task_ids='prepare-status-email', key='email_subject') }}",
+        html_content="{{ ti.xcom_pull(task_ids='prepare-status-email', key='email_html_content') }}",
+    )
 
 
 def retrieve_process_status(dag: DAG):
@@ -569,14 +581,9 @@ def retrieve_process_status(dag: DAG):
 
 with DAG(
     "ams-create-db",
-    default_args=default_args.copy().update(
-        {
-            "on_failure_callback": send_process_status,
-        }
-    ),
-    schedule_interval=None,  # "0 4 * * *",
+    schedule_interval="0 4 * * *",
     catchup=False,
-    concurrency=1,
+    concurrency=3,
     max_active_runs=1,
 ) as dag:
     run_check_variables = ShortCircuitOperator(
@@ -766,14 +773,16 @@ with DAG(
         run_skip_update_risk,
     ) >> run_retrieve_process_status
 
-    run_send_process_status = PythonOperator(
-        task_id="send-process-status",
-        python_callable=send_process_status,
+    run_prepare_status_email = PythonOperator(
+        task_id="prepare-status-email",
+        python_callable=prepare_status_email,
         provide_context=True,
         dag=dag,
     )
 
-    run_retrieve_process_status >> run_send_process_status
+    run_send_status_email = send_status_email()
+
+    run_retrieve_process_status >> run_prepare_status_email >> run_send_status_email
 
 # DAG: ams-calculate-land-use-area
 

@@ -65,4 +65,23 @@ def main(
 
             res[indicator][process] = _res is not None and _res == "completed"
 
-    print(json.dumps(res))
+    print(json.dumps(generate_process_status_message(process_data=res)))
+
+
+def generate_process_status_message(process_data):
+    all_success = all(all(processes.values()) for processes in process_data.values())
+
+    subject = "✅ SUCESSO" if all_success else "❌ FALHA"
+    subject += " - Processamento AMS"
+
+    html_message = f"<h2>{subject}</h2>"
+    html_message += "<h3>Status dos Processamentos:</h3>"
+
+    for indicator, processes in process_data.items():
+        html_message += f"<h4>{indicator.upper()}:</h4><ul>"
+        for process_name, status in processes.items():
+            icon = "✅" if status else "❌"
+            html_message += f"<li>{icon} {process_name}</li>"
+        html_message += "</ul>"
+
+    return {"subject": subject, "html_content": html_message}
