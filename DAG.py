@@ -1,5 +1,6 @@
 """A DAG to create the AMS database."""
 
+import json
 import pathlib
 import sys
 
@@ -24,7 +25,11 @@ from airflow.models import Variable
 from airflow.models.connection import Connection
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import BranchPythonOperator, ShortCircuitOperator
+from airflow.operators.python import (
+    BranchPythonOperator,
+    PythonOperator,
+    ShortCircuitOperator,
+)
 from dateutil.relativedelta import relativedelta
 
 from ams_background_tasks.tools.common import BIOMES
@@ -60,7 +65,11 @@ def update_environment(dag):
     )
 
 
-def check_variables():
+def check_variables(**context):
+    context["ti"].xcom_push(
+        key="start_process", value=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
     AMS_ALL_DATA_DB = Variable.get("AMS_ALL_DATA_DB")
     AMS_FORCE_RECREATE_DB = Variable.get("AMS_FORCE_RECREATE_DB")
     AMS_BIOMES = Variable.get("AMS_BIOMES")
@@ -528,21 +537,25 @@ def need_update_risk(dag):
     return _need_update_indicator(dag=dag, indicator="risk")
 
 
-def send_process_status(context):
-    try:
-        dag = context["dag"]
-        process_status_task = dag.get_task("retrieve-process-status")
-        ti = context["task_instance"]
-        ti.xcom_push(key="retrieve-process-status", value=True)
-    except Exception as e:
-        logging.error(f"Erro no callback: {e}")
+def send_process_status(**context):
+    bash_result = context["ti"].xcom_pull(task_ids=f"retrieve-process-status")
+    print(json.loads(bash_result))
+
+    # try:
+    #
+    #    dag = context["dag"]
+    #    process_status_task = dag.get_task("retrieve-process-status")
+    #    ti = context["task_instance"]
+    #    ti.xcom_push(key="retrieve-process-status", value=True)
+    # except Exception as e:
+    #    logging.error(f"Erro no callback: {e}")
 
 
-def retrieve_process_status(dag, start_process: datetime):
+def retrieve_process_status(dag: DAG):
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     bash_command = f"source {venv_path}/bin/activate && "
-    bash_command += f"ams-print-process-status --start=\"{start_process.strftime('%Y-%m-%d %H:%M:%S')}\""
+    bash_command += f"ams-print-process-status --start=\"{{{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}}}\""
 
     return BashOperator(
         task_id=f"retrieve-process-status",
@@ -550,6 +563,7 @@ def retrieve_process_status(dag, start_process: datetime):
         env=env,
         append_env=True,
         dag=dag,
+        trigger_rule="all_done",
     )
 
 
@@ -565,8 +579,6 @@ with DAG(
     concurrency=1,
     max_active_runs=1,
 ) as dag:
-    start_process = datetime.now()
-
     run_check_variables = ShortCircuitOperator(
         task_id="check-variables",
         provide_context=True,
@@ -634,7 +646,7 @@ with DAG(
         dag=dag
     )
 
-    run_retrieve_process_status = retrieve_process_status(dag=dag, start_process=start_process)
+    run_retrieve_process_status = retrieve_process_status(dag=dag)
 
     # running
 
@@ -670,12 +682,14 @@ with DAG(
         },
     )
 
+    run_skip_update_deter = EmptyOperator(task_id="skip-update-deter")
+
     (
         run_check_update_deter
         >> decide_deter
         >> [
             run_update_amz_deter,
-            EmptyOperator(task_id="skip-update-deter"),
+            run_skip_update_deter,
         ]
     )
 
@@ -688,12 +702,14 @@ with DAG(
         },
     )
 
+    run_skip_update_active_fires = EmptyOperator(task_id="skip-update-fires")
+
     (
         run_check_update_fires
         >> decide_fires
         >> [
             run_update_active_fires,
-            EmptyOperator(task_id="skip-update-fires"),
+            run_skip_update_active_fires,
         ]
     )
 
@@ -706,12 +722,14 @@ with DAG(
         },
     )
 
+    run_skip_update_risk = EmptyOperator(task_id="skip-update-risk")
+
     (
         run_check_update_risk
         >> decide_risk
         >> [
             run_download_risk_file,
-            EmptyOperator(task_id="skip-update-risk"),
+            run_skip_update_risk,
         ]
     )
 
@@ -743,7 +761,19 @@ with DAG(
         run_finalize_classification_fires_ppcdam,
         run_finalize_classification_risk_ams,
         run_finalize_classification_risk_ppcdam,
+        run_skip_update_deter,
+        run_skip_update_active_fires,
+        run_skip_update_risk,
     ) >> run_retrieve_process_status
+
+    run_send_process_status = PythonOperator(
+        task_id="send-process-status",
+        python_callable=send_process_status,
+        provide_context=True,
+        dag=dag,
+    )
+
+    run_retrieve_process_status >> run_send_process_status
 
 # DAG: ams-calculate-land-use-area
 
