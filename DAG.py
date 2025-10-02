@@ -77,6 +77,9 @@ def check_variables(**context):
     AMS_STAC_API_URL = Variable.get("AMS_STAC_API_URL")
     AMS_STAC_COLLECTION = Variable.get("AMS_STAC_COLLECTION")
     AMS_EMAIL_TO = Variable.get("AMS_EMAIL_TO")
+    AMS_FREQUENCY_TO_UPDATE_DETER = Variable.get("AMS_FREQUENCY_TO_UPDATE_DETER")
+    AMS_FREQUENCY_TO_UPDATE_FOCOS = Variable.get("AMS_FREQUENCY_TO_UPDATE_FOCOS")
+    AMS_FREQUENCY_TO_UPDATE_RISCO = Variable.get("AMS_FREQUENCY_TO_UPDATE_RISCO")
 
     ams_db_url = BaseHook.get_connection("AMS_DB_URL")
     ams_aux_db_url = BaseHook.get_connection("AMS_AUX_DB_URL")
@@ -124,6 +127,15 @@ def check_variables(**context):
 
     if not AMS_EMAIL_TO:
         raise Exception("Missing AMS_EMAIL_TO airflow variable.")
+
+    if not AMS_FREQUENCY_TO_UPDATE_DETER:
+        raise Exception("Missing AMS_FREQUENCY_TO_UPDATE_DETER airflow variable.")
+
+    if not AMS_FREQUENCY_TO_UPDATE_FOCOS:
+        raise Exception("Missing AMS_FREQUENCY_TO_UPDATE_FOCOS airflow variable.")
+
+    if not AMS_FREQUENCY_TO_UPDATE_RISCO:
+        raise Exception("Missing AMS_FREQUENCY_TO_UPDATE_RISCO airflow variable.")
 
     return True
 
@@ -500,7 +512,10 @@ def _need_update_indicator(dag, indicator: str):
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     bash_command = f"source {venv_path}/bin/activate && "
-    bash_command += f"ams-need-update-indicator --indicator={indicator}"
+    bash_command += f"ams-need-update-indicator --indicator={indicator} "
+    bash_command += (
+        f"--frequency={Variable.get(f'AMS_FREQUENCY_TO_UPDATE_{indicator.upper()}')}"
+    )
 
     return BashOperator(
         task_id=f"need-update-{indicator}",
@@ -521,9 +536,9 @@ def decide_update_indicator(**context):
     if bash_result == "true":
         if indicator == "deter":
             return "update-amz-deter"
-        elif indicator == "fires":
+        elif indicator == "focos":
             return "update-active-fires"
-        elif indicator == "risk":
+        elif indicator == "risco":
             return "download-inpe-risk-file"
         assert False
 
@@ -535,11 +550,11 @@ def need_update_deter(dag):
 
 
 def need_update_fires(dag):
-    return _need_update_indicator(dag=dag, indicator="fires")
+    return _need_update_indicator(dag=dag, indicator="focos")
 
 
 def need_update_risk(dag):
-    return _need_update_indicator(dag=dag, indicator="risk")
+    return _need_update_indicator(dag=dag, indicator="risco")
 
 
 def prepare_status_email(**context):
@@ -581,6 +596,7 @@ def retrieve_process_status(dag: DAG):
 
 with DAG(
     "ams-create-db",
+    default_args=default_args,
     schedule_interval="0 4 * * *",
     catchup=False,
     concurrency=3,
@@ -705,11 +721,11 @@ with DAG(
         python_callable=decide_update_indicator,
         provide_context=True,
         op_kwargs={
-            "indicator": "fires",
+            "indicator": "focos",
         },
     )
 
-    run_skip_update_active_fires = EmptyOperator(task_id="skip-update-fires")
+    run_skip_update_active_fires = EmptyOperator(task_id="skip-update-focos")
 
     (
         run_check_update_fires
@@ -725,11 +741,11 @@ with DAG(
         python_callable=decide_update_indicator,
         provide_context=True,
         op_kwargs={
-            "indicator": "risk",
+            "indicator": "risco",
         },
     )
 
-    run_skip_update_risk = EmptyOperator(task_id="skip-update-risk")
+    run_skip_update_risk = EmptyOperator(task_id="skip-update-risco")
 
     (
         run_check_update_risk

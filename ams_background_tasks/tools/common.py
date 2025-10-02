@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from urllib.parse import urlparse, urlunparse
+
+import pytz
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
@@ -242,9 +245,13 @@ def create_processing(
     schema = "public"
     name = "processing"
 
+    utc_now = datetime.now(pytz.UTC)
+    now = utc_now.replace(tzinfo=None) - utc_now.utcoffset()
+    now = now.isoformat(sep=" ")
+
     sql = f"""
         INSERT INTO {schema}.{name} (date, start_process, indicator, process, status)
-        VALUES (CURRENT_DATE, STATEMENT_TIMESTAMP(), '{indicator}', '{process}', '{status}');
+        VALUES (CURRENT_DATE, '{now}', '{indicator}', '{process}', '{status}');
     """
 
     db.execute(sql=sql)
@@ -254,9 +261,13 @@ def finalize_processing(db: DatabaseFacade, indicator: str, process: str, status
     schema = "public"
     name = "processing"
 
+    utc_now = datetime.now(pytz.UTC)
+    now = utc_now.replace(tzinfo=None) - utc_now.utcoffset()
+    now = now.isoformat(sep=" ")
+
     sql = f"""
         UPDATE {schema}.{name}
-        SET end_process=STATEMENT_TIMESTAMP(), status='{status}'
+        SET end_process='{now}', status='{status}'
         WHERE id=(SELECT MAX(id) FROM {schema}.{name} WHERE indicator='{indicator}' AND process='{process}');
     """
 
