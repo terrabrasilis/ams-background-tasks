@@ -288,7 +288,7 @@ def process_active_fires_land_structure(
     is_temp: bool,
     land_use_image: Path,
     land_use_type: str,
-    db: str,
+    db: DatabaseFacade,
     biome: str,
 ):
     def _insert_into_active_fires_land_structure(

@@ -366,6 +366,8 @@ def finalize_classification(dag, land_use_type: str, indicator: str):
         env=env,
         append_env=True,
         dag=dag,
+        pool="finalize_classification_pool",
+        pool_slots=1,
     )
 
 

@@ -77,7 +77,10 @@ def main(
 
     db = DatabaseFacade.create(db_url=db_url)
 
-    percentage_calculation_for_areas(db=db, is_temp=True, land_use_type=land_use_type)
+    if indicator == DETER_INDICATOR:
+        percentage_calculation_for_areas(
+            db=db, is_temp=True, land_use_type=land_use_type
+        )
 
     if indicator == RISK_INPE_INDICATOR:
         normalize_inpe_risk(db=db, is_temp=True, land_use_type=land_use_type)
