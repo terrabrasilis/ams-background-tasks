@@ -104,6 +104,13 @@ def main(
 
     db = DatabaseFacade.create(db_url=db_url)
 
+    create_processing(
+        db=db,
+        indicator=indicator,
+        process=f"classification-{land_use_type}",
+        status="processing",
+    )
+
     if indicator == DETER_INDICATOR:
         logger.info("processing deter")
         process_deter(
@@ -173,13 +180,6 @@ def insert_data_in_land_use_tables(
         measure = "counts"
     else:
         assert False
-
-    create_processing(
-        db=db,
-        indicator=indicator,
-        process=f"classification-{land_use_type}",
-        status="processing",
-    )
 
     for spatial_unit in read_spatial_units(db=db):
         tmpspatial_unit = f"{table_prefix}{spatial_unit}"

@@ -204,11 +204,13 @@ def delete_land_use_tables(
 ):
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
-    classnames = ",".join(get_classnames_from_indicator(db=db, indicator=indicator))
+    classnames = ",".join(
+        [f"'{_}'" for _ in get_classnames_from_indicator(db=db, indicator=indicator)]
+    )
 
     for spatial_unit in read_spatial_units(db=db):
         table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use{land_use_type_suffix}"
-        sql = f"DELETE FROM public.{table} WHERE classname IN ('{classnames}');"
+        sql = f"DELETE FROM public.{table} WHERE classname IN ({classnames});"
         db.execute(sql=sql, log=True)
 
 

@@ -19,7 +19,7 @@ The **DAG `ams-create-db`** is responsible for creating and updating the AMS dat
 - `finalize-deter-update`
 - `update-active-fires`
 - `download-inpe-risk-file`
-- `update-inpe-risk`- 
+- `update-inpe-risk`
 - `classify-{deter|focos|risco}-by-land-use-{ams|ppcdam}`
 - `finalize-classification-{deter|focos|risco}-{ams|ppcdam}`
 - `retrieve-process-status`
