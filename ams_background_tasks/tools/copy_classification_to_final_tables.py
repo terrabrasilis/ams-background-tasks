@@ -17,13 +17,13 @@ from ams_background_tasks.tools.common import (
     INDICATORS,
     LAND_USE_TYPES,
     RISK_IBAMA_CLASSNAME,
-    RISK_IBAMA_INDICATOR,
     RISK_INPE_CLASSNAME,
     RISK_INPE_INDICATOR,
     RISK_SCALE_FACTOR,
     create_land_structure_table,
-    delete_land_use_tables,
+    delete_land_use_tables_from_tmp,
     finalize_processing,
+    get_indicators_from_tmp,
     get_prefix,
     read_spatial_units,
 )
@@ -47,15 +47,6 @@ logger = get_logger(__name__, sys.stdout)
     help="if True, all data of external database will be processed.",
 )
 @click.option(
-    "--indicator",
-    type=str,
-    required=True,
-    help=f"Indicator ({', '.join(INDICATORS)})",
-)
-@click.option(
-    "--drop-tmp", is_flag=True, default=False, help="Drop the temporary tables."
-)
-@click.option(
     "--land-use-type",
     required=True,
     type=click.Choice(LAND_USE_TYPES),
@@ -64,8 +55,6 @@ logger = get_logger(__name__, sys.stdout)
 def main(
     db_url: str,
     all_data: bool,
-    drop_tmp: bool,
-    indicator: str,
     land_use_type: str,
 ):
     """Copy the classification to final tables."""
@@ -73,38 +62,38 @@ def main(
     logger.debug(db_url)
     assert db_url
 
-    logger.debug(indicator)
-
     db = DatabaseFacade.create(db_url=db_url)
 
-    if indicator == DETER_INDICATOR:
+    indicators = get_indicators_from_tmp(db=db, land_use_type=land_use_type)
+    logger.debug(indicators)
+
+    if not len(indicators):
+        return
+
+    delete_land_use_tables_from_tmp(db=db, land_use_type=land_use_type)
+
+    if DETER_INDICATOR in indicators:
         percentage_calculation_for_areas(
             db=db, is_temp=True, land_use_type=land_use_type
         )
 
-    if indicator == RISK_INPE_INDICATOR:
+    if RISK_INPE_INDICATOR in indicators:
         normalize_inpe_risk(db=db, is_temp=True, land_use_type=land_use_type)
-
-    delete_land_use_tables(
-        db=db, land_use_type=land_use_type, is_temp=False, indicator=indicator
-    )
 
     copy_data_to_final_tables(
         db=db,
         all_data=all_data,
-        indicator=indicator,
+        indicators=indicators,
         land_use_type=land_use_type,
     )
 
-    if drop_tmp:
-        drop_tmp_tables(db=db, indicator=indicator, land_use_type=land_use_type)
-
-    finalize_processing(
-        db=db,
-        indicator=indicator,
-        process=f"classification-{land_use_type}",
-        status="completed",
-    )
+    for indicator in indicators:
+        finalize_processing(
+            db=db,
+            indicator=indicator,
+            process=f"classification-{land_use_type}",
+            status="completed",
+        )
 
     db.commit()
 
@@ -177,17 +166,17 @@ def normalize_inpe_risk(db: DatabaseFacade, is_temp: bool, land_use_type: str):
 
 
 def copy_data_to_final_tables(
-    db: DatabaseFacade, all_data: bool, indicator: str, land_use_type: str
+    db: DatabaseFacade, all_data: bool, indicators: list, land_use_type: str
 ):
     logger.info("copying the new processed data to the final tables")
 
-    if indicator == DETER_INDICATOR:
+    if DETER_INDICATOR in indicators:
         copy_deter_land_structure(db=db, all_data=all_data, land_use_type=land_use_type)
 
-    if indicator == ACTIVE_FIRES_INDICATOR:
+    if ACTIVE_FIRES_INDICATOR in indicators:
         copy_fires_land_structure(db=db, all_data=all_data, land_use_type=land_use_type)
 
-    if indicator in (RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR):
+    if RISK_INPE_INDICATOR in indicators:
         copy_risk_land_structure(db=db, land_use_type=land_use_type)
 
     for spatial_unit in read_spatial_units(db=db):
@@ -195,9 +184,11 @@ def copy_data_to_final_tables(
         land_use_table = f"{spatial_unit}_land_use{land_use_type_suffix}"
         tmp_land_use_table = f"tmp_{land_use_table}"
 
+        logger.debug(db.count_rows(table=land_use_table))
+
         logger.info("updating sequence")
         db.execute(
-            sql=f"SELECT setval('{land_use_table}_id_seq', (SELECT MAX(id) FROM {land_use_table}) + 1);",
+            sql=f"SELECT setval('{land_use_table}_id_seq', COALESCE((SELECT MAX(id) FROM {land_use_table}), 0) + 1);",
             log=True,
         )
 
@@ -254,7 +245,7 @@ def copy_risk_land_structure(db: DatabaseFacade, land_use_type: str):
     db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)
 
 
-def drop_tmp_tables(db: DatabaseFacade, indicator: str, land_use_type: str):
+def drop_tmp_tables(db: DatabaseFacade, indicators: list, land_use_type: str):
     """Drop the temporary tables."""
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
@@ -262,8 +253,8 @@ def drop_tmp_tables(db: DatabaseFacade, indicator: str, land_use_type: str):
         land_use_table = f"tmp_{spatial_unit}_land_use{land_use_type_suffix}"
         db.drop_table(table=land_use_table)
 
-    if indicator == DETER_INDICATOR:
+    if DETER_INDICATOR in indicators:
         db.drop_table(table=f"tmp_deter_land_structure{land_use_type_suffix}")
 
-    if indicator == ACTIVE_FIRES_INDICATOR:
+    if ACTIVE_FIRES_INDICATOR in indicators:
         db.drop_table(table=f"tmp_fires_land_structure{land_use_type_suffix}")

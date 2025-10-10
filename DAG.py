@@ -349,50 +349,32 @@ def classify_fires_by_land_use_ppcdam(dag):
 # finalize classification
 
 
-def finalize_classification(dag, land_use_type: str, indicator: str):
+def finalize_classification(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-finalize-classification"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         f" --land-use-type={land_use_type}"
-        f" --indicator={indicator}"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"finalize-classification-{indicator}-{land_use_type}",
+        task_id=f"finalize-classification-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
         dag=dag,
-        pool="finalize_classification_pool",
-        pool_slots=1,
+        trigger_rule="all_done",
     )
 
 
-def finalize_classification_deter_ams(dag):
-    return finalize_classification(dag=dag, land_use_type="ams", indicator="deter")
+def finalize_classification_ams(dag):
+    return finalize_classification(dag=dag, land_use_type="ams")
 
 
-def finalize_classification_deter_ppcdam(dag):
-    return finalize_classification(dag=dag, land_use_type="ppcdam", indicator="deter")
-
-
-def finalize_classification_fires_ams(dag):
-    return finalize_classification(dag=dag, land_use_type="ams", indicator="focos")
-
-
-def finalize_classification_fires_ppcdam(dag):
-    return finalize_classification(dag=dag, land_use_type="ppcdam", indicator="focos")
-
-
-def finalize_classification_risk_ams(dag):
-    return finalize_classification(dag=dag, land_use_type="ams", indicator="risco")
-
-
-def finalize_classification_risk_ppcdam(dag):
-    return finalize_classification(dag=dag, land_use_type="ppcdam", indicator="risco")
+def finalize_classification_ppcdam(dag):
+    return finalize_classification(dag=dag, land_use_type="ppcdam")
 
 
 # risk
@@ -656,20 +638,8 @@ with DAG(
     run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam(dag=dag)
 
     # finalize classification
-    run_finalize_classification_deter_ams = finalize_classification_deter_ams(dag=dag)
-    run_finalize_classification_deter_ppcdam = finalize_classification_deter_ppcdam(
-        dag=dag
-    )
-
-    run_finalize_classification_fires_ams = finalize_classification_fires_ams(dag=dag)
-    run_finalize_classification_fires_ppcdam = finalize_classification_fires_ppcdam(
-        dag=dag
-    )
-
-    run_finalize_classification_risk_ams = finalize_classification_risk_ams(dag=dag)
-    run_finalize_classification_risk_ppcdam = finalize_classification_risk_ppcdam(
-        dag=dag
-    )
+    run_finalize_classification_ams = finalize_classification_ams(dag=dag)
+    run_finalize_classification_ppcdam = finalize_classification_ppcdam(dag=dag)
 
     run_retrieve_process_status = retrieve_process_status(dag=dag)
 
@@ -763,33 +733,38 @@ with DAG(
         >> run_update_risk
         >> [run_classify_risk_ams, run_classify_risk_ppcdam]
     )
-    run_classify_risk_ams >> run_finalize_classification_risk_ams
-    run_classify_risk_ppcdam >> run_finalize_classification_risk_ppcdam
 
     run_update_active_fires >> [
         run_classify_fires_ams,
         run_classify_fires_ppcdam,
     ]
-    run_classify_fires_ams >> run_finalize_classification_fires_ams
-    run_classify_fires_ppcdam >> run_finalize_classification_fires_ppcdam
 
     run_update_amz_deter >> run_update_cer_deter >> run_finalize_deter_update
 
     run_finalize_deter_update >> [run_classify_deter_ams, run_classify_deter_ppcdam]
-    run_classify_deter_ams >> run_finalize_classification_deter_ams
-    run_classify_deter_ppcdam >> run_finalize_classification_deter_ppcdam
 
     (
-        run_finalize_classification_deter_ams,
-        run_finalize_classification_deter_ppcdam,
-        run_finalize_classification_fires_ams,
-        run_finalize_classification_fires_ppcdam,
-        run_finalize_classification_risk_ams,
-        run_finalize_classification_risk_ppcdam,
+        run_classify_deter_ams,
+        run_classify_fires_ams,
+        run_classify_risk_ams,
         run_skip_update_deter,
         run_skip_update_active_fires,
         run_skip_update_risk,
-    ) >> run_retrieve_process_status
+    ) >> run_finalize_classification_ams
+
+    [
+        run_classify_deter_ppcdam,
+        run_classify_fires_ppcdam,
+        run_classify_risk_ppcdam,
+        run_skip_update_deter,
+        run_skip_update_active_fires,
+        run_skip_update_risk,
+    ] >> run_finalize_classification_ppcdam
+
+    [
+        run_finalize_classification_ams,
+        run_finalize_classification_ppcdam,
+    ] >> run_retrieve_process_status
 
     run_prepare_status_email = PythonOperator(
         task_id="prepare-status-email",

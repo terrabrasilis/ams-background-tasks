@@ -199,6 +199,67 @@ def reset_land_use_tables(
         )
 
 
+def delete_land_use_tables_from_tmp(db: DatabaseFacade, land_use_type: str):
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    for spatial_unit in read_spatial_units(db=db):
+        table = (
+            f"{get_prefix(is_temp=False)}{spatial_unit}_land_use{land_use_type_suffix}"
+        )
+        tmp_table = (
+            f"{get_prefix(is_temp=True)}{spatial_unit}_land_use{land_use_type_suffix}"
+        )
+
+        classnames = ",".join(
+            [
+                f"'{_}'"
+                for _ in get_classnames_from_land_use_table(db=db, table=tmp_table)
+            ]
+        )
+
+        if not len(classnames):
+            continue
+
+        sql = f"DELETE FROM public.{table} WHERE classname IN ({classnames});"
+        db.execute(sql=sql, log=True)
+
+
+def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    classnames_list = []
+    for spatial_unit in read_spatial_units(db=db):
+        tmp_table = (
+            f"{get_prefix(is_temp=True)}{spatial_unit}_land_use{land_use_type_suffix}"
+        )
+
+        classnames_list += [
+            f"'{_}'" for _ in get_classnames_from_land_use_table(db=db, table=tmp_table)
+        ]
+
+    classnames = ",".join(list(set(classnames_list)))
+
+    titles = [
+        _[0]
+        for _ in db.fetchall(
+            query=f"SELECT DISTINCT title FROM public.class_group WHERE name in ({classnames});"
+        )
+    ]
+
+    indicators = []
+    for title in titles:
+        if "deter" in title.lower():
+            indicators.append(DETER_INDICATOR)
+
+        if "focos" in title.lower():
+            indicators.append(ACTIVE_FIRES_INDICATOR)
+
+        if "risco" in title.lower():
+            indicators.append(RISK_INPE_INDICATOR)
+
+    return list(set(indicators))
+
+
 def delete_land_use_tables(
     db: DatabaseFacade, land_use_type: str, is_temp: bool, indicator: str
 ):
@@ -212,6 +273,15 @@ def delete_land_use_tables(
         table = f"{get_prefix(is_temp=is_temp)}{spatial_unit}_land_use{land_use_type_suffix}"
         sql = f"DELETE FROM public.{table} WHERE classname IN ({classnames});"
         db.execute(sql=sql, log=True)
+
+
+def get_classnames_from_land_use_table(db: DatabaseFacade, table: str):
+    sql = f"SELECT DISTINCT classname FROM public.{table};"
+    classnames = db.fetchall(sql)
+
+    logger.debug(classnames)
+
+    return [_[0] for _ in classnames]
 
 
 def get_classnames_from_indicator(db: DatabaseFacade, indicator: str):
