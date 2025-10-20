@@ -1,9 +1,15 @@
 """Municipalities groups."""
 
+import logging
+
+import requests
+
 from ams_background_tasks.database_utils import DatabaseFacade
 
+logger = logging.getLogger(__name__)
+
 MUNICIPALITIES_GROUPS = {
-    "prioritários amz": [
+    "prioritários amz - 2024": [
         "1505064",
         "5101852",
         "1100809",
@@ -485,7 +491,8 @@ class MunicipalitiesGroupHandler:
     groups: dict = {}
 
     def __init__(self, aux_db: DatabaseFacade):
-        self.groups["user-defined"] = MUNICIPALITIES_GROUPS
+        self.groups["user-defined"] = self.get_amz_priority_municipalities_from_url()
+        self.groups["user-defined"].update(MUNICIPALITIES_GROUPS)
         self.groups["state"] = {}
 
         states = aux_db.fetchall("SELECT DISTINCT nm_uf FROM public.municipio_test;")
@@ -508,3 +515,26 @@ class MunicipalitiesGroupHandler:
         """Return the geocodes of the given group."""
         assert group in self.groups[gkey]
         return self.groups[gkey][group]
+
+    def get_amz_priority_municipalities_from_url(self):
+        url = (
+            "https://terrabrasilis.dpi.inpe.br/geoserver/prodes-brasil-nb/ows?OUTPUTFORMAT=application/"
+            + "json&SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&exceptions=text/xml&srsName=EPSG:4326&"
+            + "TYPENAME=prodes-brasil-nb:priority_municipalities"
+        )
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            try:
+                year = data["features"][0]["properties"]["year"]
+                codes = data["features"][0]["properties"]["codes"]
+                codes = [_ for _ in codes.split(",")]
+                return {f"prioritários amz - {year}": codes}
+
+            except Exception as e:
+                logger.info(f"error loading priority municipalities from db ({e})")
+                return {}
+
+        return {}
