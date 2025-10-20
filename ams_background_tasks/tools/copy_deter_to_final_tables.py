@@ -48,6 +48,11 @@ def main(db_url: str, all_data: bool):
         db.truncate(table=f"deter.{table}")
         db.copy_table(src=f"deter.{prefix}{table}", dst=f"deter.{table}")
 
+    table = "deter_publish_date"
+    db.truncate(table=f"deter.{table}")
+    db.copy_table(src=f"deter.{prefix}{table}", dst=f"deter.{table}")
+
+    # is it still necessary?
     create_tmp_table(db=db, all_data=all_data, truncate=True)
 
     finalize_processing(
