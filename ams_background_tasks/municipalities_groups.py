@@ -9,7 +9,7 @@ from ams_background_tasks.database_utils import DatabaseFacade
 logger = logging.getLogger(__name__)
 
 MUNICIPALITIES_GROUPS = {
-    "prioritários amz - 2024": [
+    "prioritários_amz_2024": [
         "1505064",
         "5101852",
         "1100809",
@@ -420,7 +420,7 @@ MUNICIPALITIES_GROUPS = {
         "1700301",
         "1700251",
     ],
-    "prioritários cer": [
+    "prioritários_cer": [
         "2928901",
         "2917359",
         "2101400",
@@ -531,7 +531,7 @@ class MunicipalitiesGroupHandler:
                 year = data["features"][0]["properties"]["year"]
                 codes = data["features"][0]["properties"]["codes"]
                 codes = [_ for _ in codes.split(",")]
-                return {f"prioritários amz - {year}": codes}
+                return {f"prioritários_amz_{year}": codes}
 
             except Exception as e:
                 logger.info(f"error loading priority municipalities from db ({e})")
