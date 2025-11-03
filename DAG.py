@@ -86,6 +86,7 @@ def check_variables(**context):
     ams_af_db_url = BaseHook.get_connection("AMS_AF_DB_URL")
     ams_amz_deter_b_db_url = BaseHook.get_connection("AMS_AMZ_DETER_B_DB_URL")
     ams_cer_deter_b_db_url = BaseHook.get_connection("AMS_CER_DETER_B_DB_URL")
+    ams_pan_deter_b_db_url = BaseHook.get_connection("AMS_PAN_DETER_B_DB_URL")
     # ams_ftp_url = BaseHook.get_connection("AMS_FTP_URL")
 
     if not ams_db_url and not ams_db_url.get_uri():
@@ -108,6 +109,11 @@ def check_variables(**context):
     if not ams_cer_deter_b_db_url and not ams_cer_deter_b_db_url.get_uri():
         raise Exception(
             "Missing ams_cer_deter_b_db_url airflow conection configuration."
+        )
+
+    if not ams_pan_deter_b_db_url and not ams_pan_deter_b_db_url.get_uri():
+        raise Exception(
+            "Missing ams_pan_deter_b_db_url airflow conection configuration."
         )
 
     if not AMS_ALL_DATA_DB:
@@ -229,6 +235,26 @@ def update_cer_deter(dag):
 
     return BashOperator(
         task_id="update-cer-deter",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+    )
+
+
+def update_pan_deter(dag):
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-update-deter"
+        f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
+        f" --biome='Pantanal' --limit={Variable.get('AMS_LIMIT', 0)}"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_PAN_DETER_B_DB_URL"])
+    env["AMS_DETER_B_DB_URL"] = env["AMS_PAN_DETER_B_DB_URL"]
+
+    return BashOperator(
+        task_id="update-pan-deter",
         bash_command=bash_command,
         env=env,
         append_env=True,
@@ -617,6 +643,7 @@ with DAG(
     run_update_active_fires = update_active_fires(dag=dag)
     run_update_amz_deter = update_amz_deter(dag=dag)
     run_update_cer_deter = update_cer_deter(dag=dag)
+    run_update_pan_deter = update_pan_deter(dag=dag)
     run_finalize_deter_update = finalize_deter_update(dag=dag)
     # run_download_ibama_risk_file = download_ibama_risk_file()
     run_download_risk_file = download_inpe_risk_file(dag=dag)
@@ -739,7 +766,12 @@ with DAG(
         run_classify_fires_ppcdam,
     ]
 
-    run_update_amz_deter >> run_update_cer_deter >> run_finalize_deter_update
+    (
+        run_update_amz_deter
+        >> run_update_cer_deter
+        >> run_update_pan_deter
+        >> run_finalize_deter_update
+    )
 
     run_finalize_deter_update >> [run_classify_deter_ams, run_classify_deter_ppcdam]
 
