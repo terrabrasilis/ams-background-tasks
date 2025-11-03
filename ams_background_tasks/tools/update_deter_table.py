@@ -148,7 +148,7 @@ def update_deter(
             prefix=prefix,
             limit=limit,
         )
-        # _update_classname(db=db, prefix=prefix, name=name)
+        _update_classname(db=db, prefix=prefix, name=name)
 
 
 def _optimize_for_update(db: DatabaseFacade, name: str):
@@ -303,6 +303,24 @@ def _update_deter_table(
         db.execute(sql)
 
     _finalize_update(db=db, name=name)
+
+
+def _update_classname(db: DatabaseFacade, prefix: str, name: str):
+    """Update the classnames to match those used by AMS."""
+    classnames_to_fix = {
+        "DESMATAMENTO_CR": "%solo exposto%",
+        "DESMATAMENTO_VEG": "%vegetação%",
+        "CICATRIZ_DE_QUEIMADA": "cicatriz%",
+        "MINERACAO": "mineração",
+    }
+
+    for classname, title in classnames_to_fix.items():
+        sql = f"""
+            UPDATE deter.{prefix}{name}
+            SET classname='{classname}'
+            WHERE classname ILIKE '{title}';
+        """
+        db.execute(sql)
 
 
 def update_publish_date(
