@@ -606,30 +606,26 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     ]
 
     db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
     )
 
 
 def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     """Create the deter.{name} table."""
     columns = [
-        "gid varchar(254) NOT NULL",
+        "gid serial NOT NULL",
+        "origin_gid varchar NOT NULL UNIQUE",
         "biome varchar(254)",
-        "origin_gid int4",
+        "image_date date",
         "classname varchar(254)",
-        "quadrant varchar(5)",
-        "orbitpoint varchar(10)",
-        "date date",
-        "sensor varchar(10)",
         "satellite varchar(13)",
-        "areatotalkm double precision",
-        "areamunkm double precision",
-        "areauckm double precision",
-        "mun varchar(254)",
-        "uf varchar(2)",
-        "uc varchar(254)",
-        "geom geometry(MultiPolygon, 4674)",
-        "month_year varchar(10)",
+        "sensor varchar(10)",
+        "path_row varchar(10)",
+        "area_km double precision",
+        "geom geometry(MultiPolygon,4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
@@ -645,14 +641,17 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
 
     columns = [
         "classname:btree",
-        "date:btree",
+        "image_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",
     ]
 
     db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
     )
 
 
@@ -662,8 +661,8 @@ def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
         "gid varchar(254) NOT NULL",
         "biome varchar(254)",
         "classname varchar(254)",
-        "date date",
-        "areamunkm double precision",
+        "image_date date",
+        "area_km double precision",
         "geom geometry(MultiPolygon, 4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
@@ -681,24 +680,27 @@ def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
 
     columns = [
         "classname:btree",
-        "date:btree",
+        "image_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",
     ]
 
     db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
     )
 
 
 def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
-    """Create the deter.[deter, deter_auth, deter_history] tables."""
+    """Create the deter.[deter, deter_auth] tables."""
     for prefix in ("", "tmp_"):
         force_recreate = len(prefix) > 0
 
         # deter, deter_auth, deter_history
-        names = ("deter", "deter_auth", "deter_history")
+        names = ("deter", "deter_auth")  # , "deter_history")
         for name in names:
             _create_deter_table(
                 db=db, name=f"{prefix}{name}", force_recreate=force_recreate
@@ -836,7 +838,10 @@ def create_biome_tables(db: DatabaseFacade, force_recreate: bool = False):
     ]
 
     db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
     )
 
 

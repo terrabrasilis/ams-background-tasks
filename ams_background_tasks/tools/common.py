@@ -106,6 +106,18 @@ def get_biome_acronym(biome: str):
     }[biome]
 
 
+def get_biome_name(biome: str):
+    assert is_valid_biome(biome=biome)
+    return {
+        AMAZONIA: "amazonia",
+        CERRADO: "cerrado",
+        PANTANAL: "pantanal",
+        CAATINGA: "caatinha",
+        MATA_ATLANTICA: "mata_atlantica",
+        PAMPA: "pampa",
+    }[biome]
+
+
 def recreate_spatial_table(
     db: DatabaseFacade,
     spatial_unit: str,

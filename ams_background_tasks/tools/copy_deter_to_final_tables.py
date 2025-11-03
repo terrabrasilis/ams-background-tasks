@@ -36,11 +36,7 @@ def main(db_url: str, all_data: bool):
 
     db = DatabaseFacade.create(db_url=db_url)
 
-    tables = (
-        ("deter", "deter_auth", "deter_history")
-        if all_data
-        else ("deter", "deter_auth")
-    )
+    tables = ("deter", "deter_auth")
 
     prefix = "tmp_"
 
@@ -64,6 +60,8 @@ def main(db_url: str, all_data: bool):
 
 def create_tmp_table(db: DatabaseFacade, all_data: bool, truncate: bool):
     """Create a temporary table with DETER alerts to ensure gist index creation."""
+    _ = all_data  # no warn
+
     name = "tmp_data"
     table = f"deter.{name}"
 
@@ -71,20 +69,21 @@ def create_tmp_table(db: DatabaseFacade, all_data: bool, truncate: bool):
         db.truncate(table=table)
 
     union = ""
-    if all_data:
-        union = """
-            UNION
-            SELECT gid, classname, date, areamunkm, geom, geocode, biome
-            FROM deter.deter_history
-        """
+
+    # if all_data:
+    #    union = """
+    #        UNION
+    #        SELECT gid, classname, date, areamunkm, geom, geocode, biome
+    #        FROM deter.deter_history
+    #    """
 
     sql = f"""
         INSERT INTO {table} (
-            gid, classname, date, areamunkm, geom, geocode, biome
+            gid, classname, image_date, area_km, geom, geocode, biome
         )
-        SELECT gid, classname, date, areamunkm, geom, geocode, biome
+        SELECT gid, classname, image_date, area_km, geom, geocode, biome
         FROM deter.deter_auth
-        {union}            
+        {union}
     """
 
     db.execute(sql=sql)

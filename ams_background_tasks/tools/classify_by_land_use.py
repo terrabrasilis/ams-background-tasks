@@ -443,7 +443,7 @@ def process_deter_land_structure(
     table_prefix = get_prefix(is_temp=is_temp)
 
     sql = f"""
-        SELECT gid, biome, geocode, geom
+        SELECT gid::text, biome, geocode, geom
         FROM deter.tmp_data
         WHERE biome='{biome}' AND geocode IS NOT NULL    
     """
@@ -503,6 +503,19 @@ def insert_deter_in_land_use_tables(
 
     table_prefix = get_prefix(is_temp=is_temp)
 
+    """
+                    UNION
+                    SELECT 
+                        gid, 
+                        date, 
+                        classname, 
+                        geom,
+                        biome,
+                        geocode
+                    FROM 
+                        deter.deter_history
+    """
+
     data = gpd.GeoDataFrame.from_postgis(
         sql=f""" 
             SELECT DISTINCT
@@ -518,33 +531,14 @@ def insert_deter_in_land_use_tables(
                 {table_prefix}deter_land_structure{land_use_type_suffix} a
             INNER JOIN (
                 SELECT 
-                    tb.gid, 
-                    tb.date, 
-                    ST_PointOnSurface(tb.geom) AS geom, 
-                    tb.classname,
-                    tb.biome,
-                    tb.geocode
-                FROM (
-                    SELECT 
-                        gid, 
-                        date, 
-                        classname, 
-                        geom,
-                        biome,
-                        geocode
-                    FROM 
-                        deter.deter_auth
-                    UNION
-                    SELECT 
-                        gid, 
-                        date, 
-                        classname, 
-                        geom,
-                        biome,
-                        geocode
-                    FROM 
-                        deter.deter_history
-                ) AS tb
+                    gid::text,
+                    image_date AS date, 
+                    classname, 
+                    geom,
+                    biome,
+                    geocode
+                FROM 
+                    deter.deter_auth
             ) b ON a.gid = b.gid AND a.biome = b.biome AND a.geocode = b.geocode
             INNER JOIN 
                 class c ON b.classname = c.name
