@@ -619,7 +619,7 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
         "gid serial NOT NULL",
         "origin_gid varchar NOT NULL UNIQUE",
         "biome varchar(254)",
-        "image_date date",
+        "view_date date",
         "classname varchar(254)",
         "satellite varchar(13)",
         "sensor varchar(10)",
@@ -641,7 +641,7 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
 
     columns = [
         "classname:btree",
-        "image_date:btree",
+        "view_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",
@@ -661,7 +661,7 @@ def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
         "gid varchar(254) NOT NULL",
         "biome varchar(254)",
         "classname varchar(254)",
-        "image_date date",
+        "view_date date",
         "area_km double precision",
         "geom geometry(MultiPolygon, 4674)",
         "geocode varchar(80)",
@@ -680,7 +680,7 @@ def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
 
     columns = [
         "classname:btree",
-        "image_date:btree",
+        "view_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",

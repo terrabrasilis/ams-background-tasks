@@ -532,7 +532,7 @@ def insert_deter_in_land_use_tables(
             INNER JOIN (
                 SELECT 
                     gid::text,
-                    image_date AS date, 
+                    view_date AS date, 
                     classname, 
                     geom,
                     biome,

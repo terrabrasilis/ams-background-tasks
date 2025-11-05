@@ -79,9 +79,9 @@ def create_tmp_table(db: DatabaseFacade, all_data: bool, truncate: bool):
 
     sql = f"""
         INSERT INTO {table} (
-            gid, classname, image_date, area_km, geom, geocode, biome
+            gid, classname, view_date, area_km, geom, geocode, biome
         )
-        SELECT gid, classname, image_date, area_km, geom, geocode, biome
+        SELECT gid, classname, view_date, area_km, geom, geocode, biome
         FROM deter.deter_auth
         {union}
     """

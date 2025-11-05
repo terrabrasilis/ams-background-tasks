@@ -158,7 +158,7 @@ def _optimize_for_update(db: DatabaseFacade, name: str):
     # drop indexes
     columns = [
         "classname",
-        "image_date",
+        "view_date",
         "biome",
         "geocode",
         "geom",
@@ -174,7 +174,7 @@ def _finalize_update(db: DatabaseFacade, name: str):
     # recreate indexes
     columns = [
         "classname:btree",
-        "image_date:btree",
+        "view_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",
@@ -253,7 +253,7 @@ def _update_deter_table(
 
     sql = f"""
         INSERT INTO deter.{name}(
-            origin_gid, image_date, classname, satellite, sensor, path_row, area_km, geom, biome
+            origin_gid, view_date, classname, satellite, sensor, path_row, area_km, geom, biome
         )
         SELECT deter.origin_gid, deter.image_date, deter.classname, deter.satellite,
             deter.sensor, deter.path_row, deter.area_km, deter.geom, '{biome}'::text as biome
@@ -269,7 +269,7 @@ def _update_deter_table(
 
     years = db.fetchall(
         f"""
-        SELECT DISTINCT EXTRACT(YEAR FROM image_date)::int AS year
+        SELECT DISTINCT EXTRACT(YEAR FROM view_date)::int AS year
         FROM {table}
         WHERE biome='{biome}'
         ORDER BY year;
@@ -293,7 +293,7 @@ def _update_deter_table(
                     AND ST_Within(ST_PointOnSurface(dt2.geom), mun.geometry)
                 WHERE
                     dt2.biome='{biome}'
-                    AND EXTRACT(YEAR FROM dt2.image_date)::int = {year}
+                    AND EXTRACT(YEAR FROM dt2.view_date)::int = {year}
             ) AS a
             WHERE 
                 dt.gid = a.gid
