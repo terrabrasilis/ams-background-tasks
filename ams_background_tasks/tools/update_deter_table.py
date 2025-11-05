@@ -307,14 +307,18 @@ def _update_deter_table(
 
 def _update_classname(db: DatabaseFacade, prefix: str, name: str):
     """Update the classnames to match those used by AMS."""
-    classnames_to_fix = {
-        "DESMATAMENTO_CR": "%solo exposto%",
-        "DESMATAMENTO_VEG": "%vegetação%",
-        "CICATRIZ_DE_QUEIMADA": "cicatriz%",
-        "MINERACAO": "mineração",
-    }
+    classnames_to_fix = (
+        ("DESMATAMENTO_CR", "%solo exposto%"),
+        ("DESMATAMENTO_VEG", "%vegetação%"),
+        ("CICATRIZ_DE_QUEIMADA", "cicatriz%"),
+        ("MINERACAO", "mineração"),
+        ("DEGRADACAO", "degradação"),
+        ("CS_DESORDENADO", "corte seletivo tipo 1%"),
+        ("CS_GEOMETRICO", "corte seletivo tipo 2%"),
+        ("CS_DESORDENADO", "corte seletivo"),
+    )
 
-    for classname, title in classnames_to_fix.items():
+    for classname, title in classnames_to_fix:
         sql = f"""
             UPDATE deter.{prefix}{name}
             SET classname='{classname}'
