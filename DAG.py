@@ -314,7 +314,7 @@ def _classify_deter_by_land_use(dag, land_use_type: str):
     bash_command += (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Amazônia' --biome='Cerrado'"
+        " --biome='Amazônia' --biome='Cerrado' --biome='Pantanal'"
         " --indicator='deter'"
         f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
