@@ -580,6 +580,7 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         "uuid character varying(254)",
         "biome varchar(254)",
         "view_date date",
+        "prodes_class varchar(254)",
         "satelite varchar(254)",
         "estado varchar(254)",
         "municipio varchar(254)",

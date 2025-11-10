@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
     help="External active fires database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
+    "--fc-db-url",
+    required=False,
+    type=str,
+    default="",
+    help="External fires class database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
+)
+@click.option(
     "--all-data",
     required=False,
     is_flag=True,
@@ -53,7 +60,14 @@ logger = logging.getLogger(__name__)
     default=0,
     help="Restrict the number of rows to update (test purpose).",
 )
-def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
+def main(
+    db_url: str,
+    af_db_url: str,
+    fc_db_url: str,
+    all_data: bool,
+    biome: tuple,
+    limit: int,
+):
     """Update the active fires table."""
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
@@ -62,6 +76,10 @@ def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
     af_db_url = os.getenv("AMS_AF_DB_URL", "") if not af_db_url else af_db_url
     logger.debug(af_db_url)
     assert af_db_url
+
+    fc_db_url = os.getenv("AMS_FC_DB_URL", "") if not fc_db_url else fc_db_url
+    logger.debug(fc_db_url)
+    assert fc_db_url
 
     logger.debug(all_data)
 
@@ -74,6 +92,7 @@ def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
     update_active_fires_table(
         db=db,
         af_db_url=af_db_url,
+        fc_db_url=fc_db_url,
         all_data=all_data,
         biome_list=list(biome),
         limit=limit,
@@ -87,7 +106,12 @@ def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple, limit: int):
 
 
 def update_active_fires_table(
-    db: DatabaseFacade, af_db_url: str, all_data: bool, biome_list: list, limit: int
+    db: DatabaseFacade,
+    af_db_url: str,
+    fc_db_url: str,
+    all_data: bool,
+    biome_list: list,
+    limit: int,
 ):
     logger.info("updating the active_fires table")
 
@@ -132,9 +156,9 @@ def update_active_fires_table(
 
     sql = f"""
         INSERT INTO {table} (
-            id, uuid, view_date, satelite, estado, municipio, biome, geom
+            id, uuid, view_date, prodes_class, satelite, estado, municipio, biome, geom
         )
-        SELECT a.id, a.uuid, a.view_date, a.satelite, a.estado, a.municipio, a.biome, a.geom
+        SELECT a.id, a.uuid, a.view_date, 'Sem Classificacao', a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
         {limit_sql};
@@ -165,6 +189,40 @@ def update_active_fires_table(
         WHERE 
             ac.id = a.id
             AND ac.biome=a.biome;
+    """
+
+    db.execute(sql)
+
+    # sql view for retrieve fire classes
+    logger.info("creating a sql view to qualify fires from prodes class")
+    user, password, host, port, db_name = get_connection_components(db_url=fc_db_url)
+
+    view = "public.fires_class"
+
+    sql = f"""
+        CREATE OR REPLACE VIEW {view}
+        AS
+        SELECT remote_data.id,
+            remote_data.uuid,
+            remote_data.classe_prodes
+        FROM dblink(
+                'hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
+                'SELECT id, uuid, classe_prodes FROM public.focos_aqua_referencia'::text
+            )
+            AS remote_data(
+                id integer,
+                uuid varchar,
+                classe_prodes varchar
+            );
+    """
+
+    db.execute(sql)
+
+    sql = f"""
+        UPDATE {table} AS af
+        SET prodes_class = fc.classe_prodes
+        FROM {view} fc
+        WHERE af.uuid=fc.uuid;
     """
 
     db.execute(sql)
