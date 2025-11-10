@@ -84,6 +84,7 @@ def check_variables(**context):
     ams_db_url = BaseHook.get_connection("AMS_DB_URL")
     ams_aux_db_url = BaseHook.get_connection("AMS_AUX_DB_URL")
     ams_af_db_url = BaseHook.get_connection("AMS_AF_DB_URL")
+    ams_fc_db_url = BaseHook.get_connection("AMS_FC_DB_URL")
     ams_amz_deter_b_db_url = BaseHook.get_connection("AMS_AMZ_DETER_B_DB_URL")
     ams_cer_deter_b_db_url = BaseHook.get_connection("AMS_CER_DETER_B_DB_URL")
     ams_pan_deter_b_db_url = BaseHook.get_connection("AMS_PAN_DETER_B_DB_URL")
@@ -100,6 +101,9 @@ def check_variables(**context):
 
     if not ams_af_db_url and not ams_af_db_url.get_uri():
         raise Exception("Missing ams_af_db_url airflow conection configuration.")
+
+    if not ams_fc_db_url and not ams_fc_db_url.get_uri():
+        raise Exception("Missing ams_fc_db_url airflow conection configuration.")
 
     if not ams_amz_deter_b_db_url and not ams_amz_deter_b_db_url.get_uri():
         raise Exception(
@@ -195,7 +199,7 @@ def update_active_fires(dag):
     return BashOperator(
         task_id="update-active-fires",
         bash_command=bash_command,
-        env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AF_DB_URL"]),
+        env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AF_DB_URL", "AMS_FC_DB_URL"]),
         append_env=True,
         dag=dag,
     )
