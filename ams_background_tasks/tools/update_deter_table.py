@@ -217,7 +217,7 @@ def _update_deter_table(
         SELECT
             remote_data.uuid::TEXT AS origin_gid,
             remote_data.image_date AS image_date,
-            remote_data.class_name AS classname,
+            remote_data.class_map AS classname,
             remote_data.satellite AS satellite,
             remote_data.sensor AS sensor,
             remote_data.path_row AS path_row,
@@ -226,11 +226,11 @@ def _update_deter_table(
         FROM
             dblink(
                 'hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
-                'SELECT uuid, image_date, class_name, satellite, sensor, path_row, area_km, geom FROM public.{ext_table}'::text
+                'SELECT uuid, image_date, class_map, satellite, sensor, path_row, area_km, geom FROM public.{ext_table}'::text
             ) AS remote_data(
                 uuid varchar,
                 image_date date,
-                class_name varchar(254),
+                class_map varchar(254),
                 satellite varchar(13),
                 sensor varchar(10),
                 path_row varchar(10),
