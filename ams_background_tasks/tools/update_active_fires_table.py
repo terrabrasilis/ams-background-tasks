@@ -145,7 +145,7 @@ def update_active_fires_table(
 
     table = "fires.active_fires"
 
-    by_date = "a.view_date > '2016-01-01'::date "
+    by_date = "a.view_date > '2018-01-01'::date "
 
     if all_data:
         db.truncate(table=table)
@@ -158,7 +158,7 @@ def update_active_fires_table(
         INSERT INTO {table} (
             id, uuid, view_date, prodes_class, satelite, estado, municipio, biome, geom
         )
-        SELECT a.id, a.uuid, a.view_date, 'Sem Classificacao', a.satelite, a.estado, a.municipio, a.biome, a.geom
+        SELECT a.id, a.uuid, a.view_date, '', a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
         {limit_sql};
