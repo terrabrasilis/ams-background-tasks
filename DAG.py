@@ -310,6 +310,10 @@ def prepare_classification_ppcdam(dag):
     return _prepare_classification(dag=dag, land_use_type="ppcdam")
 
 
+def prepare_classification_prodes(dag):
+    return _prepare_classification(dag=dag, land_use_type="prodes")
+
+
 # deter data classfication
 
 
@@ -376,6 +380,10 @@ def classify_fires_by_land_use_ppcdam(dag):
     return _classify_fires_by_land_use(dag=dag, land_use_type="ppcdam")
 
 
+def classify_fires_by_land_use_prodes(dag):
+    return _classify_fires_by_land_use(dag=dag, land_use_type="prodes")
+
+
 # finalize classification
 
 
@@ -405,6 +413,10 @@ def finalize_classification_ams(dag):
 
 def finalize_classification_ppcdam(dag):
     return finalize_classification(dag=dag, land_use_type="ppcdam")
+
+
+def finalize_classification_prodes(dag):
+    return finalize_classification(dag=dag, land_use_type="prodes")
 
 
 # risk
@@ -613,7 +625,7 @@ with DAG(
     default_args=default_args,
     schedule_interval="0 4 * * *",
     catchup=False,
-    concurrency=3,
+    concurrency=4,
     max_active_runs=1,
 ) as dag:
     run_check_variables = ShortCircuitOperator(
@@ -657,6 +669,7 @@ with DAG(
     # preparing to classify
     run_prepare_classification_ams = prepare_classification_ams(dag=dag)
     run_prepare_classification_ppcdam = prepare_classification_ppcdam(dag=dag)
+    run_prepare_classification_prodes = prepare_classification_prodes(dag=dag)
 
     # classification
     run_classify_deter_ams = classify_deter_by_land_use_ams(dag=dag)
@@ -664,6 +677,7 @@ with DAG(
 
     run_classify_fires_ams = classify_fires_by_land_use_ams(dag=dag)
     run_classify_fires_ppcdam = classify_fires_by_land_use_ppcdam(dag=dag)
+    run_classify_fires_prodes = classify_fires_by_land_use_prodes(dag=dag)
 
     run_classify_risk_ams = classify_risk_by_land_use_ams(dag=dag)
     run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam(dag=dag)
@@ -671,6 +685,7 @@ with DAG(
     # finalize classification
     run_finalize_classification_ams = finalize_classification_ams(dag=dag)
     run_finalize_classification_ppcdam = finalize_classification_ppcdam(dag=dag)
+    run_finalize_classification_prodes = finalize_classification_prodes(dag=dag)
 
     run_retrieve_process_status = retrieve_process_status(dag=dag)
 
@@ -689,7 +704,11 @@ with DAG(
 
     (
         run_join
-        >> [run_prepare_classification_ams, run_prepare_classification_ppcdam]
+        >> [
+            run_prepare_classification_ams,
+            run_prepare_classification_ppcdam,
+            run_prepare_classification_prodes,
+        ]
         >> run_join2
     )
 
@@ -768,6 +787,7 @@ with DAG(
     run_update_active_fires >> [
         run_classify_fires_ams,
         run_classify_fires_ppcdam,
+        run_classify_fires_prodes,
     ]
 
     (
@@ -798,8 +818,14 @@ with DAG(
     ] >> run_finalize_classification_ppcdam
 
     [
+        run_classify_fires_prodes,
+        run_skip_update_active_fires,
+    ] >> run_finalize_classification_prodes
+
+    [
         run_finalize_classification_ams,
         run_finalize_classification_ppcdam,
+        run_finalize_classification_prodes,
     ] >> run_retrieve_process_status
 
     run_prepare_status_email = PythonOperator(

@@ -57,8 +57,9 @@ INDICATORS = [
 # land_use_type
 AMS = "ams"
 PPCDAM = "ppcdam"
+PRODES = "prodes"
 
-LAND_USE_TYPES = [AMS, PPCDAM]
+LAND_USE_TYPES = [AMS, PPCDAM, PRODES]
 
 
 def is_valid_biome(biome: str):
@@ -356,3 +357,11 @@ def finalize_processing(db: DatabaseFacade, indicator: str, process: str, status
     """
 
     db.execute(sql=sql)
+
+
+def get_land_use_type_suffix(land_use_type: str):
+    return {
+        AMS: "",
+        PPCDAM: "_ppcdam",
+        PRODES: "_prodes",
+    }[land_use_type]

@@ -115,9 +115,10 @@ def update_active_fires_table(
 ):
     logger.info("updating the active_fires table")
 
+    assert all_data
+
     # creating a sql view for the external database
     logger.info("creating the sql view")
-    print("creating the sql view")
     user, password, host, port, db_name = get_connection_components(db_url=af_db_url)
 
     sql = f"""
@@ -145,12 +146,9 @@ def update_active_fires_table(
 
     table = "fires.active_fires"
 
-    by_date = "a.view_date > '2018-01-01'::date "
+    by_date = "a.view_date > '2018-08-01'::date "
 
-    if all_data:
-        db.truncate(table=table)
-    else:
-        by_date = f"a.view_date > (SELECT MAX(view_date) FROM {table})"
+    db.truncate(table=table)
 
     limit_sql = f"LIMIT {limit}" if limit > 0 else ""
 
@@ -158,7 +156,7 @@ def update_active_fires_table(
         INSERT INTO {table} (
             id, uuid, view_date, prodes_class, satelite, estado, municipio, biome, geom
         )
-        SELECT a.id, a.uuid, a.view_date, '', a.satelite, a.estado, a.municipio, a.biome, a.geom
+        SELECT a.id, a.uuid, a.view_date, 'Nao Categorizado', a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
         {limit_sql};
@@ -226,3 +224,7 @@ def update_active_fires_table(
     """
 
     db.execute(sql)
+
+    logger.info(
+        db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
+    )

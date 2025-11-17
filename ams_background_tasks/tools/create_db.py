@@ -15,6 +15,7 @@ from ams_background_tasks.tools.common import (
     CELL_25KM,
     CELL_150KM,
     PPCDAM,
+    PRODES,
     is_valid_cell,
     is_valid_land_use_type,
 )
@@ -84,6 +85,7 @@ def main(db_url: str, force_recreate: bool):
     # land use
     create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=AMS)
     create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PPCDAM)
+    create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PRODES)
 
     # municipalities group
     create_municipalities_group_tables(db=db, force_recreate=force_recreate)
@@ -957,8 +959,10 @@ def create_land_use_table(
     if table_exists and not force_recreate:
         return
 
-    land_use_categories = (
-        [
+    land_use_categories = []
+
+    if land_use_type == AMS:
+        land_use_categories = [
             "Terra indígena",
             "Unidade de conservação de proteção integral",
             "Unidade de conservação de uso sustentável (sem APA)",
@@ -969,8 +973,8 @@ def create_land_use_table(
             "Floresta pública não destinada",
             "Área sem registro fundiário",
         ]
-        if land_use_type == AMS
-        else [
+    elif land_use_type == PPCDAM:
+        land_use_categories = [
             "Terra indígena",
             "Unidade de conservação",
             "Território quilombola",
@@ -986,7 +990,13 @@ def create_land_use_table(
             "Propriedade privada (Dados do CAR)",
             "Área sem registro fundiário",
         ]
-    )
+    else:  # prodes
+        land_use_categories = [
+            "Desmatamento Consolidado",
+            "Vegetacao Nativa",
+            "Desmatamento Recente",
+            "Outros",
+        ]
 
     values = [
         f"({index+1}, '{value}', {index})"
@@ -1243,7 +1253,7 @@ def create_processing_table(db: DatabaseFacade, force_recreate: bool):
             "end_process TIMESTAMP",
             "status VARCHAR(20) DEFAULT 'pending'",
             "CONSTRAINT valid_dates CHECK (end_process IS NULL OR end_process > start_process)",
-            "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam'))",
+            "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam', 'classification-prodes'))",
             "CONSTRAINT valid_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))",
         ],
         force_recreate=force_recreate,

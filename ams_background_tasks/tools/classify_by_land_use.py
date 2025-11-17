@@ -28,12 +28,14 @@ from ams_background_tasks.tools.common import (
     INDICATORS,
     LAND_USE_TYPES,
     PIXEL_LAND_USE_AREA,
+    PRODES,
     RISK_IBAMA_CLASSNAME,
     RISK_IBAMA_INDICATOR,
     RISK_INDICATORS,
     RISK_INPE_CLASSNAME,
     RISK_INPE_INDICATOR,
     create_processing,
+    get_land_use_type_suffix,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
@@ -56,8 +58,9 @@ logger = get_logger(__name__, sys.stdout)
 )
 @click.option(
     "--land-use-dir",
-    required=True,
+    required=False,
     type=click.Path(exists=True, resolve_path=True, dir_okay=True),
+    default="",
     help="Land use image path.",
 )
 @click.option(
@@ -93,6 +96,9 @@ def main(
     assert all_data
     assert is_valid_indicator(indicator=indicator)
 
+    if land_use_type == PRODES:
+        assert indicator == ACTIVE_FIRES_INDICATOR
+
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
@@ -100,7 +106,8 @@ def main(
     logger.debug(land_use_dir)
     logger.debug(biome)
 
-    assert Path(land_use_dir).exists()
+    if land_use_type != PRODES:
+        assert Path(land_use_dir).exists()
 
     db = DatabaseFacade.create(db_url=db_url)
 
@@ -269,19 +276,45 @@ def process_active_fires(
         logger.info("processing biome %s", biome)
         assert is_valid_biome(biome=biome)
 
-        land_use_image = land_use_dir / land_use_type / "land_use.tif"
-        logger.debug(land_use_image)
-        assert land_use_image.exists()
+        if land_use_type != PRODES:
+            land_use_image = land_use_dir / land_use_type / "land_use.tif"
+            logger.debug(land_use_image)
+            assert land_use_image.exists()
 
-        process_active_fires_land_structure(
-            db=db,
-            is_temp=True,
-            land_use_image=land_use_image,
-            land_use_type=land_use_type,
-            biome=biome,
-        )
+            process_active_fires_land_structure(
+                db=db,
+                is_temp=True,
+                land_use_image=land_use_image,
+                land_use_type=land_use_type,
+                biome=biome,
+            )
+        else:
+            process_active_fires_land_structure_for_prodes(
+                db=db, is_temp=True, biome=biome
+            )
 
     insert_fires_in_land_use_tables(db=db, is_temp=True, land_use_type=land_use_type)
+
+
+def process_active_fires_land_structure_for_prodes(
+    is_temp: bool,
+    db: DatabaseFacade,
+    biome: str,
+):
+    land_use_type_suffix = get_land_use_type_suffix(land_use_type=PRODES)
+
+    table_prefix = get_prefix(is_temp=is_temp)
+
+    sql = f"""
+        INSERT INTO {table_prefix}fires_land_structure{land_use_type_suffix}
+            (gid, biome, geocode, land_use_id, num_pixels)
+        SELECT a.uuid as gid, a.biome, a.geocode, b.id, 1
+        FROM fires.active_fires a
+        INNER JOIN public.land_use_prodes b ON b.name=a.prodes_class
+        WHERE biome='{biome}' AND geocode IS NOT NULL
+    """
+
+    db.execute(sql=sql)
 
 
 def process_active_fires_land_structure(
@@ -307,7 +340,7 @@ def process_active_fires_land_structure(
     table_prefix = get_prefix(is_temp=is_temp)
 
     sql = f"""
-        SELECT id as gid, biome, geocode, geom
+        SELECT uuid as gid, biome, geocode, geom
         FROM fires.active_fires
         WHERE biome='{biome}' AND geocode IS NOT NULL
     """
@@ -376,7 +409,7 @@ def insert_fires_in_land_use_tables(
             FROM
                 {table_prefix}fires_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome AND a.geocode = b.geocode;
+                fires.active_fires b ON a.gid = b.uuid::text AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
         con=db.conn,
         geom_col="geometry",
