@@ -419,6 +419,22 @@ def finalize_classification_prodes(dag):
     return finalize_classification(dag=dag, land_use_type="prodes")
 
 
+# drop temporary tables
+def drop_temp_tables(dag):
+    bash_command = f"source {venv_path}/bin/activate && ams-drop-temp-tables"
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id=f"drop-temp-tables",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+        trigger_rule="all_done",
+    )
+
+
 # risk
 
 
@@ -687,6 +703,8 @@ with DAG(
     run_finalize_classification_ppcdam = finalize_classification_ppcdam(dag=dag)
     run_finalize_classification_prodes = finalize_classification_prodes(dag=dag)
 
+    run_drop_temp_tables = drop_temp_tables(dag=dag)
+
     run_retrieve_process_status = retrieve_process_status(dag=dag)
 
     # running
@@ -822,11 +840,13 @@ with DAG(
         run_skip_update_active_fires,
     ] >> run_finalize_classification_prodes
 
-    [
+    (
         run_finalize_classification_ams,
         run_finalize_classification_ppcdam,
         run_finalize_classification_prodes,
-    ] >> run_retrieve_process_status
+    ) >> run_drop_temp_tables
+
+    run_drop_temp_tables >> run_retrieve_process_status
 
     run_prepare_status_email = PythonOperator(
         task_id="prepare-status-email",
