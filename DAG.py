@@ -431,7 +431,7 @@ def drop_temp_tables(dag):
         env=env,
         append_env=True,
         dag=dag,
-        trigger_rule="all_done",
+        trigger_rule="all_success",
     )
 
 
