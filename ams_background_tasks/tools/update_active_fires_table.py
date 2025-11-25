@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from time import sleep
 
 import click
 
@@ -216,14 +217,28 @@ def update_active_fires_table(
 
     db.execute(sql)
 
-    sql = f"""
-        UPDATE {table} AS af
-        SET prodes_class = fc.classe_prodes
-        FROM {view} fc
-        WHERE af.uuid=fc.uuid;
-    """
+    stop = False
+    tries = 10
 
-    db.execute(sql)
+    while not stop:
+        sql = f"""
+            UPDATE {table} AS af
+            SET prodes_class = fc.classe_prodes
+            FROM {view} fc
+            WHERE af.uuid=fc.uuid;
+        """
+
+        db.execute(sql)
+
+        count = db.count_rows(table=table, conditions="prodes_class='0'")
+
+        logger.info(count)
+
+        stop = count == 0 or tries >= 10
+        tries += 1
+
+        if not stop:
+            sleep(30)
 
     logger.info(
         db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
