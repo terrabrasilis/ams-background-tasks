@@ -218,7 +218,7 @@ def update_active_fires_table(
     db.execute(sql)
 
     stop = False
-    tries = 10
+    tries = 0
 
     while not stop:
         sql = f"""
@@ -234,11 +234,11 @@ def update_active_fires_table(
 
         logger.info(count)
 
-        stop = count == 0 or tries >= 10
+        stop = count == 0 or tries >= 15
         tries += 1
 
         if not stop:
-            sleep(30)
+            sleep(300)
 
     logger.info(
         db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
