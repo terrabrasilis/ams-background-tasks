@@ -63,6 +63,9 @@ def main(
 
             _res = db.fetchone(query=sql)
 
+            if _res is None:
+                continue
+
             res[indicator][process] = _res is not None and _res == "completed"
 
     print(json.dumps(generate_process_status_message(process_data=res)))
