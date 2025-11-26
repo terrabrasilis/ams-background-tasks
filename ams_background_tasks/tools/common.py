@@ -162,6 +162,8 @@ def recreate_spatial_table(
             "date:btree",
             "biome:btree",
             "geocode:btree",
+            "suid:btree",
+            "land_use_id:btree",
         ],
         force_recreate=force_recreate,
     )
