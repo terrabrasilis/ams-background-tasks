@@ -240,6 +240,8 @@ def update_active_fires_table(
         if not stop:
             sleep(300)
 
+    logger.info(tries)
+
     logger.info(
         db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
     )

@@ -190,7 +190,7 @@ def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: 
         schema="public",
         name=table,
         columns=[
-            "gid:hash",
+            "gid:btree",
             "biome:btree",
             "geocode:btree",
             "gid,biome:btree",
