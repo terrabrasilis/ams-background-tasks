@@ -308,7 +308,7 @@ def process_active_fires_land_structure_for_prodes(
     sql = f"""
         INSERT INTO {table_prefix}fires_land_structure{land_use_type_suffix}
             (gid, biome, geocode, land_use_id, num_pixels)
-        SELECT a.uuid as gid, a.biome, a.geocode, b.id, 1
+        SELECT a.id as gid, a.biome, a.geocode, b.id, 1
         FROM fires.active_fires a
         INNER JOIN public.land_use_prodes b ON b.name=a.prodes_class
         WHERE biome='{biome}' AND geocode IS NOT NULL
@@ -340,7 +340,7 @@ def process_active_fires_land_structure(
     table_prefix = get_prefix(is_temp=is_temp)
 
     sql = f"""
-        SELECT uuid as gid, biome, geocode, geom
+        SELECT id as gid, biome, geocode, geom
         FROM fires.active_fires
         WHERE biome='{biome}' AND geocode IS NOT NULL
     """
@@ -409,7 +409,7 @@ def insert_fires_in_land_use_tables(
             FROM
                 {table_prefix}fires_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                fires.active_fires b ON a.gid = b.uuid::text AND a.biome = b.biome AND a.geocode = b.geocode;
+                fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
         con=db.conn,
         geom_col="geometry",

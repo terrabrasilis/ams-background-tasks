@@ -155,9 +155,9 @@ def update_active_fires_table(
 
     sql = f"""
         INSERT INTO {table} (
-            id, uuid, view_date, prodes_class, satelite, estado, municipio, biome, geom
+            uuid, view_date, prodes_class, satelite, estado, municipio, biome, geom
         )
-        SELECT a.id, a.uuid, a.view_date, 'Nao Categorizado', a.satelite, a.estado, a.municipio, a.biome, a.geom
+        SELECT a.uuid, a.view_date, 'Nao Categorizado', a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
         {limit_sql};
@@ -240,8 +240,8 @@ def update_active_fires_table(
         if not stop:
             sleep(300)
 
-    logger.info(tries)
+    logger.debug(tries)
 
-    logger.info(
+    logger.debug(
         db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
     )

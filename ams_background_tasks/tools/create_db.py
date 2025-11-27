@@ -578,7 +578,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
 def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the fires.active_fires table."""
     columns = [
-        "id int4 NOT NULL",
+        "id serial NOT NULL PRIMARY KEY",
         "uuid character varying(254)",
         "biome varchar(254)",
         "view_date date",
@@ -588,7 +588,6 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         "municipio varchar(254)",
         "geom geometry(Point, 4674)",
         "geocode varchar(80)",
-        "PRIMARY KEY (id, biome)",
     ]
 
     schema = "fires"
