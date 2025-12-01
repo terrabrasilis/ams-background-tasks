@@ -605,6 +605,7 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         "uuid:btree",
         "biome:btree",
         "geocode:btree",
+        "prodes_class:btree",
         "geom:gist",
     ]
 
