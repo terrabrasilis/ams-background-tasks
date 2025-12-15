@@ -154,19 +154,39 @@ def recreate_spatial_table(
         force_recreate=force_recreate,
     )
 
-    db.create_indexes(
-        schema="public",
-        name=table,
-        columns=[
-            "classname:btree",
-            "date:btree",
-            "biome:btree",
-            "geocode:btree",
-            "suid:btree",
-            "land_use_id:btree",
-        ],
-        force_recreate=force_recreate,
-    )
+
+def prepare_to_update_land_use_table(db: DatabaseFacade, table: str):
+    index_columns = [
+        "classname:btree",
+        # "date:btree",
+        # "biome:btree",
+        "geocode:btree",
+        # "suid:btree",
+        # "land_use_id:btree",
+        "geocode,classname,land_use_id,date:btree",
+        "suid,classname,date:btree",
+        "biome,classname,date:btree",
+        "biome,classname,land_use_id,date:btree",
+        "classname,land_use_id,geocode,date:btree",
+    ]
+    prepare_table_to_update(db=db, schema="public", name=table, columns=index_columns)
+
+
+def optimize_land_use_table(db: DatabaseFacade, table: str):
+    index_columns = [
+        "classname:btree",
+        # "date:btree",
+        # "biome:btree",
+        "geocode:btree",
+        # "suid:btree",
+        # "land_use_id:btree",
+        "geocode,classname,land_use_id,date:btree",
+        "suid,classname,date:btree",
+        "biome,classname,date:btree",
+        "biome,classname,land_use_id,date:btree",
+        "classname,land_use_id,geocode,date:btree",
+    ]
+    optimize_table(db=db, schema="public", name=table, columns=index_columns)
 
 
 def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: bool):
@@ -178,7 +198,7 @@ def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: 
         name=table,
         columns=[
             "id serial NOT NULL PRIMARY KEY",
-            "gid varchar(254) NOT NULL",
+            "gid int4 NOT NULL",
             "land_use_id int4 NULL",
             "num_pixels int4 NULL",
             "geocode varchar(80) NULL",
@@ -188,17 +208,27 @@ def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: 
         force_recreate=force_recreate,
     )
 
-    db.create_indexes(
-        schema="public",
-        name=table,
-        columns=[
-            "gid:btree",
-            "biome:btree",
-            "geocode:btree",
-            "gid,biome:btree",
-        ],
-        force_recreate=force_recreate,
-    )
+
+def prepare_to_update_land_structure_table(db: DatabaseFacade, table: str):
+    index_columns = [
+        "gid:btree",
+        "biome:btree",
+        "geocode:btree",
+        "land_use_id:btree",
+        "gid,biome:btree",
+    ]
+    prepare_table_to_update(db=db, schema="public", name=table, columns=index_columns)
+
+
+def optimize_land_structure_table(db: DatabaseFacade, table: str):
+    index_columns = [
+        "gid:btree",
+        "biome:btree",
+        "geocode:btree",
+        "land_use_id:btree",
+        "gid,biome:btree",
+    ]
+    optimize_table(db=db, schema="public", name=table, columns=index_columns)
 
 
 def reset_land_use_tables(
@@ -232,7 +262,7 @@ def delete_land_use_tables_from_tmp(db: DatabaseFacade, land_use_type: str):
             ]
         )
 
-        if not len(classnames):
+        if len(classnames) == 0:
             continue
 
         sql = f"DELETE FROM public.{table} WHERE classname IN ({classnames});"
@@ -367,3 +397,26 @@ def get_land_use_type_suffix(land_use_type: str):
         PPCDAM: "_ppcdam",
         PRODES: "_prodes",
     }[land_use_type]
+
+
+def prepare_table_to_update(
+    db: DatabaseFacade,
+    schema: str,
+    name: str,
+    columns: list,
+):
+    """Prepare table to update the data."""
+    # disable autovacuum
+    # db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = off);")
+    db.drop_indexes(schema=schema, name=name, columns=columns)
+
+
+def optimize_table(db: DatabaseFacade, schema: str, name: str, columns: list):
+    # enable autovacuum
+    # db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = on);")
+    db.create_indexes(schema=schema, name=name, columns=columns, force_recreate=False)
+
+
+def analyze_table(db: DatabaseFacade, schema: str, name: str):
+    """Update the table stats."""
+    db.analyze(schema=schema, table=name)

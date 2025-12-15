@@ -35,7 +35,7 @@ logger = get_logger(__name__, sys.stdout)
     type=int,
     required=False,
     default=0,
-    help=f"Frequency in seconds to update the indicator.",
+    help="Frequency in seconds to update the indicator.",
 )
 def main(db_url: str, indicator: str, frequency: int):
     """Check if is necessary to update the indicator data."""

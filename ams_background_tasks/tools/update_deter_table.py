@@ -17,6 +17,7 @@ from ams_background_tasks.tools.common import (
     create_processing,
     get_biome_acronym,
     get_biome_name,
+    prepare_table_to_update,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,38 +152,6 @@ def update_deter(
         _update_classname(db=db, prefix=prefix, name=name)
 
 
-def _optimize_for_update(db: DatabaseFacade, name: str):
-    # disable autovacuum
-    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = off);")
-
-    # drop indexes
-    columns = [
-        "classname",
-        "view_date",
-        "biome",
-        "geocode",
-        "geom",
-    ]
-
-    db.drop_indexes(schema="deter", name=name, columns=columns)
-
-
-def _finalize_update(db: DatabaseFacade, name: str):
-    # enable autovacuum
-    db.execute(f"ALTER TABLE deter.{name} SET (autovacuum_enabled = on);")
-
-    # recreate indexes
-    columns = [
-        "classname:btree",
-        "view_date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
-
-    db.create_indexes(schema="deter", name=name, columns=columns, force_recreate=False)
-
-
 def _update_deter_table(
     *,
     db: DatabaseFacade,
@@ -199,7 +168,16 @@ def _update_deter_table(
 
     logger.info("updating the deter.%s table", name)
 
-    _optimize_for_update(db=db, name=name)
+    index_columns = [
+        "classname",
+        "view_date",
+        "biome",
+        "geocode",
+        "geom",
+        "biome,view_date",
+    ]
+
+    prepare_table_to_update(db=db, schema="deter", name=name, columns=index_columns)
 
     # creating sql view for the external database
     view = f"public.{get_biome_acronym(biome=biome)}_{name}"
@@ -301,8 +279,6 @@ def _update_deter_table(
         """
 
         db.execute(sql)
-
-    _finalize_update(db=db, name=name)
 
 
 def _update_classname(db: DatabaseFacade, prefix: str, name: str):

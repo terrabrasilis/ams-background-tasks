@@ -600,21 +600,21 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    columns = [
-        "view_date:btree",
-        "uuid:btree",
-        "biome:btree",
-        "geocode:btree",
-        "prodes_class:btree",
-        "geom:gist",
-    ]
+    # columns = [
+    # "view_date:btree",
+    # "uuid:btree",
+    # "biome:btree",
+    # "geocode:btree",
+    # "prodes_class:btree",
+    # "geom:gist",
+    # ]
 
-    db.create_indexes(
-        schema=schema,
-        name=name,
-        columns=columns,
-        force_recreate=force_recreate,
-    )
+    # db.create_indexes(
+    # schema=schema,
+    # name=name,
+    # columns=columns,
+    # force_recreate=force_recreate,
+    # )
 
 
 def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
@@ -651,18 +651,18 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
         "geom:gist",
     ]
 
-    db.create_indexes(
-        schema=schema,
-        name=name,
-        columns=columns,
-        force_recreate=force_recreate,
-    )
+    # db.create_indexes(
+    #    schema=schema,
+    #    name=name,
+    #    columns=columns,
+    #    force_recreate=force_recreate,
+    # )
 
 
 def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
     """Create the deter.tmp_data table."""
     columns = [
-        "gid varchar(254) NOT NULL",
+        "gid serial NOT NULL",
         "biome varchar(254)",
         "classname varchar(254)",
         "view_date date",
@@ -672,27 +672,9 @@ def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
         "PRIMARY KEY (gid, biome)",
     ]
 
-    schema = "deter"
-    name = "tmp_data"
-
     db.create_table(
-        schema=schema,
+        schema="deter",
         name="tmp_data",
-        columns=columns,
-        force_recreate=force_recreate,
-    )
-
-    columns = [
-        "classname:btree",
-        "view_date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
-
-    db.create_indexes(
-        schema=schema,
-        name=name,
         columns=columns,
         force_recreate=force_recreate,
     )

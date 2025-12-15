@@ -301,6 +301,8 @@ def process_active_fires_land_structure_for_prodes(
     db: DatabaseFacade,
     biome: str,
 ):
+    assert is_temp
+
     land_use_type_suffix = get_land_use_type_suffix(land_use_type=PRODES)
 
     table_prefix = get_prefix(is_temp=is_temp)
@@ -324,6 +326,8 @@ def process_active_fires_land_structure(
     db: DatabaseFacade,
     biome: str,
 ):
+    assert is_temp
+
     def _insert_into_active_fires_land_structure(
         db: DatabaseFacade, table_prefix: str, values
     ):
@@ -389,6 +393,8 @@ def process_active_fires_land_structure(
 def insert_fires_in_land_use_tables(
     db: DatabaseFacade, is_temp: bool, land_use_type: str
 ):
+    assert is_temp
+
     logger.info("Insert ACTIVE FIRES data in land use tables for each spatial units.")
 
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
@@ -409,7 +415,7 @@ def insert_fires_in_land_use_tables(
             FROM
                 {table_prefix}fires_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome AND a.geocode = b.geocode;
+                fires.active_fires b ON a.gid = b.id AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
         con=db.conn,
         geom_col="geometry",
@@ -476,7 +482,7 @@ def process_deter_land_structure(
     table_prefix = get_prefix(is_temp=is_temp)
 
     sql = f"""
-        SELECT gid::text, biome, geocode, geom
+        SELECT gid, biome, geocode, geom
         FROM deter.tmp_data
         WHERE biome='{biome}' AND geocode IS NOT NULL    
     """
@@ -536,18 +542,18 @@ def insert_deter_in_land_use_tables(
 
     table_prefix = get_prefix(is_temp=is_temp)
 
-    """
-                    UNION
-                    SELECT 
-                        gid, 
-                        date, 
-                        classname, 
-                        geom,
-                        biome,
-                        geocode
-                    FROM 
-                        deter.deter_history
-    """
+    # """
+    # UNION
+    # SELECT
+    # gid,
+    # date,
+    # classname,
+    # geom,
+    # biome,
+    # geocode
+    # FROM
+    # deter.deter_history
+    # """
 
     data = gpd.GeoDataFrame.from_postgis(
         sql=f""" 
@@ -564,7 +570,7 @@ def insert_deter_in_land_use_tables(
                 {table_prefix}deter_land_structure{land_use_type_suffix} a
             INNER JOIN (
                 SELECT 
-                    gid::text,
+                    gid,
                     view_date AS date, 
                     classname, 
                     geom,
@@ -733,7 +739,7 @@ def insert_risk_in_land_use_tables(
             FROM
                 {table_prefix}risk_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                public.{risk_view} b ON a.gid = b.id::text;
+                public.{risk_view} b ON a.gid = b.id;
         """,
         con=db.conn,
         geom_col="geometry",

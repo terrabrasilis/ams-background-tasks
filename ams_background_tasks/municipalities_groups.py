@@ -522,7 +522,7 @@ class MunicipalitiesGroupHandler:
             + "json&SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&exceptions=text/xml&srsName=EPSG:4326&"
             + "TYPENAME=prodes-brasil-nb:priority_municipalities"
         )
-        response = requests.get(url)
+        response = requests.get(url, timeout=300)
 
         if response.status_code == 200:
             data = response.json()
@@ -530,11 +530,11 @@ class MunicipalitiesGroupHandler:
             try:
                 year = data["features"][0]["properties"]["year"]
                 codes = data["features"][0]["properties"]["codes"]
-                codes = [_ for _ in codes.split(",")]
+                codes = codes.split(",")
                 return {f"prioritários_amz_{year}": codes}
 
-            except Exception as e:
-                logger.info(f"error loading priority municipalities from db ({e})")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.info("error loading priority municipalities from db (%s)", e)
                 return {}
 
         return {}

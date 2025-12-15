@@ -50,7 +50,7 @@ def main(
             continue
 
         res[indicator] = {}
-        for process in ["update", "classification-ams", "classification-ppcdam"]:
+        for process in ("update", "classification-ams", "classification-ppcdam"):
             sql = f"""
                 SELECT status from {schema}.{name}
                 WHERE

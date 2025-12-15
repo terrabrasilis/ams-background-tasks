@@ -14,17 +14,20 @@ from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_INDICATOR,
     AMS,
     DETER_INDICATOR,
-    INDICATORS,
     LAND_USE_TYPES,
     RISK_IBAMA_CLASSNAME,
     RISK_INPE_CLASSNAME,
     RISK_INPE_INDICATOR,
     RISK_SCALE_FACTOR,
+    analyze_table,
     create_land_structure_table,
     delete_land_use_tables_from_tmp,
     finalize_processing,
     get_indicators_from_tmp,
     get_prefix,
+    optimize_land_structure_table,
+    optimize_land_use_table,
+    prepare_to_update_land_use_table,
     read_spatial_units,
 )
 
@@ -58,6 +61,8 @@ def main(
     land_use_type: str,
 ):
     """Copy the classification to final tables."""
+    assert all_data
+
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
@@ -67,7 +72,7 @@ def main(
     indicators = get_indicators_from_tmp(db=db, land_use_type=land_use_type)
     logger.debug(indicators)
 
-    if not len(indicators):
+    if len(indicators) == 0:
         return
 
     delete_land_use_tables_from_tmp(db=db, land_use_type=land_use_type)
@@ -82,7 +87,6 @@ def main(
 
     copy_data_to_final_tables(
         db=db,
-        all_data=all_data,
         indicators=indicators,
         land_use_type=land_use_type,
     )
@@ -96,6 +100,11 @@ def main(
         )
 
     db.commit()
+
+    for spatial_unit in read_spatial_units(db=db):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+        land_use_table = f"{spatial_unit}_land_use{land_use_type_suffix}"
+        analyze_table(db=db, schema="public", name=land_use_table)
 
 
 def percentage_calculation_for_areas(
@@ -165,16 +174,14 @@ def normalize_inpe_risk(db: DatabaseFacade, is_temp: bool, land_use_type: str):
         db.execute(sql)
 
 
-def copy_data_to_final_tables(
-    db: DatabaseFacade, all_data: bool, indicators: list, land_use_type: str
-):
+def copy_data_to_final_tables(db: DatabaseFacade, indicators: list, land_use_type: str):
     logger.info("copying the new processed data to the final tables")
 
     if DETER_INDICATOR in indicators:
-        copy_deter_land_structure(db=db, all_data=all_data, land_use_type=land_use_type)
+        copy_deter_land_structure(db=db, land_use_type=land_use_type)
 
     if ACTIVE_FIRES_INDICATOR in indicators:
-        copy_fires_land_structure(db=db, all_data=all_data, land_use_type=land_use_type)
+        copy_fires_land_structure(db=db, land_use_type=land_use_type)
 
     if RISK_INPE_INDICATOR in indicators:
         copy_risk_land_structure(db=db, land_use_type=land_use_type)
@@ -192,45 +199,55 @@ def copy_data_to_final_tables(
             log=True,
         )
 
+        prepare_to_update_land_use_table(db=db, table=land_use_table)
+
         logger.info("copying from %s to %s.", tmp_land_use_table, land_use_table)
-        db.copy_table(src=tmp_land_use_table, dst=land_use_table, cols_to_ignore=["id"])
+        db.copy_table(
+            src=tmp_land_use_table,
+            dst=land_use_table,
+            cols_to_ignore=["id"],
+            with_commit=False,
+        )
+
+        optimize_land_use_table(db=db, table=land_use_table)
 
 
-def copy_deter_land_structure(db: DatabaseFacade, all_data: bool, land_use_type: str):
+def copy_deter_land_structure(db: DatabaseFacade, land_use_type: str):
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
     table = f"deter_land_structure{land_use_type_suffix}"
 
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
 
-    if all_data:
-        create_land_structure_table(db=db, table=table, force_recreate=True)
-
-    else:
-        # here, we expect deter.tmp_data to only have DETER data coming from the current table
-        # update sequence value from the ams of table id
-        sql = f"""
-            DELETE FROM deter_land_structure{land_use_type_suffix} WHERE gid like '%_curr';
-            SELECT setval('public.deter_land_structure_id_seq', (
-                SELECT MAX(id) FROM public.deter_land_structure{land_use_type_suffix})::integer, true
-            );
-        """
-        db.execute(sql=sql)
+    create_land_structure_table(db=db, table=table, force_recreate=True)
 
     # copy data from temporary table
-    db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)
+    db.copy_table(
+        src=f"{get_prefix(is_temp=True)}{table}",
+        dst=table,
+        cols_to_ignore=[],
+        with_commit=False,
+    )
+
+    optimize_land_structure_table(db=db, table=table)
 
 
-def copy_fires_land_structure(db: DatabaseFacade, all_data: bool, land_use_type: str):
+def copy_fires_land_structure(db: DatabaseFacade, land_use_type: str):
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
     table = f"fires_land_structure{land_use_type_suffix}"
 
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
 
-    if all_data:
-        create_land_structure_table(db=db, table=table, force_recreate=True)
+    create_land_structure_table(db=db, table=table, force_recreate=True)
 
     # copy data from temporary table
-    db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)
+    db.copy_table(
+        src=f"{get_prefix(is_temp=True)}{table}",
+        dst=table,
+        cols_to_ignore=[],
+        with_commit=False,
+    )
+
+    optimize_land_structure_table(db=db, table=table)
 
 
 def copy_risk_land_structure(db: DatabaseFacade, land_use_type: str):
@@ -242,19 +259,11 @@ def copy_risk_land_structure(db: DatabaseFacade, land_use_type: str):
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
 
     # copy data from temporary table
-    db.copy_table(src=f"{get_prefix(is_temp=True)}{table}", dst=table)
+    db.copy_table(
+        src=f"{get_prefix(is_temp=True)}{table}",
+        dst=table,
+        cols_to_ignore=[],
+        with_commit=False,
+    )
 
-
-def drop_tmp_tables(db: DatabaseFacade, indicators: list, land_use_type: str):
-    """Drop the temporary tables."""
-    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
-
-    for spatial_unit in read_spatial_units(db=db):
-        land_use_table = f"tmp_{spatial_unit}_land_use{land_use_type_suffix}"
-        db.drop_table(table=land_use_table)
-
-    if DETER_INDICATOR in indicators:
-        db.drop_table(table=f"tmp_deter_land_structure{land_use_type_suffix}")
-
-    if ACTIVE_FIRES_INDICATOR in indicators:
-        db.drop_table(table=f"tmp_fires_land_structure{land_use_type_suffix}")
+    optimize_land_structure_table(db=db, table=table)

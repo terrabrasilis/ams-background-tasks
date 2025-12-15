@@ -215,6 +215,7 @@ class DatabaseFacade(BaseModel):
     ):
         """Create an index for each column."""
         for col in columns:
+            col = col.split(":")[0]
             self.drop_index(
                 schema=schema,
                 name=f"{name}_{col.replace(',', '_')}_idx",
@@ -258,9 +259,7 @@ class DatabaseFacade(BaseModel):
         sql = f"TRUNCATE {table} {_restart} {_cascade};"
         self.execute(sql=sql, with_commit=with_commit)
 
-    def copy_table(
-        self, src: str, dst: str, with_commit: bool = False, cols_to_ignore: list = []
-    ):
+    def copy_table(self, src: str, dst: str, with_commit: bool, cols_to_ignore: list):
         schema = dst.split(".")[0] if len(dst.split(".")) == 2 else "public"
         table = dst.split(".")[1] if len(dst.split(".")) == 2 else dst
 
@@ -324,3 +323,25 @@ class DatabaseFacade(BaseModel):
         """
 
         return [_[0] for _ in self.fetchall(query=query)]
+
+    def analyze(self, schema: str, table: str):
+        """Update the table stats."""
+        sql = f"VACUUM ANALYZE {schema}.{table};"
+
+        logger.debug(sql)
+
+        conn = connect(
+            user=self.user,
+            password=self.password,
+            host=self.host,
+            port=self.port,
+            dbname=self.db_name,
+        )
+
+        conn.set_session(autocommit=True)
+
+        cur = conn.cursor()
+        cur.execute(sql)
+
+        cur.close()
+        conn.close()

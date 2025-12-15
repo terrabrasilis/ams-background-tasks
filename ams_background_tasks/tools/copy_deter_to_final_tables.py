@@ -8,7 +8,13 @@ import os
 import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
-from ams_background_tasks.tools.common import DETER_INDICATOR, finalize_processing
+from ams_background_tasks.tools.common import (
+    DETER_INDICATOR,
+    analyze_table,
+    finalize_processing,
+    optimize_table,
+    prepare_table_to_update,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +46,36 @@ def main(db_url: str, all_data: bool):
 
     prefix = "tmp_"
 
+    index_columns = [
+        "classname:btree",
+        "view_date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "biome,view_date:btree",
+        "geom:gist",
+    ]
+
     for table in tables:
         db.truncate(table=f"deter.{table}")
-        db.copy_table(src=f"deter.{prefix}{table}", dst=f"deter.{table}")
+        prepare_table_to_update(
+            db=db, schema="deter", name=table, columns=index_columns
+        )
+        db.copy_table(
+            src=f"deter.{prefix}{table}",
+            dst=f"deter.{table}",
+            cols_to_ignore=[],
+            with_commit=False,
+        )
+        optimize_table(db=db, schema="deter", name=table, columns=index_columns)
 
     table = "deter_publish_date"
     db.truncate(table=f"deter.{table}")
-    db.copy_table(src=f"deter.{prefix}{table}", dst=f"deter.{table}")
+    db.copy_table(
+        src=f"deter.{prefix}{table}",
+        dst=f"deter.{table}",
+        cols_to_ignore=[],
+        with_commit=False,
+    )
 
     # is it still necessary?
     create_tmp_table(db=db, all_data=all_data, truncate=True)
@@ -57,6 +86,9 @@ def main(db_url: str, all_data: bool):
 
     db.commit()
 
+    for table in ("deter", "deter_auth", "tmp_data"):
+        analyze_table(db=db, schema="deter", name=table)
+
 
 def create_tmp_table(db: DatabaseFacade, all_data: bool, truncate: bool):
     """Create a temporary table with DETER alerts to ensure gist index creation."""
@@ -65,8 +97,18 @@ def create_tmp_table(db: DatabaseFacade, all_data: bool, truncate: bool):
     name = "tmp_data"
     table = f"deter.{name}"
 
+    index_columns = [
+        "classname:btree",
+        "view_date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "biome,view_date:btree",
+        "geom:gist",
+    ]
+
     if truncate:
         db.truncate(table=table)
+        prepare_table_to_update(db=db, schema="deter", name=name, columns=index_columns)
 
     union = ""
 
@@ -89,3 +131,7 @@ def create_tmp_table(db: DatabaseFacade, all_data: bool, truncate: bool):
     db.execute(sql=sql)
 
     logger.info("The DETER temporary table has been created.")
+
+    # drop indexes
+
+    optimize_table(db=db, schema="deter", name=name, columns=index_columns)

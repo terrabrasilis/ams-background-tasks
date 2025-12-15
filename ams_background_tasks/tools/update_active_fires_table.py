@@ -15,8 +15,11 @@ from ams_background_tasks.database_utils import (
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_INDICATOR,
     BIOMES,
+    analyze_table,
     create_processing,
     finalize_processing,
+    optimize_table,
+    prepare_table_to_update,
 )
 
 logger = logging.getLogger(__name__)
@@ -105,6 +108,8 @@ def main(
 
     db.commit()
 
+    analyze_table(db=db, schema="fires", name="active_fires")
+
 
 def update_active_fires_table(
     db: DatabaseFacade,
@@ -117,6 +122,20 @@ def update_active_fires_table(
     logger.info("updating the active_fires table")
 
     assert all_data
+
+    index_columns = [
+        "view_date:btree",
+        "uuid:btree",
+        "biome:btree",
+        "geocode:btree",
+        "prodes_class:btree",
+        "biome,view_date:btree",
+        "geom:gist",
+    ]
+
+    prepare_table_to_update(
+        db=db, schema="fires", name="active_fires", columns=index_columns
+    )
 
     # creating a sql view for the external database
     logger.info("creating the sql view")
@@ -143,7 +162,6 @@ def update_active_fires_table(
 
     # inserting data
     logger.info("inserting data from view")
-    print("inserting data from view")
 
     table = "fires.active_fires"
 
@@ -245,3 +263,5 @@ def update_active_fires_table(
     logger.debug(
         db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
     )
+
+    optimize_table(db=db, schema="fires", name="active_fires", columns=index_columns)
