@@ -245,6 +245,14 @@ def _update_deter_table(
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
+    index_columns = [
+        "gid:btree",
+        "geom:gist",
+    ]
+    db.create_indexes(
+        schema="deter", name=name, columns=index_columns, force_recreate=False
+    )
+
     years = db.fetchall(
         f"""
         SELECT DISTINCT EXTRACT(YEAR FROM view_date)::int AS year

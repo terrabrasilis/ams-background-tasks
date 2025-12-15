@@ -183,6 +183,15 @@ def update_active_fires_table(
 
     db.execute(sql)
 
+    index_columns = [
+        "biome:btree",
+        "uuid:btree",
+        "geom:gist",
+    ]
+    db.create_indexes(
+        schema="fires", name="active_fires", columns=index_columns, force_recreate=False
+    )
+
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
