@@ -245,12 +245,13 @@ def _update_deter_table(
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
 
-    index_columns = [
+    # creating the essentials indices to update some columns
+    tmp_index_columns = [
         "gid:btree",
         "geom:gist",
     ]
     db.create_indexes(
-        schema="deter", name=name, columns=index_columns, force_recreate=False
+        schema="deter", name=name, columns=tmp_index_columns, force_recreate=False
     )
 
     years = db.fetchall(

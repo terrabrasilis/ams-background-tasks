@@ -183,13 +183,17 @@ def update_active_fires_table(
 
     db.execute(sql)
 
-    index_columns = [
+    # creating the essentials indices to update some columns
+    tmp_index_columns = [
         "biome:btree",
         "uuid:btree",
         "geom:gist",
     ]
     db.create_indexes(
-        schema="fires", name="active_fires", columns=index_columns, force_recreate=False
+        schema="fires",
+        name="active_fires",
+        columns=tmp_index_columns,
+        force_recreate=False,
     )
 
     # intersecting with municipalities
@@ -261,7 +265,7 @@ def update_active_fires_table(
 
         logger.info(count)
 
-        stop = count == 0 or tries >= 15
+        stop = count == 0 or tries >= 30
         tries += 1
 
         if not stop:
