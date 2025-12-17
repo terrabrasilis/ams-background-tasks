@@ -130,6 +130,7 @@ def update_active_fires_table(
         "geocode:btree",
         "prodes_class:btree",
         "biome,view_date:btree",
+        "view_date,id,biome:btree",
         "geom:gist",
     ]
 
