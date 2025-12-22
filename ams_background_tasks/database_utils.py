@@ -259,7 +259,14 @@ class DatabaseFacade(BaseModel):
         sql = f"TRUNCATE {table} {_restart} {_cascade};"
         self.execute(sql=sql, with_commit=with_commit)
 
-    def copy_table(self, src: str, dst: str, with_commit: bool, cols_to_ignore: list):
+    def copy_table(
+        self,
+        src: str,
+        dst: str,
+        with_commit: bool,
+        cols_to_ignore: list,
+        conditions: str = "",
+    ):
         schema = dst.split(".")[0] if len(dst.split(".")) == 2 else "public"
         table = dst.split(".")[1] if len(dst.split(".")) == 2 else dst
 
@@ -271,7 +278,7 @@ class DatabaseFacade(BaseModel):
         cols_str = ", ".join(cols)
 
         self.execute(
-            f"INSERT INTO {dst} ({cols_str}) SELECT {cols_str} FROM {src}",
+            f"INSERT INTO {dst} ({cols_str}) SELECT {cols_str} FROM {src} {conditions}",
             with_commit=with_commit,
         )
 

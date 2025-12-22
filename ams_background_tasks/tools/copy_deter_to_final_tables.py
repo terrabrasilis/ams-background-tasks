@@ -42,8 +42,6 @@ def main(db_url: str, all_data: bool):
 
     db = DatabaseFacade.create(db_url=db_url)
 
-    tables = ("deter", "deter_auth")
-
     prefix = "tmp_"
 
     index_columns = [
@@ -55,18 +53,16 @@ def main(db_url: str, all_data: bool):
         "geom:gist",
     ]
 
-    for table in tables:
-        db.truncate(table=f"deter.{table}")
-        prepare_table_to_update(
-            db=db, schema="deter", name=table, columns=index_columns
-        )
-        db.copy_table(
-            src=f"deter.{prefix}{table}",
-            dst=f"deter.{table}",
-            cols_to_ignore=[],
-            with_commit=False,
-        )
-        optimize_table(db=db, schema="deter", name=table, columns=index_columns)
+    table = "deter_auth"
+    db.truncate(table=f"deter.{table}")
+    prepare_table_to_update(db=db, schema="deter", name=table, columns=index_columns)
+    db.copy_table(
+        src=f"deter.{prefix}{table}",
+        dst=f"deter.{table}",
+        cols_to_ignore=[],
+        with_commit=False,
+    )
+    optimize_table(db=db, schema="deter", name=table, columns=index_columns)
 
     table = "deter_publish_date"
     db.truncate(table=f"deter.{table}")
@@ -76,6 +72,31 @@ def main(db_url: str, all_data: bool):
         cols_to_ignore=[],
         with_commit=False,
     )
+
+    # updating deter.deter from deter.deter_auth
+    dst = "deter"
+    src = "deter_auth"
+
+    table = dst
+
+    db.truncate(table=f"deter.{table}")
+    prepare_table_to_update(db=db, schema="deter", name=table, columns=index_columns)
+
+    sql = "SELECT biome from deter.deter_publish_date;"
+    biomes = [_[0] for _ in db.fetchall(sql)]
+
+    for biome in biomes:
+        sql = f"SELECT date from deter.deter_publish_date WHERE biome='{biome}';"
+        publish_date = db.fetchone(sql)
+        db.copy_table(
+            src=f"deter.{src}",
+            dst=f"deter.{dst}",
+            cols_to_ignore=[],
+            with_commit=False,
+            conditions=f"WHERE view_date<='{publish_date}'::date AND biome='{biome}'",
+        )
+
+    optimize_table(db=db, schema="deter", name=table, columns=index_columns)
 
     # is it still necessary?
     create_tmp_table(db=db, all_data=all_data, truncate=True)

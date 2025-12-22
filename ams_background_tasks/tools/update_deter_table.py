@@ -130,11 +130,8 @@ def update_deter(
     """Update the DETER tables (deter, deter_auth, deter_history)."""
     _ = all_data  # no warn
 
-    tables = ("deter", "deter_auth")
-    ext_tables = (
-        f"deter_{get_biome_name(biome)}",
-        f"deter_{get_biome_name(biome)}_auth",
-    )
+    tables = ("deter_auth",)
+    ext_tables = (f"deter_{get_biome_name(biome)}_auth",)
 
     prefix = "tmp_"
 
