@@ -64,13 +64,13 @@ def main(
     land_use_type: str,
 ):
     """Create the land use tables, calculate the land use area and insert the results into database."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
     logger.debug(biome)
 
-    db = DatabaseFacade.from_url(db_url=db_url)
+    db = DatabaseFacade.create(db_url=db_url)
 
     create_land_use_area_tables(
         db=db, force_recreate=force_recreate, land_use_type=land_use_type
@@ -92,6 +92,8 @@ def main(
             biome=_biome,
             land_use_type=land_use_type,
         )
+
+    db.commit()
 
 
 def create_land_use_area_tables(

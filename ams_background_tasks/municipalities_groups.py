@@ -1,9 +1,15 @@
 """Municipalities groups."""
 
+import logging
+
+import requests
+
 from ams_background_tasks.database_utils import DatabaseFacade
 
+logger = logging.getLogger(__name__)
+
 MUNICIPALITIES_GROUPS = {
-    "prioritários amz": [
+    "prioritários_amz_2024": [
         "1505064",
         "5101852",
         "1100809",
@@ -414,7 +420,7 @@ MUNICIPALITIES_GROUPS = {
         "1700301",
         "1700251",
     ],
-    "prioritários cer": [
+    "prioritários_cer": [
         "2928901",
         "2917359",
         "2101400",
@@ -484,17 +490,16 @@ class MunicipalitiesGroupHandler:
 
     groups: dict = {}
 
-    def __init__(self, db_url: str):
-        db = DatabaseFacade.from_url(db_url=db_url)
-
-        self.groups["user-defined"] = MUNICIPALITIES_GROUPS
+    def __init__(self, aux_db: DatabaseFacade):
+        self.groups["user-defined"] = self.get_amz_priority_municipalities_from_url()
+        self.groups["user-defined"].update(MUNICIPALITIES_GROUPS)
         self.groups["state"] = {}
 
-        states = db.fetchall("SELECT DISTINCT nm_uf FROM public.municipio_test;")
+        states = aux_db.fetchall("SELECT DISTINCT nm_uf FROM public.municipio_test;")
         states = [_[0] for _ in states]
 
         for state in states:
-            geocodes = db.fetchall(
+            geocodes = aux_db.fetchall(
                 f"SELECT geocodigo FROM public.municipio_test WHERE nm_uf='{state}';"
             )
             geocodes = [_[0] for _ in geocodes]
@@ -510,3 +515,26 @@ class MunicipalitiesGroupHandler:
         """Return the geocodes of the given group."""
         assert group in self.groups[gkey]
         return self.groups[gkey][group]
+
+    def get_amz_priority_municipalities_from_url(self):
+        url = (
+            "https://terrabrasilis.dpi.inpe.br/geoserver/prodes-brasil-nb/ows?OUTPUTFORMAT=application/"
+            + "json&SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&exceptions=text/xml&srsName=EPSG:4326&"
+            + "TYPENAME=prodes-brasil-nb:priority_municipalities"
+        )
+        response = requests.get(url, timeout=300)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            try:
+                year = data["features"][0]["properties"]["year"]
+                codes = data["features"][0]["properties"]["codes"]
+                codes = codes.split(",")
+                return {f"prioritários_amz_{year}": codes}
+
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.info("error loading priority municipalities from db (%s)", e)
+                return {}
+
+        return {}

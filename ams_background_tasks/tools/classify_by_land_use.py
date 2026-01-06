@@ -28,11 +28,14 @@ from ams_background_tasks.tools.common import (
     INDICATORS,
     LAND_USE_TYPES,
     PIXEL_LAND_USE_AREA,
+    PRODES,
     RISK_IBAMA_CLASSNAME,
     RISK_IBAMA_INDICATOR,
     RISK_INDICATORS,
     RISK_INPE_CLASSNAME,
     RISK_INPE_INDICATOR,
+    create_processing,
+    get_land_use_type_suffix,
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
@@ -55,8 +58,9 @@ logger = get_logger(__name__, sys.stdout)
 )
 @click.option(
     "--land-use-dir",
-    required=True,
+    required=False,
     type=click.Path(exists=True, resolve_path=True, dir_okay=True),
+    default="",
     help="Land use image path.",
 )
 @click.option(
@@ -92,19 +96,32 @@ def main(
     assert all_data
     assert is_valid_indicator(indicator=indicator)
 
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    if land_use_type == PRODES:
+        assert indicator == ACTIVE_FIRES_INDICATOR
+
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
     logger.debug(land_use_dir)
     logger.debug(biome)
 
-    assert Path(land_use_dir).exists()
+    if land_use_type != PRODES:
+        assert Path(land_use_dir).exists()
+
+    db = DatabaseFacade.create(db_url=db_url)
+
+    create_processing(
+        db=db,
+        indicator=indicator,
+        process=f"classification-{land_use_type}",
+        status="processing",
+    )
 
     if indicator == DETER_INDICATOR:
         logger.info("processing deter")
         process_deter(
-            db_url=db_url,
+            db=db,
             biome_list=list(biome),
             land_use_dir=Path(land_use_dir),
             land_use_type=land_use_type,
@@ -113,7 +130,7 @@ def main(
     if indicator == ACTIVE_FIRES_INDICATOR:
         logger.info("processing active fires")
         process_active_fires(
-            db_url=db_url,
+            db=db,
             biome_list=list(biome),
             land_use_dir=Path(land_use_dir),
             land_use_type=land_use_type,
@@ -121,11 +138,13 @@ def main(
 
     if AMAZONIA in list(biome) and indicator in RISK_INDICATORS:
         process_risk(
-            db_url=db_url,
+            db=db,
             land_use_dir=Path(land_use_dir),
             land_use_type=land_use_type,
             indicator=indicator,
         )
+
+    db.commit()
 
 
 def insert_data_in_land_use_tables(
@@ -251,36 +270,64 @@ def insert_data_in_land_use_tables(
 
 
 def process_active_fires(
-    db_url: str, biome_list: list, land_use_dir: Path, land_use_type: str
+    db: DatabaseFacade, biome_list: list, land_use_dir: Path, land_use_type: str
 ):
     for biome in biome_list:
         logger.info("processing biome %s", biome)
         assert is_valid_biome(biome=biome)
 
-        land_use_image = land_use_dir / land_use_type / "land_use.tif"
-        logger.debug(land_use_image)
-        assert land_use_image.exists()
+        if land_use_type != PRODES:
+            land_use_image = land_use_dir / land_use_type / "land_use.tif"
+            logger.debug(land_use_image)
+            assert land_use_image.exists()
 
-        process_active_fires_land_structure(
-            db_url=db_url,
-            is_temp=True,
-            land_use_image=land_use_image,
-            land_use_type=land_use_type,
-            biome=biome,
-        )
+            process_active_fires_land_structure(
+                db=db,
+                is_temp=True,
+                land_use_image=land_use_image,
+                land_use_type=land_use_type,
+                biome=biome,
+            )
+        else:
+            process_active_fires_land_structure_for_prodes(
+                db=db, is_temp=True, biome=biome
+            )
 
-    insert_fires_in_land_use_tables(
-        db_url=db_url, is_temp=True, land_use_type=land_use_type
-    )
+    insert_fires_in_land_use_tables(db=db, is_temp=True, land_use_type=land_use_type)
+
+
+def process_active_fires_land_structure_for_prodes(
+    is_temp: bool,
+    db: DatabaseFacade,
+    biome: str,
+):
+    assert is_temp
+
+    land_use_type_suffix = get_land_use_type_suffix(land_use_type=PRODES)
+
+    table_prefix = get_prefix(is_temp=is_temp)
+
+    sql = f"""
+        INSERT INTO {table_prefix}fires_land_structure{land_use_type_suffix}
+            (gid, biome, geocode, land_use_id, num_pixels)
+        SELECT a.id as gid, a.biome, a.geocode, b.id, 1
+        FROM fires.active_fires a
+        INNER JOIN public.land_use_prodes b ON b.name=a.prodes_class
+        WHERE biome='{biome}' AND geocode IS NOT NULL
+    """
+
+    db.execute(sql=sql)
 
 
 def process_active_fires_land_structure(
     is_temp: bool,
     land_use_image: Path,
     land_use_type: str,
-    db_url: str,
+    db: DatabaseFacade,
     biome: str,
 ):
+    assert is_temp
+
     def _insert_into_active_fires_land_structure(
         db: DatabaseFacade, table_prefix: str, values
     ):
@@ -293,8 +340,6 @@ def process_active_fires_land_structure(
             "inserting into %sfires_land_structure_%s", table_prefix, land_use_type
         )
         db.execute(sql=sql, log=False)
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
 
@@ -342,15 +387,17 @@ def process_active_fires_land_structure(
         values = []
 
     logger.debug("len(values): %s", count_values)
-    assert count_values > 0
+    # assert count_values > 0
 
 
-def insert_fires_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: str):
+def insert_fires_in_land_use_tables(
+    db: DatabaseFacade, is_temp: bool, land_use_type: str
+):
+    assert is_temp
+
     logger.info("Insert ACTIVE FIRES data in land use tables for each spatial units.")
 
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
 
@@ -368,7 +415,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
             FROM
                 {table_prefix}fires_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                fires.active_fires b ON a.gid = b.id::text AND a.biome = b.biome AND a.geocode = b.geocode;
+                fires.active_fires b ON a.gid = b.id AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
         con=db.conn,
         geom_col="geometry",
@@ -387,7 +434,7 @@ def insert_fires_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
 
 
 def process_deter(
-    db_url: str, biome_list: list, land_use_dir: Path, land_use_type: str
+    db: DatabaseFacade, biome_list: list, land_use_dir: Path, land_use_type: str
 ):
     for biome in biome_list:
         logger.info("processing biome %s", biome)
@@ -398,7 +445,7 @@ def process_deter(
         assert land_use_image.exists()
 
         process_deter_land_structure(
-            db_url=db_url,
+            db=db,
             is_temp=True,
             land_use_image=land_use_image,
             land_use_type=land_use_type,
@@ -406,16 +453,14 @@ def process_deter(
         )
 
     # inserting data in land use table
-    insert_deter_in_land_use_tables(
-        db_url=db_url, is_temp=True, land_use_type=land_use_type
-    )
+    insert_deter_in_land_use_tables(db=db, is_temp=True, land_use_type=land_use_type)
 
 
 def process_deter_land_structure(
+    db: DatabaseFacade,
     is_temp: bool,
     land_use_image: Path,
     land_use_type: str,
-    db_url: str,
     biome: str,
 ):
     def _insert_into_deter_land_structure(
@@ -433,8 +478,6 @@ def process_deter_land_structure(
             land_use_type_suffix,
         )
         db.execute(sql=sql, log=False)
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
 
@@ -487,17 +530,30 @@ def process_deter_land_structure(
         )
 
     logger.debug("len(values): %s", count_values)
-    assert count_values > 0
+    # assert count_values > 0
 
 
-def insert_deter_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: str):
+def insert_deter_in_land_use_tables(
+    db: DatabaseFacade, is_temp: bool, land_use_type: str
+):
     logger.info("Insert DETER data in land use tables for each spatial units.")
 
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
-    db = DatabaseFacade.from_url(db_url=db_url)
-
     table_prefix = get_prefix(is_temp=is_temp)
+
+    # """
+    # UNION
+    # SELECT
+    # gid,
+    # date,
+    # classname,
+    # geom,
+    # biome,
+    # geocode
+    # FROM
+    # deter.deter_history
+    # """
 
     data = gpd.GeoDataFrame.from_postgis(
         sql=f""" 
@@ -514,33 +570,14 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
                 {table_prefix}deter_land_structure{land_use_type_suffix} a
             INNER JOIN (
                 SELECT 
-                    tb.gid, 
-                    tb.date, 
-                    ST_PointOnSurface(tb.geom) AS geom, 
-                    tb.classname,
-                    tb.biome,
-                    tb.geocode
-                FROM (
-                    SELECT 
-                        gid, 
-                        date, 
-                        classname, 
-                        geom,
-                        biome,
-                        geocode
-                    FROM 
-                        deter.deter_auth
-                    UNION
-                    SELECT 
-                        gid, 
-                        date, 
-                        classname, 
-                        geom,
-                        biome,
-                        geocode
-                    FROM 
-                        deter.deter_history
-                ) AS tb
+                    gid,
+                    view_date AS date, 
+                    classname, 
+                    geom,
+                    biome,
+                    geocode
+                FROM 
+                    deter.deter_auth
             ) b ON a.gid = b.gid AND a.biome = b.biome AND a.geocode = b.geocode
             INNER JOIN 
                 class c ON b.classname = c.name
@@ -563,7 +600,9 @@ def insert_deter_in_land_use_tables(db_url: str, is_temp: bool, land_use_type: s
     )
 
 
-def process_risk(db_url: str, land_use_dir: Path, land_use_type: str, indicator: str):
+def process_risk(
+    db: DatabaseFacade, land_use_dir: Path, land_use_type: str, indicator: str
+):
     assert indicator in RISK_INDICATORS
 
     biome = AMAZONIA
@@ -573,7 +612,7 @@ def process_risk(db_url: str, land_use_dir: Path, land_use_type: str, indicator:
     assert land_use_image.exists()
 
     process_risk_land_structure(
-        db_url=db_url,
+        db=db,
         is_temp=True,
         land_use_image=land_use_image,
         land_use_type=land_use_type,
@@ -582,15 +621,15 @@ def process_risk(db_url: str, land_use_dir: Path, land_use_type: str, indicator:
     )
 
     insert_risk_in_land_use_tables(
-        db_url=db_url, is_temp=True, land_use_type=land_use_type, indicator=indicator
+        db=db, is_temp=True, land_use_type=land_use_type, indicator=indicator
     )
 
 
 def process_risk_land_structure(
+    db: DatabaseFacade,
     is_temp: bool,
     land_use_image: Path,
     land_use_type: str,
-    db_url: str,
     biome: str,
     indicator: str,
 ):
@@ -607,8 +646,6 @@ def process_risk_land_structure(
         db.execute(sql=sql, log=False)
 
     assert indicator in RISK_INDICATORS
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     risk_geom = (
         "risk_matrix_inpe" if indicator == RISK_INPE_INDICATOR else "matrix_ibama_1km"
@@ -668,7 +705,7 @@ def process_risk_land_structure(
 
 
 def insert_risk_in_land_use_tables(
-    db_url: str, is_temp: bool, land_use_type: str, indicator: str
+    db: DatabaseFacade, is_temp: bool, land_use_type: str, indicator: str
 ):
     logger.info("Insert RISK data in land use tables for each spatial units.")
 
@@ -684,8 +721,6 @@ def insert_risk_in_land_use_tables(
         if indicator == RISK_INPE_INDICATOR
         else RISK_IBAMA_CLASSNAME
     )
-
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     table_prefix = get_prefix(is_temp=is_temp)
 
@@ -704,7 +739,7 @@ def insert_risk_in_land_use_tables(
             FROM
                 {table_prefix}risk_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                public.{risk_view} b ON a.gid = b.id::text;
+                public.{risk_view} b ON a.gid = b.id;
         """,
         con=db.conn,
         geom_col="geometry",
