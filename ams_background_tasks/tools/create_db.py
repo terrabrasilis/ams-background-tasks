@@ -93,6 +93,9 @@ def main(db_url: str, force_recreate: bool):
     # risk
     create_risk_tables(db=db, force_recreate=force_recreate)
 
+    # fire spreading risk
+    create_fire_spreading_risk_tables(db=db, force_recreate=force_recreate)
+
     # processing
     create_processing_table(db=db, force_recreate=force_recreate)
 
@@ -711,6 +714,9 @@ def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False)
     """Create the public.spatial_units table."""
     schema = "public"
 
+    if db.table_exist(schema=schema, table="spatial_units") and not force_recreate:
+        return
+
     # spatial_units table
     if force_recreate:
         db.drop_table("public.spatial_units_subsets")
@@ -834,6 +840,9 @@ def create_biome_tables(db: DatabaseFacade, force_recreate: bool = False):
 def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     """Create the public.class and public.class_group tables."""
     schema = "public"
+
+    if db.table_exist(schema=schema, table="class") and not force_recreate:
+        return
 
     if force_recreate:
         db.drop_table(table=f"{schema}.class")
@@ -1252,6 +1261,32 @@ def create_processing_table(db: DatabaseFacade, force_recreate: bool):
             "start_process:btree",
             "end_process:btree",
             "status:btree",
+        ],
+        force_recreate=force_recreate,
+    )
+
+
+def create_fire_spreading_risk_tables(db: DatabaseFacade, force_recreate: bool):
+    """Create the fire spreading risk tables."""
+    schema = "fire_spreading_risk"
+
+    db.create_schema(name=schema, force_recreate=False)
+
+    if force_recreate:
+        db.drop_table(f"{schema}.etl_log", cascade=True)
+
+    name = "etl_log"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar",
+            "process_status int4",
+            "process_message varchar",
+            "file_date TIMESTAMP NOT NULL",
+            "is_new boolean DEFAULT true",
+            "processed_at timestamp with time zone",
         ],
         force_recreate=force_recreate,
     )
