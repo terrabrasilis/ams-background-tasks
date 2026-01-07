@@ -9,6 +9,7 @@ project_dir = str(pathlib.Path(__file__).parent.resolve().absolute())
 venv_dir = pathlib.Path(f"/tmp/venvs/")
 venv_dir.mkdir(exist_ok=True, parents=False)
 venv_path = venv_dir / pathlib.Path(project_dir).name
+venv_cmd = f"source {venv_path}/bin/activate && "
 
 # Loading project dir files
 sys.path.append(project_dir)
@@ -38,6 +39,7 @@ from common import *
 
 land_use_dir = project_dir + "/land_use"
 risk_dir = project_dir + "/risk"
+fire_spreading_risk_dir = project_dir + "/fire_spreading_risk"
 
 AMS_ALL_DATA_DB = None
 AMS_FORCE_RECREATE_DB = None
@@ -900,3 +902,44 @@ with DAG(
     run_calculate_land_use_area = calculate_biomes_land_use_area()
 
     (run_check_variables >> run_update_environment >> run_calculate_land_use_area)
+
+
+# DAG: ams-process-fire-spreading-risk-file
+
+
+def download_fire_spreading_risk_file(dag):
+    bash_command = venv_cmd + (
+        f"ams-download-fire-spreading-risk-file --save-dir {fire_spreading_risk_dir}"
+    )
+
+    return BashOperator(
+        task_id="download-fire-spreading-risk-file",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+        dag=dag,
+    )
+
+
+with DAG(
+    "ams-process-fire-spreading-risk-file",
+    default_args=default_args,
+    schedule_interval="0 2 * * *",
+    catchup=False,
+) as dag:
+    run_check_variables = ShortCircuitOperator(
+        task_id="check-variables",
+        provide_context=True,
+        python_callable=check_variables,
+        op_kwargs={},
+    )
+
+    run_update_environment = update_environment(dag=dag)
+
+    run_download_fire_spreading_risk_file = download_fire_spreading_risk_file(dag)
+
+    (
+        run_check_variables
+        >> run_update_environment
+        >> run_download_fire_spreading_risk_file
+    )
