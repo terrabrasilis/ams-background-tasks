@@ -921,6 +921,20 @@ def download_fire_spreading_risk_file(dag):
     )
 
 
+def process_fire_spreading_risk_file(dag):
+    bash_command = venv_cmd + (
+        f"ams-process-fire-spreading-risk-file --save-dir {fire_spreading_risk_dir}"
+    )
+
+    return BashOperator(
+        task_id="process-fire-spreading-risk-file",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+        dag=dag,
+    )
+
+
 with DAG(
     "ams-process-fire-spreading-risk-file",
     default_args=default_args,
@@ -937,9 +951,11 @@ with DAG(
     run_update_environment = update_environment(dag=dag)
 
     run_download_fire_spreading_risk_file = download_fire_spreading_risk_file(dag)
+    run_process_fire_spreading_risk_file = process_fire_spreading_risk_file(dag)
 
     (
         run_check_variables
         >> run_update_environment
         >> run_download_fire_spreading_risk_file
+        >> run_process_fire_spreading_risk_file
     )
