@@ -21,11 +21,11 @@ _FIRE_SPREADING_RISK_HEADERS = {
     "host": "maps.csr.ufmg.br",
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "accept-encoding": "gzip, deflate, br, zstd",
-    "referer": "https://maps.csr.ufmg.br/geodownload/?workspace=CSR&store=tif__projetos_csr__Fip_cerrado__cerrado__cerrado_fire_steps__cerrado_fire_steps&license_agreement=true",
+    "referer": "https://maps.csr.ufmg.br/geodownload/?workspace=CSR&store=tif__projetos_csr__Fip_cerrado__cerrado__cerrado_fire_map__cerrado_fire_map&license_agreement=true",
 }
 _FIRE_SPREADING_RISK_QUERYSTRING = {
     "workspace": "CSR",
-    "store": "tif__projetos_csr__Fip_cerrado__cerrado__cerrado_fire_steps__cerrado_fire_steps",
+    "store": "tif__projetos_csr__Fip_cerrado__cerrado__cerrado_fire_map__cerrado_fire_map",
     "license_agreement": "true",
 }
 
@@ -65,8 +65,8 @@ def main(db_url: str, save_dir: Path):
         save_dir / f"fire_spreading_risk_{now.strftime('%Y_%m_%d_%H_%M_%S')}"
     )
 
-    output_file = file_prefix + ".zip"
-    log_file = file_prefix + ".log"
+    output_file = Path(file_prefix + ".zip")
+    log_file = Path(file_prefix + ".log")
 
     response = requests.get(
         _FIRE_SPREADING_RISK_URL,
@@ -92,35 +92,15 @@ def main(db_url: str, save_dir: Path):
     with open(log_file, "w", encoding="utf-8") as f:
         f.write(msg)
 
-    write_log(
-        db=db,
-        msg=msg,
-        status=status,
-        file_date=now,
-        file_name=output_file,
-        is_new=True,
-    )
-
-    db.commit()
-
-
-def write_log(
-    *,
-    db: DatabaseFacade,
-    msg: str,
-    status: int,
-    file_date: datetime,
-    file_name: str,
-    is_new: bool,
-):
-    """Write log to database."""
-    dt = file_date.strftime("%Y-%m-%d %H:%M:%S")
+    dt = now.strftime("%Y-%m-%d %H:%M:%S")
 
     msg = msg.replace("'", '"')
 
     sql = f"""
-        INSERT INTO fire_spreading_risk.etl_log (file_name, process_status, process_message, file_date, is_new)
-        VALUES('{file_name}', {status}, '{msg}', '{dt}', {is_new});
+        INSERT INTO fire_spreading_risk.risk_file (file_name, process_status, process_message, file_date, is_new)
+        VALUES('{output_file.name}', {status}, '{msg}', '{dt}', {True});
     """
 
     db.execute(sql)
+
+    db.commit()

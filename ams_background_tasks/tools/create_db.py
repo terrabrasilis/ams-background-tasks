@@ -1272,10 +1272,7 @@ def create_fire_spreading_risk_tables(db: DatabaseFacade, force_recreate: bool):
 
     db.create_schema(name=schema, force_recreate=False)
 
-    if force_recreate:
-        db.drop_table(f"{schema}.etl_log", cascade=True)
-
-    name = "etl_log"
+    name = "risk_file"
     db.create_table(
         schema=schema,
         name=name,
@@ -1288,5 +1285,23 @@ def create_fire_spreading_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "is_new boolean DEFAULT true",
             "processed_at timestamp with time zone",
         ],
+        force_recreate=force_recreate,
+    )
+
+    name = "risk_data"
+    columns = [
+        "id serial NOT NULL PRIMARY KEY",
+        "biome varchar(254)",
+        "view_date date",
+        "municipality varchar(254)",
+        "geom geometry(Point, 4674)",
+        "geocode varchar(80)",
+        "src varchar(254)",
+    ]
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=columns,
         force_recreate=force_recreate,
     )
