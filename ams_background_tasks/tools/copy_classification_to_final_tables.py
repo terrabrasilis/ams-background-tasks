@@ -12,6 +12,7 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
+    FIRE_SPREADING_RISK_INDICATOR,
     AMS,
     DETER_INDICATOR,
     LAND_USE_TYPES,
@@ -74,10 +75,10 @@ def main(
 
     if len(indicators) == 0:
         return
-
+    
     delete_land_use_tables_from_tmp(db=db, land_use_type=land_use_type)
 
-    if DETER_INDICATOR in indicators:
+    if DETER_INDICATOR in indicators or FIRE_SPREADING_RISK_INDICATOR in indicators:
         percentage_calculation_for_areas(
             db=db, is_temp=True, land_use_type=land_use_type
         )
@@ -110,7 +111,7 @@ def main(
 def percentage_calculation_for_areas(
     db: DatabaseFacade, is_temp: bool, land_use_type: str
 ):
-    logger.info("using spatial units and deter areas to calculate the percentages")
+    logger.info("using spatial units and areas to calculate the percentages")
 
     for spatial_unit in read_spatial_units(db=db):
         tmpspatial_unit = f"{get_prefix(is_temp=is_temp)}{spatial_unit}"

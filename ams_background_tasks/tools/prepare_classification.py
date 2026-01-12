@@ -33,9 +33,17 @@ logger = get_logger(__name__, sys.stdout)
     type=click.Choice(LAND_USE_TYPES),
     help="Land use categories type.",
 )
+@click.option(
+    "--force-recreate",    
+    required=False,
+    is_flag=True,
+    default=False,
+    help="Force to recreate the tables.",
+)
 def main(
     db_url: str,
     land_use_type: str,
+    force_recreate: bool,
 ):
     """Prepare the database to perform the classification."""
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
@@ -59,7 +67,7 @@ def main(
     create_land_structure_table(
         db=db,
         table=f"fires_land_structure{land_use_type_suffix}",
-        force_recreate=False,
+        force_recreate=force_recreate,
     )
 
     # deter
@@ -71,7 +79,7 @@ def main(
     create_land_structure_table(
         db=db,
         table=f"deter_land_structure{land_use_type_suffix}",
-        force_recreate=False,
+        force_recreate=force_recreate,
     )
 
     # risk
@@ -83,11 +91,23 @@ def main(
     create_land_structure_table(
         db=db,
         table=f"risk_land_structure{land_use_type_suffix}",
-        force_recreate=False,
+        force_recreate=force_recreate,
+    )
+
+    # fire-spreading-risk
+    create_land_structure_table(
+        db=db,
+        table=f"tmp_fire_spreading_risk_land_structure{land_use_type_suffix}",
+        force_recreate=True,
+    )
+    create_land_structure_table(
+        db=db,
+        table=f"fire_spreading_risk_land_structure{land_use_type_suffix}",
+        force_recreate=force_recreate,
     )
 
     reset_land_use_tables(
-        db=db, is_temp=False, force_recreate=False, land_use_type=land_use_type
+        db=db, is_temp=False, force_recreate=force_recreate, land_use_type=land_use_type
     )
 
     db.commit()

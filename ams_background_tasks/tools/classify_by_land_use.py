@@ -25,6 +25,9 @@ from ams_background_tasks.tools.common import (
     AMAZONIA,
     AMS,
     DETER_INDICATOR,
+    FIRE_SPREADING_RISK_CLASSNAME,
+    FIRE_SPREADING_RISK_INDICATOR,
+    FIRE_SPREADING_RISK_PIXEL_AREA,
     INDICATORS,
     LAND_USE_TYPES,
     PIXEL_LAND_USE_AREA,
@@ -136,6 +139,15 @@ def main(
             land_use_type=land_use_type,
         )
 
+    if indicator == FIRE_SPREADING_RISK_INDICATOR:
+        logger.info("processing fire spreading risk")
+        process_fire_spreading_risk(
+            db=db,
+            biome_list=list(biome),
+            land_use_dir=Path(land_use_dir),
+            land_use_type=land_use_type,
+        )
+
     if AMAZONIA in list(biome) and indicator in RISK_INDICATORS:
         process_risk(
             db=db,
@@ -183,6 +195,9 @@ def insert_data_in_land_use_tables(
         multiplier = PIXEL_LAND_USE_AREA
     elif indicator == ACTIVE_FIRES_INDICATOR or indicator is RISK_IBAMA_INDICATOR:
         measure = "counts"
+    elif indicator == FIRE_SPREADING_RISK_INDICATOR:
+        measure = "area"
+        multiplier = FIRE_SPREADING_RISK_PIXEL_AREA
     elif indicator == RISK_INPE_INDICATOR:
         measure = "counts"
     else:
@@ -753,5 +768,147 @@ def insert_risk_in_land_use_tables(
         table_prefix=table_prefix,
         log=False,
         risk=True,
+        land_use_type=land_use_type,
+    )
+
+
+def process_fire_spreading_risk(
+    db: DatabaseFacade, biome_list: list, land_use_dir: Path, land_use_type: str
+):
+    for biome in biome_list:
+        logger.info("processing biome %s", biome)
+        assert is_valid_biome(biome=biome)
+
+        land_use_image = land_use_dir / land_use_type / "land_use.tif"
+        logger.debug(land_use_image)
+        assert land_use_image.exists()
+
+        process_fire_spreading_risk_land_structure(
+            db=db,
+            is_temp=True,
+            land_use_image=land_use_image,
+            land_use_type=land_use_type,
+            biome=biome,
+        )
+
+    insert_fire_spreading_risk_in_land_use_tables(
+        db=db, is_temp=True, land_use_type=land_use_type
+    )
+
+
+def process_fire_spreading_risk_land_structure(
+    is_temp: bool,
+    land_use_image: Path,
+    land_use_type: str,
+    db: DatabaseFacade,
+    biome: str,
+):
+    assert is_temp
+
+    def _insert_into_fire_spreading_risk_land_structure(
+        db: DatabaseFacade, table_prefix: str, values
+    ):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+        sql = f"""
+            INSERT INTO {table_prefix}fire_spreading_risk_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
+            VALUES {','.join(values)};
+        """
+        logger.info(
+            "inserting into %sfire_spreading_risk_land_structure_%s",
+            table_prefix,
+            land_use_type,
+        )
+        db.execute(sql=sql, log=False)
+
+    table_prefix = get_prefix(is_temp=is_temp)
+
+    sql = f"""
+        SELECT id as gid, biome, geocode, geom
+        FROM fire_spreading_risk.risk_data
+        WHERE biome='{biome}' AND geocode IS NOT NULL
+    """
+
+    logger.debug(sql)
+
+    risk = gpd.GeoDataFrame.from_postgis(sql=sql, con=db.conn, geom_col="geom")
+    coord_list = list(zip(risk["geom"].x, risk["geom"].y))
+
+    landuse_raster = rio.open(land_use_image)
+    assert landuse_raster.nodata == 255
+
+    risk["value"] = list(landuse_raster.sample(coord_list))
+    values: list = []
+    count_values: int = 0
+
+    with alive_bar(len(risk)) as progress_bar:
+        for _, point in risk.iterrows():
+            assert point.biome == biome
+            assert point.geocode
+
+            if point["value"][0] > 0:
+                values.append(
+                    f"('{point.gid}', '{point.biome}', '{point.geocode}', {point['value'][0]}, 1)"
+                )
+                count_values += 1
+
+            progress_bar()
+
+            if len(values) >= OPT_MAX_VALUES:  # optimizing
+                _insert_into_fire_spreading_risk_land_structure(
+                    db=db, table_prefix=table_prefix, values=values
+                )
+                values = []
+
+    if len(values) > 0:
+        _insert_into_fire_spreading_risk_land_structure(
+            db=db, table_prefix=table_prefix, values=values
+        )
+        values = []
+
+    logger.debug("len(values): %s", count_values)
+    # assert count_values > 0
+
+
+def insert_fire_spreading_risk_in_land_use_tables(
+    db: DatabaseFacade, is_temp: bool, land_use_type: str
+):
+    assert is_temp
+
+    logger.info(
+        "Insert FIRE SPREADING RISK data in land use tables for each spatial units."
+    )
+
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    table_prefix = get_prefix(is_temp=is_temp)
+
+    data = gpd.GeoDataFrame.from_postgis(
+        sql=f"""
+            SELECT DISTINCT
+                a.id,
+                a.land_use_id,
+                a.num_pixels,
+                a.biome,
+                a.geocode,
+                '{FIRE_SPREADING_RISK_CLASSNAME}' as classname,
+                b.view_date AS date,
+                b.geom AS geometry
+            FROM
+                {table_prefix}fire_spreading_risk_land_structure{land_use_type_suffix} a 
+            INNER JOIN
+                fire_spreading_risk.risk_data b ON a.gid = b.id AND a.biome = b.biome AND a.geocode = b.geocode;
+        """,
+        con=db.conn,
+        geom_col="geometry",
+        crs="EPSG:4674",
+    )
+
+    insert_data_in_land_use_tables(
+        indicator=FIRE_SPREADING_RISK_INDICATOR,
+        db=db,
+        data=data,
+        table_prefix=table_prefix,
+        log=False,
+        risk=False,
         land_use_type=land_use_type,
     )

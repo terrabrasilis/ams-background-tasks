@@ -872,7 +872,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (4, 'MN', 'DETER Mineração', 3),
             (5, 'AF', 'Focos (Programa Queimadas)', 4),
             (6, 'RK', 'Risco de desmatamento (IBAMA)', 5),
-            (7, 'RI', 'Risco de desmatamento', 6);
+            (7, 'RI', 'Risco de desmatamento', 6),
+            (8, 'FS', 'Risco de espalhamento de fogo', 7)
     """
 
     db.execute(sql=sql)
@@ -916,7 +917,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (17, 'DESMATAMENTO_CR', 1, 'Pantanal'),
             (18, 'DESMATAMENTO_VEG', 1, 'Pantanal'),
             (19, 'CICATRIZ_DE_QUEIMADA', 2, 'Pantanal'),
-            (20, 'MINERACAO', 4, 'Pantanal');
+            (20, 'MINERACAO', 4, 'Pantanal'),
+            (21, 'RISCO_ESPALHAMENTO_FOGO', 8, 'Cerrado');
     """
 
     db.execute(sql=sql)

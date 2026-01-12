@@ -121,7 +121,6 @@ def main(db_url: str, save_dir: Path, srid: str):
 
 def process_fire_spreading_risk_file(db: DatabaseFacade, zip_path: Path, srid: str):
     """Extract risk point data from a ZIP file and store it in the database."""
-    db.truncate(table=_FIRE_SPREADING_RISK_DB_DATA_TABLE)
 
     def _insert_into_risk_data_table(values: list):
         sql = f"INSERT INTO {_FIRE_SPREADING_RISK_DB_DATA_TABLE} (geom, biome, view_date, src) VALUES {','.join(values)};"

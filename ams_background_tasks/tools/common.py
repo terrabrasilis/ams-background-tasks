@@ -31,19 +31,22 @@ PAMPA = "Pampa"
 BIOMES = [AMAZONIA, CERRADO, PANTANAL, CAATINGA, MATA_ATLANTICA, PAMPA]
 
 # constants
-PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)
+FIRE_SPREADING_RISK_PIXEL_AREA = 423.0 * 423.0 * (10**-6)  # km^2
+PIXEL_LAND_USE_AREA = 29.875 * 29.875 * (10**-6)  # km^2
 RISK_SCALE_FACTOR = 1
 
 # classnames
 ACTIVE_FIRES_CLASSNAME = "AF"
 RISK_IBAMA_CLASSNAME = "RK"
 RISK_INPE_CLASSNAME = "RI"
+FIRE_SPREADING_RISK_CLASSNAME = "FS"
 
 # indicators
 DETER_INDICATOR = "deter"
 ACTIVE_FIRES_INDICATOR = "focos"
 RISK_IBAMA_INDICATOR = "risco-ibama"
 RISK_INPE_INDICATOR = "risco"
+FIRE_SPREADING_RISK_INDICATOR = "risco-espalhamento-fogo"
 
 RISK_INDICATORS = [RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR]
 
@@ -52,6 +55,7 @@ INDICATORS = [
     ACTIVE_FIRES_INDICATOR,
     RISK_IBAMA_INDICATOR,
     RISK_INPE_INDICATOR,
+    FIRE_SPREADING_RISK_INDICATOR,
 ]
 
 # land_use_type
@@ -295,12 +299,19 @@ def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
     for title in titles:
         if "deter" in title.lower():
             indicators.append(DETER_INDICATOR)
+            continue
 
         if "focos" in title.lower():
             indicators.append(ACTIVE_FIRES_INDICATOR)
+            continue
+
+        if "risco de espalhamento" in title.lower():
+            indicators.append(FIRE_SPREADING_RISK_INDICATOR)
+            continue
 
         if "risco" in title.lower():
             indicators.append(RISK_INPE_INDICATOR)
+            continue
 
     return list(set(indicators))
 
