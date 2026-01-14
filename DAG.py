@@ -290,6 +290,9 @@ def finalize_deter_update(dag):
 def _prepare_classification(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += f"ams-prepare-classification --land-use-type {land_use_type}"
+    bash_command += (
+        f" {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')}"
+    )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
