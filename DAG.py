@@ -39,7 +39,7 @@ from common import *
 
 land_use_dir = project_dir + "/land_use"
 risk_dir = project_dir + "/risk"
-fire_spreading_risk_dir = project_dir + "/fire_spreading_risk"
+fire_sr_dir = project_dir + "/fire_spreading_risk"
 
 AMS_ALL_DATA_DB = None
 AMS_FORCE_RECREATE_DB = None
@@ -392,7 +392,7 @@ def classify_fires_by_land_use_prodes(dag):
 # fire spreading risk classification
 
 
-def _classify_fire_spreading_risk_by_land_use(dag, land_use_type: str):
+def _classify_fire_sr_by_land_use(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-classify-by-land-use "
@@ -414,12 +414,12 @@ def _classify_fire_spreading_risk_by_land_use(dag, land_use_type: str):
     )
 
 
-def classify_fire_spreading_risk_by_land_use_ams(dag):
-    return _classify_fire_spreading_risk_by_land_use(dag=dag, land_use_type="ams")
+def classify_fire_sr_by_land_use_ams(dag):
+    return _classify_fire_sr_by_land_use(dag=dag, land_use_type="ams")
 
 
-def classify_fire_spreading_risk_by_land_use_ppcdam(dag):
-    return _classify_fire_spreading_risk_by_land_use(dag=dag, land_use_type="ppcdam")
+def classify_fire_sr_by_land_use_ppcdam(dag):
+    return _classify_fire_sr_by_land_use(dag=dag, land_use_type="ppcdam")
 
 
 # finalize classification
@@ -620,6 +620,8 @@ def decide_update_indicator(**context):
             return "update-active-fires"
         elif indicator == "risco":
             return "download-inpe-risk-file"
+        elif indicator == "risco-espalhamento-fogo":
+            return "import-fire-spreading-risk-file"
         assert False
 
     return f"skip-update-{indicator}"
@@ -635,6 +637,10 @@ def need_update_fires(dag):
 
 def need_update_risk(dag):
     return _need_update_indicator(dag=dag, indicator="risco")
+
+
+def need_update_fire_sr(dag):
+    return _need_update_indicator(dag=dag, indicator="risco-espalhamento-fogo")
 
 
 def prepare_status_email(**context):
@@ -671,6 +677,34 @@ def retrieve_process_status(dag: DAG):
         append_env=True,
         dag=dag,
         trigger_rule="all_done",
+    )
+
+
+def import_fire_sr(dag):
+    bash_command = venv_cmd + (
+        f"ams-import-fire-spreading-risk-file --save-dir {fire_sr_dir}"
+    )
+
+    return BashOperator(
+        task_id="import-fire-spreading-risk-file",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+        dag=dag,
+    )
+
+
+def update_fire_sr(dag):
+    bash_command = venv_cmd + (
+        f"ams-process-fire-spreading-risk-file --save-dir {fire_sr_dir} "
+    )
+
+    return BashOperator(
+        task_id="update-fire-spreading-risk",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+        dag=dag,
     )
 
 
@@ -719,6 +753,8 @@ with DAG(
     run_download_risk_file = download_inpe_risk_file(dag=dag)
     # run_update_ibama_risk = update_ibama_risk()
     run_update_risk = update_inpe_risk(dag=dag)
+    run_import_fire_sr = import_fire_sr(dag)
+    run_update_fire_sr = update_fire_sr(dag)
 
     # preparing to classify
     run_prepare_classification_ams = prepare_classification_ams(dag=dag)
@@ -736,12 +772,8 @@ with DAG(
     run_classify_risk_ams = classify_risk_by_land_use_ams(dag=dag)
     run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam(dag=dag)
 
-    run_classify_fire_spreading_risk_ams = classify_fire_spreading_risk_by_land_use_ams(
-        dag=dag
-    )
-    run_classify_fire_spreading_risk_ppcdam = (
-        classify_fire_spreading_risk_by_land_use_ppcdam(dag=dag)
-    )
+    run_classify_fire_sr_ams = classify_fire_sr_by_land_use_ams(dag=dag)
+    run_classify_fire_sr_ppcdam = classify_fire_sr_by_land_use_ppcdam(dag=dag)
 
     # finalize classification
     run_finalize_classification_ams = finalize_classification_ams(dag=dag)
@@ -778,13 +810,13 @@ with DAG(
     run_check_update_deter = need_update_deter(dag=dag)
     run_check_update_fires = need_update_fires(dag=dag)
     run_check_update_risk = need_update_risk(dag=dag)
+    run_check_update_fire_sr = need_update_fire_sr(dag=dag)
 
     run_join2 >> [
         run_check_update_risk,
         run_check_update_deter,
         run_check_update_fires,
-        run_classify_fire_spreading_risk_ams,
-        run_classify_fire_spreading_risk_ppcdam,
+        run_check_update_fire_sr,
     ]
 
     decide_deter = BranchPythonOperator(
@@ -838,6 +870,30 @@ with DAG(
 
     run_skip_update_risk = EmptyOperator(task_id="skip-update-risco")
 
+    decide_fire_sr = BranchPythonOperator(
+        task_id="decide-update-fire-spreading-risk",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "risco-espalhamento-fogo",
+        },
+    )
+
+    run_skip_update_fire_sr = EmptyOperator(
+        task_id="skip-update-risco-espalhamento-fogo"
+    )
+
+    (
+        run_check_update_fire_sr
+        >> decide_fire_sr
+        >> [
+            run_import_fire_sr,
+            run_skip_update_fire_sr,
+        ]
+    )
+
+    run_import_fire_sr >> run_update_fire_sr
+
     (
         run_check_update_risk
         >> decide_risk
@@ -866,6 +922,11 @@ with DAG(
         >> run_finalize_deter_update
     )
 
+    run_update_fire_sr >> [
+        run_classify_fire_sr_ams,
+        run_classify_fire_sr_ppcdam,
+    ]
+
     run_finalize_deter_update >> [run_classify_deter_ams, run_classify_deter_ppcdam]
 
     (
@@ -875,7 +936,8 @@ with DAG(
         run_skip_update_deter,
         run_skip_update_active_fires,
         run_skip_update_risk,
-        run_classify_fire_spreading_risk_ams,
+        run_classify_fire_sr_ams,
+        run_skip_update_fire_sr,
     ) >> run_finalize_classification_ams
 
     [
@@ -885,7 +947,8 @@ with DAG(
         run_skip_update_deter,
         run_skip_update_active_fires,
         run_skip_update_risk,
-        run_classify_fire_spreading_risk_ppcdam,
+        run_classify_fire_sr_ppcdam,
+        run_skip_update_fire_sr,
     ] >> run_finalize_classification_ppcdam
 
     [
@@ -958,9 +1021,9 @@ with DAG(
 # DAG: ams-process-fire-spreading-risk-file
 
 
-def download_fire_spreading_risk_file(dag):
+def download_fire_sr_file(dag):
     bash_command = venv_cmd + (
-        f"ams-download-fire-spreading-risk-file --save-dir {fire_spreading_risk_dir}"
+        f"ams-download-fire-spreading-risk-file --save-dir {fire_sr_dir}"
     )
 
     return BashOperator(
@@ -972,9 +1035,9 @@ def download_fire_spreading_risk_file(dag):
     )
 
 
-def process_fire_spreading_risk_file(dag):
+def process_fire_sr_file(dag):
     bash_command = venv_cmd + (
-        f"ams-process-fire-spreading-risk-file --save-dir {fire_spreading_risk_dir}"
+        f"ams-process-fire-spreading-risk-file --save-dir {fire_sr_dir}"
     )
 
     return BashOperator(
@@ -1001,12 +1064,12 @@ with DAG(
 
     run_update_environment = update_environment(dag=dag)
 
-    run_download_fire_spreading_risk_file = download_fire_spreading_risk_file(dag)
-    run_process_fire_spreading_risk_file = process_fire_spreading_risk_file(dag)
+    run_download_fire_sr_file = download_fire_sr_file(dag)
+    run_process_fire_sr_file = process_fire_sr_file(dag)
 
     (
         run_check_variables
         >> run_update_environment
-        >> run_download_fire_spreading_risk_file
-        >> run_process_fire_spreading_risk_file
+        >> run_download_fire_sr_file
+        >> run_process_fire_sr_file
     )

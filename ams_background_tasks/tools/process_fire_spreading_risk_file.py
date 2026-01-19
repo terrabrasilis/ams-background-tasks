@@ -52,8 +52,15 @@ def _path_to_pathlib(ctx, param, value):
     callback=_path_to_pathlib,
     help="Directory to save the downloaded image.",
 )
+@click.option(
+    "--force",
+    required=False,
+    is_flag=True,
+    default=False,
+    help="Force to process the fire spreading risk files.",
+)
 @click.option("--srid", type=int, default=4674, help="SRID of the risk points.")
-def main(db_url: str, save_dir: Path, srid: str):
+def main(db_url: str, save_dir: Path, srid: str, force: bool):
     """Process all files in the dir."""
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
@@ -61,10 +68,12 @@ def main(db_url: str, save_dir: Path, srid: str):
 
     db = DatabaseFacade.create(db_url=db_url)
 
+    cond = "" if force else "WHERE is_new=True"
+
     sql = f"""
         SELECT file_name
         FROM {_FIRE_SPREADING_RISK_DB_FILE_TABLE}
-        WHERE is_new=True
+        {cond}
     """
 
     zip_files = sorted([_[0] for _ in db.fetchall(sql)], reverse=True)

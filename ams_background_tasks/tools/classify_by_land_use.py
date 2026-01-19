@@ -810,11 +810,11 @@ def process_fire_spreading_risk_land_structure(
     ):
         land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
         sql = f"""
-            INSERT INTO {table_prefix}fire_spreading_risk_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
+            INSERT INTO {table_prefix}fire_sr_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
             VALUES {','.join(values)};
         """
         logger.info(
-            "inserting into %sfire_spreading_risk_land_structure_%s",
+            "inserting into %sfire_sr_land_structure_%s",
             table_prefix,
             land_use_type,
         )
@@ -894,7 +894,7 @@ def insert_fire_spreading_risk_in_land_use_tables(
                 b.view_date AS date,
                 b.geom AS geometry
             FROM
-                {table_prefix}fire_spreading_risk_land_structure{land_use_type_suffix} a 
+                {table_prefix}fire_sr_land_structure{land_use_type_suffix} a 
             INNER JOIN
                 fire_spreading_risk.risk_data b ON a.gid = b.id AND a.biome = b.biome AND a.geocode = b.geocode;
         """,

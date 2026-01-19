@@ -57,6 +57,9 @@ def main(
     reset_land_use_tables(
         db=db, is_temp=True, force_recreate=True, land_use_type=land_use_type
     )
+    reset_land_use_tables(
+        db=db, is_temp=False, force_recreate=force_recreate, land_use_type=land_use_type
+    )
 
     # fires
     create_land_structure_table(
@@ -97,17 +100,13 @@ def main(
     # fire-spreading-risk
     create_land_structure_table(
         db=db,
-        table=f"tmp_fire_spreading_risk_land_structure{land_use_type_suffix}",
+        table=f"tmp_fire_sr_land_structure{land_use_type_suffix}",
         force_recreate=True,
     )
     create_land_structure_table(
         db=db,
-        table=f"fire_spreading_risk_land_structure{land_use_type_suffix}",
+        table=f"fire_sr_land_structure{land_use_type_suffix}",
         force_recreate=force_recreate,
-    )
-
-    reset_land_use_tables(
-        db=db, is_temp=False, force_recreate=force_recreate, land_use_type=land_use_type
     )
 
     db.commit()

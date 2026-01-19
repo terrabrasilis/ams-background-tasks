@@ -988,7 +988,7 @@ def create_land_use_table(
         land_use_categories = [
             "Vegetacao Nativa",
             "Desmatamento Recente",
-            "Desmatamento Consolidado",            
+            "Desmatamento Consolidado",
             "Outros",
         ]
 

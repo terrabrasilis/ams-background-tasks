@@ -187,6 +187,9 @@ def copy_data_to_final_tables(db: DatabaseFacade, indicators: list, land_use_typ
     if RISK_INPE_INDICATOR in indicators:
         copy_risk_land_structure(db=db, land_use_type=land_use_type)
 
+    if FIRE_SPREADING_RISK_INDICATOR in indicators:
+        copy_fire_spreading_risk_land_structure(db=db, land_use_type=land_use_type)
+
     for spatial_unit in read_spatial_units(db=db):
         land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
         land_use_table = f"{spatial_unit}_land_use{land_use_type_suffix}"
@@ -258,6 +261,25 @@ def copy_risk_land_structure(db: DatabaseFacade, land_use_type: str):
     db.truncate(table=table)
 
     logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
+
+    # copy data from temporary table
+    db.copy_table(
+        src=f"{get_prefix(is_temp=True)}{table}",
+        dst=table,
+        cols_to_ignore=[],
+        with_commit=False,
+    )
+
+    optimize_land_structure_table(db=db, table=table)
+
+
+def copy_fire_spreading_risk_land_structure(db: DatabaseFacade, land_use_type: str):
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+    table = f"fire_sr_land_structure{land_use_type_suffix}"
+
+    logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
+
+    create_land_structure_table(db=db, table=table, force_recreate=True)
 
     # copy data from temporary table
     db.copy_table(
