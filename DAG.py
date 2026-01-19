@@ -386,6 +386,39 @@ def classify_fires_by_land_use_prodes(dag):
     return _classify_fires_by_land_use(dag=dag, land_use_type="prodes")
 
 
+# fire spreading risk classification
+
+
+def _classify_fire_spreading_risk_by_land_use(dag, land_use_type: str):
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-classify-by-land-use "
+        f"{('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
+        "--biome='Cerrado' "
+        "--indicator='risco-espalhamento-fogo' "
+        f"--land-use-type={land_use_type} "
+        f"--land-use-dir={land_use_dir}"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id=f"classify-fire-spreading-risk-by-land-use-{land_use_type}",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+    )
+
+
+def classify_fire_spreading_risk_by_land_use_ams(dag):
+    return _classify_fire_spreading_risk_by_land_use(dag=dag, land_use_type="ams")
+
+
+def classify_fire_spreading_risk_by_land_use_ppcdam(dag):
+    return _classify_fire_spreading_risk_by_land_use(dag=dag, land_use_type="ppcdam")
+
+
 # finalize classification
 
 
@@ -700,6 +733,13 @@ with DAG(
     run_classify_risk_ams = classify_risk_by_land_use_ams(dag=dag)
     run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam(dag=dag)
 
+    run_classify_fire_spreading_risk_ams = classify_fire_spreading_risk_by_land_use_ams(
+        dag=dag
+    )
+    run_classify_fire_spreading_risk_ppcdam = (
+        classify_fire_spreading_risk_by_land_use_ppcdam(dag=dag)
+    )
+
     # finalize classification
     run_finalize_classification_ams = finalize_classification_ams(dag=dag)
     run_finalize_classification_ppcdam = finalize_classification_ppcdam(dag=dag)
@@ -736,7 +776,13 @@ with DAG(
     run_check_update_fires = need_update_fires(dag=dag)
     run_check_update_risk = need_update_risk(dag=dag)
 
-    run_join2 >> [run_check_update_risk, run_check_update_deter, run_check_update_fires]
+    run_join2 >> [
+        run_check_update_risk,
+        run_check_update_deter,
+        run_check_update_fires,
+        run_classify_fire_spreading_risk_ams,
+        run_classify_fire_spreading_risk_ppcdam,
+    ]
 
     decide_deter = BranchPythonOperator(
         task_id="decide-update-deter",
@@ -826,6 +872,7 @@ with DAG(
         run_skip_update_deter,
         run_skip_update_active_fires,
         run_skip_update_risk,
+        run_classify_fire_spreading_risk_ams,
     ) >> run_finalize_classification_ams
 
     [
@@ -835,6 +882,7 @@ with DAG(
         run_skip_update_deter,
         run_skip_update_active_fires,
         run_skip_update_risk,
+        run_classify_fire_spreading_risk_ppcdam,
     ] >> run_finalize_classification_ppcdam
 
     [
