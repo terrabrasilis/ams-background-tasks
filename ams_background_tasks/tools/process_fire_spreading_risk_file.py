@@ -83,16 +83,18 @@ def main(db_url: str, save_dir: Path, srid: str):
         res = db.fetchall(sql)
 
         if len(res):
-            logger.warning(
-                "skipping file %s - data for {file_date} already exists in the database",
+            logger.debug(
+                "skipping file %s - data for %s already exists in the database",
                 zip_path,
+                file_date,
             )
+            continue
 
         logger.info("processing %s ...", zip_path)
         if Path(zip_path).exists():
             process_fire_spreading_risk_file(db=db, zip_path=zip_path, srid=srid)
         else:
-            logger.warning("file %s not found.", zip_path)
+            logger.debug("file %s not found.", zip_path)
 
         db.execute(
             sql=f"""
@@ -137,7 +139,6 @@ def process_fire_spreading_risk_file(db: DatabaseFacade, zip_path: Path, srid: s
 
             parts = zip_path.name.split("_")
             view_date = f"{parts[3]}-{parts[4]}-{parts[5]}"
-            print(view_date)
 
             dfr = gpd.GeoDataFrame()
             with rio.open(file_path, "r") as src:

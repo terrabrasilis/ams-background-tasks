@@ -34,7 +34,7 @@ logger = get_logger(__name__, sys.stdout)
     help="Land use categories type.",
 )
 @click.option(
-    "--force-recreate",    
+    "--force-recreate",
     required=False,
     is_flag=True,
     default=False,

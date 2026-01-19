@@ -12,9 +12,9 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
-    FIRE_SPREADING_RISK_INDICATOR,
     AMS,
     DETER_INDICATOR,
+    FIRE_SPREADING_RISK_INDICATOR,
     LAND_USE_TYPES,
     RISK_IBAMA_CLASSNAME,
     RISK_INPE_CLASSNAME,
@@ -75,7 +75,7 @@ def main(
 
     if len(indicators) == 0:
         return
-    
+
     delete_land_use_tables_from_tmp(db=db, land_use_type=land_use_type)
 
     if DETER_INDICATOR in indicators or FIRE_SPREADING_RISK_INDICATOR in indicators:
