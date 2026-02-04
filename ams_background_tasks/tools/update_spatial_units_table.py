@@ -44,32 +44,30 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
-    db = DatabaseFacade.from_url(db_url=db_url)
+
+    db = DatabaseFacade.create(db_url=db_url)
 
     check_count_rows(db=db)
 
     aux_db_url = os.getenv("AMS_AUX_DB_URL") if not aux_db_url else aux_db_url
     logger.debug(aux_db_url)
     assert aux_db_url
-    aux_db = DatabaseFacade.from_url(db_url=aux_db_url)
+    aux_db = DatabaseFacade.create(db_url=aux_db_url)
 
     for index, _biome in enumerate(biome):
         assert is_valid_biome(biome=_biome)
         ignore_conflict = index
-        # truncate = not index
         update_states_table(
             db=db,
             aux_db=aux_db,
             biome=_biome,
             ignore_conflict=ignore_conflict,
-            # truncate=truncate,
         )
         update_municipalities_table(
             db=db,
             aux_db=aux_db,
             biome=_biome,
             ignore_conflict=ignore_conflict,
-            # truncate=truncate,
         )
         for cell in CELLS:
             assert aux_db.table_exist(
@@ -82,10 +80,11 @@ def main(db_url: str, aux_db_url: str, biome: tuple):
                 cell=cell,
                 ignore_conflict=ignore_conflict,
                 biome=_biome,
-                # truncate=truncate,
             )
 
-    update_municipalities_groups(db_url=db_url, aux_db_url=aux_db_url)
+    update_municipalities_groups(db=db, aux_db=aux_db)
+
+    db.commit()
 
 
 def check_count_rows(db: DatabaseFacade):
@@ -105,16 +104,11 @@ def update_states_table(
     aux_db: DatabaseFacade,
     biome: str,
     ignore_conflict: bool,
-    # truncate: bool,
 ):
     logger.info("updating the states tables from the auxiliary database.")
 
     table1 = "public.states"
     table2 = "public.states_biome"
-
-    # if truncate:
-    # db.truncate(table=table2)
-    # db.truncate(table=table1, cascade=True)
 
     select_query = f"""
         SELECT a.id, a.nome, a.geocodigo, a.sigla, ST_AsText(a.geom), ST_AsText(a.geom)
@@ -211,11 +205,9 @@ def update_municipalities_table(
     db.insert(query=insert_query, data=data)
 
 
-def update_municipalities_groups(db_url: str, aux_db_url: str):
+def update_municipalities_groups(db: DatabaseFacade, aux_db: DatabaseFacade):
     """Update the municipalities groups."""
-    db = DatabaseFacade.from_url(db_url=db_url)
-
-    mgh = MunicipalitiesGroupHandler(db_url=aux_db_url)
+    mgh = MunicipalitiesGroupHandler(aux_db=aux_db)
 
     valid_geocodes = [
         _[0] for _ in db.fetchall("SELECT geocode from public.municipalities")

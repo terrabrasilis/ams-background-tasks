@@ -1,6 +1,6 @@
 """A DAG to create the AMS database."""
 
-import os
+import json
 import pathlib
 import sys
 
@@ -24,8 +24,13 @@ from airflow.hooks.base import BaseHook
 from airflow.models import Variable
 from airflow.models.connection import Connection
 from airflow.operators.bash import BashOperator
+from airflow.operators.email import EmailOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import BranchPythonOperator, ShortCircuitOperator
+from airflow.operators.python import (
+    BranchPythonOperator,
+    PythonOperator,
+    ShortCircuitOperator,
+)
 from dateutil.relativedelta import relativedelta
 
 from ams_background_tasks.tools.common import BIOMES
@@ -52,28 +57,37 @@ def _get_all_biomes():
 # DAG: ams-create-db
 
 
-@task(task_id="update-environment")
-def update_environment():
+def update_environment(dag):
     bash_command = f"python3 -m venv {venv_path} && " if not venv_path.exists() else ""
     bash_command += f"source {venv_path}/bin/activate && " f"pip install " + project_dir
 
     return BashOperator(
-        task_id="update-environment", bash_command=bash_command
-    ).execute({})
+        task_id="update-environment", bash_command=bash_command, dag=dag
+    )
 
 
-def check_variables():
+def check_variables(**context):
+    context["ti"].xcom_push(
+        key="start_process", value=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
     AMS_ALL_DATA_DB = Variable.get("AMS_ALL_DATA_DB")
     AMS_FORCE_RECREATE_DB = Variable.get("AMS_FORCE_RECREATE_DB")
     AMS_BIOMES = Variable.get("AMS_BIOMES")
     AMS_STAC_API_URL = Variable.get("AMS_STAC_API_URL")
     AMS_STAC_COLLECTION = Variable.get("AMS_STAC_COLLECTION")
+    AMS_EMAIL_TO = Variable.get("AMS_EMAIL_TO")
+    AMS_FREQUENCY_TO_UPDATE_DETER = Variable.get("AMS_FREQUENCY_TO_UPDATE_DETER")
+    AMS_FREQUENCY_TO_UPDATE_FOCOS = Variable.get("AMS_FREQUENCY_TO_UPDATE_FOCOS")
+    AMS_FREQUENCY_TO_UPDATE_RISCO = Variable.get("AMS_FREQUENCY_TO_UPDATE_RISCO")
 
     ams_db_url = BaseHook.get_connection("AMS_DB_URL")
     ams_aux_db_url = BaseHook.get_connection("AMS_AUX_DB_URL")
     ams_af_db_url = BaseHook.get_connection("AMS_AF_DB_URL")
+    ams_fc_db_url = BaseHook.get_connection("AMS_FC_DB_URL")
     ams_amz_deter_b_db_url = BaseHook.get_connection("AMS_AMZ_DETER_B_DB_URL")
     ams_cer_deter_b_db_url = BaseHook.get_connection("AMS_CER_DETER_B_DB_URL")
+    ams_pan_deter_b_db_url = BaseHook.get_connection("AMS_PAN_DETER_B_DB_URL")
     # ams_ftp_url = BaseHook.get_connection("AMS_FTP_URL")
 
     if not ams_db_url and not ams_db_url.get_uri():
@@ -88,6 +102,9 @@ def check_variables():
     if not ams_af_db_url and not ams_af_db_url.get_uri():
         raise Exception("Missing ams_af_db_url airflow conection configuration.")
 
+    if not ams_fc_db_url and not ams_fc_db_url.get_uri():
+        raise Exception("Missing ams_fc_db_url airflow conection configuration.")
+
     if not ams_amz_deter_b_db_url and not ams_amz_deter_b_db_url.get_uri():
         raise Exception(
             "Missing ams_amz_deter_b_db_url airflow conection configuration."
@@ -96,6 +113,11 @@ def check_variables():
     if not ams_cer_deter_b_db_url and not ams_cer_deter_b_db_url.get_uri():
         raise Exception(
             "Missing ams_cer_deter_b_db_url airflow conection configuration."
+        )
+
+    if not ams_pan_deter_b_db_url and not ams_pan_deter_b_db_url.get_uri():
+        raise Exception(
+            "Missing ams_pan_deter_b_db_url airflow conection configuration."
         )
 
     if not AMS_ALL_DATA_DB:
@@ -113,139 +135,197 @@ def check_variables():
     if not AMS_STAC_COLLECTION:
         raise Exception("Missing AMS_STAC_COLLECTION airflow variable.")
 
+    if not AMS_EMAIL_TO:
+        raise Exception("Missing AMS_EMAIL_TO airflow variable.")
+
+    if not AMS_FREQUENCY_TO_UPDATE_DETER:
+        raise Exception("Missing AMS_FREQUENCY_TO_UPDATE_DETER airflow variable.")
+
+    if not AMS_FREQUENCY_TO_UPDATE_FOCOS:
+        raise Exception("Missing AMS_FREQUENCY_TO_UPDATE_FOCOS airflow variable.")
+
+    if not AMS_FREQUENCY_TO_UPDATE_RISCO:
+        raise Exception("Missing AMS_FREQUENCY_TO_UPDATE_RISCO airflow variable.")
+
     return True
 
 
-@task(task_id="create-db")
-def create_db():
+def create_db(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += f"ams-create-db {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')}"
 
     return BashOperator(
-        task_id="ams-create-db",
+        task_id="create-db",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-biome")
-def update_biome():
+def update_biome(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += f"ams-update-biome {_get_all_biomes()}"
 
     return BashOperator(
-        task_id="ams-update-biome",
+        task_id="update-biome",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-spatial-units")
-def update_spatial_units():
+def update_spatial_units(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += f"ams-update-spatial-units {_get_all_biomes()}"
 
     return BashOperator(
-        task_id="ams-update-spatial-units",
+        task_id="update-spatial-units",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AUX_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-active-fires")
-def update_active_fires():
+def update_active_fires(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-update-active-fires {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
-        f"{_get_all_biomes()}"
+        f"{_get_all_biomes()} "
+        f"--limit={Variable.get('AMS_LIMIT', 0)}"
     )
     return BashOperator(
-        task_id="ams-update-active-fires",
+        task_id="update-active-fires",
         bash_command=bash_command,
-        env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AF_DB_URL"]),
+        env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_AF_DB_URL", "AMS_FC_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-amz-deter")
-def update_amz_deter():
+def update_amz_deter(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Amazônia' --truncate"
+        f" --biome='Amazônia' --truncate --limit={Variable.get('AMS_LIMIT', 0)}"
+        f" --create-processing-flag"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_AMZ_DETER_B_DB_URL"])
     env["AMS_DETER_B_DB_URL"] = env["AMS_AMZ_DETER_B_DB_URL"]
 
     return BashOperator(
-        task_id="ams-update-amz-deter",
+        task_id="update-amz-deter",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-cer-deter")
-def update_cer_deter():
+def update_cer_deter(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-update-deter"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Cerrado'"
+        f" --biome='Cerrado' --limit={Variable.get('AMS_LIMIT', 0)}"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_CER_DETER_B_DB_URL"])
     env["AMS_DETER_B_DB_URL"] = env["AMS_CER_DETER_B_DB_URL"]
 
     return BashOperator(
-        task_id="ams-update-cer-deter",
+        task_id="update-cer-deter",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
+
+
+def update_pan_deter(dag):
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-update-deter"
+        f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
+        f" --biome='Pantanal' --limit={Variable.get('AMS_LIMIT', 0)}"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL", "AMS_PAN_DETER_B_DB_URL"])
+    env["AMS_DETER_B_DB_URL"] = env["AMS_PAN_DETER_B_DB_URL"]
+
+    return BashOperator(
+        task_id="update-pan-deter",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+    )
+
+
+def finalize_deter_update(dag):
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-finalize-deter-update"
+        f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id=f"finalize-deter-update",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+    )
 
 
 # prepare classification
 
 
-def _prepare_classification(land_use_type: str):
+def _prepare_classification(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += f"ams-prepare-classification --land-use-type {land_use_type}"
+    bash_command += (
+        f" {('--force-recreate' if Variable.get('AMS_FORCE_RECREATE_DB')=='1' else '')}"
+    )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"ams-prepare-classification-{land_use_type}",
+        task_id=f"prepare-classification-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="prepare-classification-AMS")
-def prepare_classification_ams():
-    return _prepare_classification(land_use_type="ams")
+def prepare_classification_ams(dag):
+    return _prepare_classification(dag=dag, land_use_type="ams")
 
 
-@task(task_id="prepare-classification-PPCDAM")
-def prepare_classification_ppcdam():
-    return _prepare_classification(land_use_type="ppcdam")
+def prepare_classification_ppcdam(dag):
+    return _prepare_classification(dag=dag, land_use_type="ppcdam")
+
+
+def prepare_classification_prodes(dag):
+    return _prepare_classification(dag=dag, land_use_type="prodes")
 
 
 # deter data classfication
 
 
-def _classify_deter_by_land_use(land_use_type: str):
+def _classify_deter_by_land_use(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
-        " --biome='Amazônia' --biome='Cerrado'"
+        " --biome='Amazônia' --biome='Cerrado' --biome='Pantanal'"
         " --indicator='deter'"
         f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
@@ -254,27 +334,26 @@ def _classify_deter_by_land_use(land_use_type: str):
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"ams-classify-deter-by-land-use-{land_use_type}",
+        task_id=f"classify-deter-by-land-use-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="classify-deter-by-land-use-AMS")
-def classify_deter_by_land_use_ams():
-    return _classify_deter_by_land_use(land_use_type="ams")
+def classify_deter_by_land_use_ams(dag):
+    return _classify_deter_by_land_use(dag=dag, land_use_type="ams")
 
 
-@task(task_id="classify-deter-by-land-use-PPCDAM")
-def classify_deter_by_land_use_ppcdam():
-    return _classify_deter_by_land_use(land_use_type="ppcdam")
+def classify_deter_by_land_use_ppcdam(dag):
+    return _classify_deter_by_land_use(dag=dag, land_use_type="ppcdam")
 
 
 # active fires data classification
 
 
-def _classify_active_fires_by_land_use(land_use_type: str):
+def _classify_fires_by_land_use(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-classify-by-land-use "
@@ -288,88 +367,109 @@ def _classify_active_fires_by_land_use(land_use_type: str):
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"ams-classify-fires-by-land-use-{land_use_type}",
+        task_id=f"classify-fires-by-land-use-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="classify-fires-by-land-use-AMS")
-def classify_active_fires_by_land_use_ams():
-    return _classify_active_fires_by_land_use(land_use_type="ams")
+def classify_fires_by_land_use_ams(dag):
+    return _classify_fires_by_land_use(dag=dag, land_use_type="ams")
 
 
-@task(task_id="classify-fires-by-land-use-PPCDAM")
-def classify_active_fires_by_land_use_ppcdam():
-    return _classify_active_fires_by_land_use(land_use_type="ppcdam")
+def classify_fires_by_land_use_ppcdam(dag):
+    return _classify_fires_by_land_use(dag=dag, land_use_type="ppcdam")
+
+
+def classify_fires_by_land_use_prodes(dag):
+    return _classify_fires_by_land_use(dag=dag, land_use_type="prodes")
 
 
 # finalize classification
 
 
-def finalize_classification(land_use_type: str):
+def finalize_classification(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-finalize-classification"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         f" --land-use-type={land_use_type}"
-        " --drop-tmp"
     )
 
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"ams-finalize-classification-{land_use_type}",
+        task_id=f"finalize-classification-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+        trigger_rule="all_done",
+    )
 
 
-@task(task_id="finalize-classification-AMS")
-def finalize_classification_ams():
-    return finalize_classification(land_use_type="ams")
+def finalize_classification_ams(dag):
+    return finalize_classification(dag=dag, land_use_type="ams")
 
 
-@task(task_id="finalize-classification-PPCDAM")
-def finalize_classification_ppcdam():
-    return finalize_classification(land_use_type="ppcdam")
+def finalize_classification_ppcdam(dag):
+    return finalize_classification(dag=dag, land_use_type="ppcdam")
+
+
+def finalize_classification_prodes(dag):
+    return finalize_classification(dag=dag, land_use_type="prodes")
+
+
+# drop temporary tables
+def drop_temp_tables(dag):
+    bash_command = f"source {venv_path}/bin/activate && ams-drop-temp-tables"
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id=f"drop-temp-tables",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+        trigger_rule="all_success",
+    )
 
 
 # risk
 
 
-@task(task_id="download-ibama-risk-file")
-def download_ibama_risk_file():
+def download_ibama_risk_file(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         "ams-download-ibama-risk-file --days-until-expiration=15 --save-dir=" + risk_dir
     )
 
     return BashOperator(
-        task_id="ams-download-ibama-risk-file",
+        task_id="download-ibama-risk-file",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL", "AMS_FTP_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-ibama-risk")
-def update_ibama_risk():
+def update_ibama_risk(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += "ams-update-ibama-risk --risk-threshold=0.85 --biome='Amazônia'"
 
     return BashOperator(
-        task_id="ams-update-ibama-risk",
+        task_id="update-ibama-risk",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="download-inpe-risk-file")
-def download_inpe_risk_file():
+def download_inpe_risk_file(dag):
     beg = (datetime.now() - relativedelta(days=30)).strftime("%Y-%m-%d")
     end = datetime.now().strftime("%Y-%m-%d")
 
@@ -387,37 +487,37 @@ def download_inpe_risk_file():
     )
 
     return BashOperator(
-        task_id="ams-download-inpe-risk-file",
+        task_id="download-inpe-risk-file",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="update-inpe-risk")
-def update_inpe_risk():
+def update_inpe_risk(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += "ams-update-inpe-risk --risk-threshold=0. --biome='Amazônia'"
 
     return BashOperator(
-        task_id="ams-update-inpe-risk",
+        task_id="update-inpe-risk",
         bash_command=bash_command,
         env=get_conn_secrets_uri(["AMS_DB_URL"]),
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
 # risk data classification
 
 
-def _classify_risk_by_land_use(land_use_type: str):
+def _classify_risk_by_land_use(dag, land_use_type: str):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
         f"ams-classify-by-land-use"
         f" {('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')}"
         " --biome='Amazônia'"
-        # " --indicator='risco'"
-        " --indicator='risco-inpe'"
+        " --indicator='risco'"
         f" --land-use-type={land_use_type}"
         " --land-use-dir=" + land_use_dir
     )
@@ -425,21 +525,20 @@ def _classify_risk_by_land_use(land_use_type: str):
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id=f"ams-classify-risk-by-land-use-{land_use_type}",
+        task_id=f"classify-risk-by-land-use-{land_use_type}",
         bash_command=bash_command,
         env=env,
         append_env=True,
-    ).execute({})
+        dag=dag,
+    )
 
 
-@task(task_id="classify-risk-by-land-use-AMS")
-def classify_risk_by_land_use_ams():
-    return _classify_risk_by_land_use(land_use_type="ams")
+def classify_risk_by_land_use_ams(dag):
+    return _classify_risk_by_land_use(dag=dag, land_use_type="ams")
 
 
-@task(task_id="classify-risk-by-land-use-PPCDAM")
-def classify_risk_by_land_use_ppcdam():
-    return _classify_risk_by_land_use(land_use_type="ppcdam")
+def classify_risk_by_land_use_ppcdam(dag):
+    return _classify_risk_by_land_use(dag=dag, land_use_type="ppcdam")
 
 
 # others
@@ -450,7 +549,94 @@ def _check_recreate_db():
 
     if force_recreate:
         return "create-db"
+
     return "skip-create-db"
+
+
+def _need_update_indicator(dag, indicator: str):
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-need-update-indicator --indicator={indicator} "
+    bash_command += (
+        f"--frequency={Variable.get(f'AMS_FREQUENCY_TO_UPDATE_{indicator.upper()}')}"
+    )
+
+    return BashOperator(
+        task_id=f"need-update-{indicator}",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+    )
+
+
+def decide_update_indicator(**context):
+    indicator = context["indicator"]
+
+    bash_result = context["ti"].xcom_pull(task_ids=f"need-update-{indicator}")
+
+    bash_result = bash_result.strip().lower()
+
+    if bash_result == "true":
+        if indicator == "deter":
+            return "update-amz-deter"
+        elif indicator == "focos":
+            return "update-active-fires"
+        elif indicator == "risco":
+            return "download-inpe-risk-file"
+        assert False
+
+    return f"skip-update-{indicator}"
+
+
+def need_update_deter(dag):
+    return _need_update_indicator(dag, indicator="deter")
+
+
+def need_update_fires(dag):
+    return _need_update_indicator(dag=dag, indicator="focos")
+
+
+def need_update_risk(dag):
+    return _need_update_indicator(dag=dag, indicator="risco")
+
+
+def prepare_status_email(**context):
+    bash_result = context["ti"].xcom_pull(task_ids=f"retrieve-process-status")
+
+    res = json.loads(bash_result)
+
+    context["ti"].xcom_push(key="email_subject", value=res["subject"])
+    context["ti"].xcom_push(key="email_html_content", value=res["html_content"])
+
+    print(context)
+
+
+def send_status_email():
+    return EmailOperator(
+        task_id="send-status-email",
+        mime_charset="utf-8",
+        to=Variable.get("AMS_EMAIL_TO"),
+        subject="{{ ti.xcom_pull(task_ids='prepare-status-email', key='email_subject') }}",
+        html_content="{{ ti.xcom_pull(task_ids='prepare-status-email', key='email_html_content') }}",
+    )
+
+
+def retrieve_process_status(dag: DAG):
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += f"ams-print-process-status --start=\"{{{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}}}\""
+
+    return BashOperator(
+        task_id=f"retrieve-process-status",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+        trigger_rule="all_done",
+    )
 
 
 with DAG(
@@ -458,7 +644,7 @@ with DAG(
     default_args=default_args,
     schedule_interval="0 4 * * *",
     catchup=False,
-    concurrency=3,
+    concurrency=4,
     max_active_runs=1,
 ) as dag:
     run_check_variables = ShortCircuitOperator(
@@ -466,9 +652,10 @@ with DAG(
         provide_context=True,
         python_callable=check_variables,
         op_kwargs={},
+        dag=dag,
     )
 
-    run_update_environment = update_environment()
+    run_update_environment = update_environment(dag=dag)
 
     run_check_recreate_db = BranchPythonOperator(
         task_id="check-create-db",
@@ -481,39 +668,47 @@ with DAG(
     )
 
     # database creation
-    run_create_db = create_db()
+    run_create_db = create_db(dag=dag)
 
     # biomes and spatial units
-    run_update_biome = update_biome()
-    run_update_spatial_units = update_spatial_units()
+    run_update_biome = update_biome(dag=dag)
+    run_update_spatial_units = update_spatial_units(dag=dag)
 
     # indicators
-    run_update_active_fires = update_active_fires()
-    run_update_amz_deter = update_amz_deter()
-    run_update_cer_deter = update_cer_deter()
+    run_update_active_fires = update_active_fires(dag=dag)
+    run_update_amz_deter = update_amz_deter(dag=dag)
+    run_update_cer_deter = update_cer_deter(dag=dag)
+    run_update_pan_deter = update_pan_deter(dag=dag)
+    run_finalize_deter_update = finalize_deter_update(dag=dag)
     # run_download_ibama_risk_file = download_ibama_risk_file()
-    run_download_risk_file = download_inpe_risk_file()
+    run_download_risk_file = download_inpe_risk_file(dag=dag)
     # run_update_ibama_risk = update_ibama_risk()
-    run_update_risk = update_inpe_risk()
+    run_update_risk = update_inpe_risk(dag=dag)
 
     # preparing to classify
-    run_prepare_classification = EmptyOperator(task_id="prepare-classification")
-    run_prepare_classification_ams = prepare_classification_ams()
-    run_prepare_classification_ppcdam = prepare_classification_ppcdam()
+    run_prepare_classification_ams = prepare_classification_ams(dag=dag)
+    run_prepare_classification_ppcdam = prepare_classification_ppcdam(dag=dag)
+    run_prepare_classification_prodes = prepare_classification_prodes(dag=dag)
 
     # classification
-    run_classify_deter_ams = classify_deter_by_land_use_ams()
-    run_classify_deter_ppcdam = classify_deter_by_land_use_ppcdam()
+    run_classify_deter_ams = classify_deter_by_land_use_ams(dag=dag)
+    run_classify_deter_ppcdam = classify_deter_by_land_use_ppcdam(dag=dag)
 
-    run_classify_active_fires_ams = classify_active_fires_by_land_use_ams()
-    run_classify_active_fires_ppcdam = classify_active_fires_by_land_use_ppcdam()
+    run_classify_fires_ams = classify_fires_by_land_use_ams(dag=dag)
+    run_classify_fires_ppcdam = classify_fires_by_land_use_ppcdam(dag=dag)
+    run_classify_fires_prodes = classify_fires_by_land_use_prodes(dag=dag)
 
-    run_classify_risk_ams = classify_risk_by_land_use_ams()
-    run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam()
+    run_classify_risk_ams = classify_risk_by_land_use_ams(dag=dag)
+    run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam(dag=dag)
 
     # finalize classification
-    run_finalize_classification_ams = finalize_classification_ams()
-    run_finalize_classification_ppcdam = finalize_classification_ppcdam()
+    run_finalize_classification_ams = finalize_classification_ams(dag=dag)
+    run_finalize_classification_ppcdam = finalize_classification_ppcdam(dag=dag)
+    run_finalize_classification_prodes = finalize_classification_prodes(dag=dag)
+
+    run_drop_temp_tables = drop_temp_tables(dag=dag)
+
+    run_retrieve_process_status = retrieve_process_status(dag=dag)
 
     # running
 
@@ -526,51 +721,146 @@ with DAG(
     run_create_db >> [run_update_biome, run_update_spatial_units] >> run_join
     run_skip >> run_join
 
-    run_join >> [
-        run_update_active_fires,
-        run_update_amz_deter,
-        run_download_risk_file,
+    run_join2 = EmptyOperator(task_id="join-prepare-classification")
+
+    (
+        run_join
+        >> [
+            run_prepare_classification_ams,
+            run_prepare_classification_ppcdam,
+            run_prepare_classification_prodes,
+        ]
+        >> run_join2
+    )
+
+    run_check_update_deter = need_update_deter(dag=dag)
+    run_check_update_fires = need_update_fires(dag=dag)
+    run_check_update_risk = need_update_risk(dag=dag)
+
+    run_join2 >> [run_check_update_risk, run_check_update_deter, run_check_update_fires]
+
+    decide_deter = BranchPythonOperator(
+        task_id="decide-update-deter",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "deter",
+        },
+    )
+
+    run_skip_update_deter = EmptyOperator(task_id="skip-update-deter")
+
+    (
+        run_check_update_deter
+        >> decide_deter
+        >> [
+            run_update_amz_deter,
+            run_skip_update_deter,
+        ]
+    )
+
+    decide_fires = BranchPythonOperator(
+        task_id="decide-update-fires",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "focos",
+        },
+    )
+
+    run_skip_update_active_fires = EmptyOperator(task_id="skip-update-focos")
+
+    (
+        run_check_update_fires
+        >> decide_fires
+        >> [
+            run_update_active_fires,
+            run_skip_update_active_fires,
+        ]
+    )
+
+    decide_risk = BranchPythonOperator(
+        task_id="decide-update-risk",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "risco",
+        },
+    )
+
+    run_skip_update_risk = EmptyOperator(task_id="skip-update-risco")
+
+    (
+        run_check_update_risk
+        >> decide_risk
+        >> [
+            run_download_risk_file,
+            run_skip_update_risk,
+        ]
+    )
+
+    (
+        run_download_risk_file
+        >> run_update_risk
+        >> [run_classify_risk_ams, run_classify_risk_ppcdam]
+    )
+
+    run_update_active_fires >> [
+        run_classify_fires_ams,
+        run_classify_fires_ppcdam,
+        run_classify_fires_prodes,
     ]
-    run_update_amz_deter >> run_update_cer_deter
-    run_download_risk_file >> run_update_risk
 
-    [
-        run_update_active_fires,
-        run_update_cer_deter,
-        run_update_risk,
-    ] >> run_prepare_classification
+    (
+        run_update_amz_deter
+        >> run_update_cer_deter
+        >> run_update_pan_deter
+        >> run_finalize_deter_update
+    )
 
-    run_prepare_classification >> [
-        run_prepare_classification_ams,
-        run_prepare_classification_ppcdam,
-    ]
+    run_finalize_deter_update >> [run_classify_deter_ams, run_classify_deter_ppcdam]
 
-    # ams
-    run_prepare_classification_ams >> [
-        run_classify_active_fires_ams,
+    (
         run_classify_deter_ams,
+        run_classify_fires_ams,
         run_classify_risk_ams,
-    ]
+        run_skip_update_deter,
+        run_skip_update_active_fires,
+        run_skip_update_risk,
+    ) >> run_finalize_classification_ams
 
     [
-        run_classify_active_fires_ams,
-        run_classify_deter_ams,
-        run_classify_risk_ams,
-    ] >> run_finalize_classification_ams
-
-    # ppcdam
-    run_prepare_classification_ppcdam >> [
-        run_classify_active_fires_ppcdam,
         run_classify_deter_ppcdam,
+        run_classify_fires_ppcdam,
         run_classify_risk_ppcdam,
-    ]
-
-    [
-        run_classify_active_fires_ppcdam,
-        run_classify_deter_ppcdam,
-        run_classify_risk_ppcdam,
+        run_skip_update_deter,
+        run_skip_update_active_fires,
+        run_skip_update_risk,
     ] >> run_finalize_classification_ppcdam
 
+    [
+        run_classify_fires_prodes,
+        run_skip_update_active_fires,
+    ] >> run_finalize_classification_prodes
+
+    (
+        run_finalize_classification_ams,
+        run_finalize_classification_ppcdam,
+        run_finalize_classification_prodes,
+    ) >> run_drop_temp_tables
+
+    run_drop_temp_tables >> run_retrieve_process_status
+
+    run_prepare_status_email = PythonOperator(
+        task_id="prepare-status-email",
+        python_callable=prepare_status_email,
+        provide_context=True,
+        dag=dag,
+    )
+
+    run_send_status_email = send_status_email()
+
+    run_retrieve_process_status >> run_prepare_status_email >> run_send_status_email
 
 # DAG: ams-calculate-land-use-area
 
@@ -588,7 +878,7 @@ def calculate_biomes_land_use_area():
     env = get_conn_secrets_uri(["AMS_DB_URL"])
 
     return BashOperator(
-        task_id="ams-calculate-biomes-land-use-area",
+        task_id="calculate-biomes-land-use-area",
         bash_command=bash_command,
         env=env,
         append_env=True,
@@ -608,7 +898,7 @@ with DAG(
         op_kwargs={},
     )
 
-    run_update_environment = update_environment()
+    run_update_environment = update_environment(dag=dag)
 
     run_calculate_land_use_area = calculate_biomes_land_use_area()
 

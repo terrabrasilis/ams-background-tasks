@@ -15,6 +15,7 @@ from ams_background_tasks.tools.common import (
     CELL_25KM,
     CELL_150KM,
     PPCDAM,
+    PRODES,
     is_valid_cell,
     is_valid_land_use_type,
 )
@@ -39,11 +40,11 @@ logger = get_logger(__name__, sys.stdout)
 )
 def main(db_url: str, force_recreate: bool):
     """Create the AMS database."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
-    db = DatabaseFacade.from_url(db_url=db_url)
+    db = DatabaseFacade.create(db_url=db_url)
 
     db.create_postgis_extension()
     db.create_dblink_extension()
@@ -84,12 +85,18 @@ def main(db_url: str, force_recreate: bool):
     # land use
     create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=AMS)
     create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PPCDAM)
+    create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PRODES)
 
     # municipalities group
     create_municipalities_group_tables(db=db, force_recreate=force_recreate)
 
     # risk
     create_risk_tables(db=db, force_recreate=force_recreate)
+
+    # processing
+    create_processing_table(db=db, force_recreate=force_recreate)
+
+    db.commit()
 
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
@@ -571,16 +578,16 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
 def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the fires.active_fires table."""
     columns = [
-        "id int4 NOT NULL",
+        "id serial NOT NULL PRIMARY KEY",
         "uuid character varying(254)",
         "biome varchar(254)",
         "view_date date",
+        "prodes_class varchar(254)",
         "satelite varchar(254)",
         "estado varchar(254)",
         "municipio varchar(254)",
         "geom geometry(Point, 4674)",
         "geocode varchar(80)",
-        "PRIMARY KEY (id, biome)",
     ]
 
     schema = "fires"
@@ -593,38 +600,36 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    columns = [
-        "view_date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
+    # columns = [
+    # "view_date:btree",
+    # "uuid:btree",
+    # "biome:btree",
+    # "geocode:btree",
+    # "prodes_class:btree",
+    # "geom:gist",
+    # ]
 
-    db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
-    )
+    # db.create_indexes(
+    # schema=schema,
+    # name=name,
+    # columns=columns,
+    # force_recreate=force_recreate,
+    # )
 
 
 def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     """Create the deter.{name} table."""
     columns = [
-        "gid varchar(254) NOT NULL",
+        "gid serial NOT NULL",
+        "origin_gid varchar NOT NULL UNIQUE",
         "biome varchar(254)",
-        "origin_gid int4",
+        "view_date date",
         "classname varchar(254)",
-        "quadrant varchar(5)",
-        "orbitpoint varchar(10)",
-        "date date",
-        "sensor varchar(10)",
         "satellite varchar(13)",
-        "areatotalkm double precision",
-        "areamunkm double precision",
-        "areauckm double precision",
-        "mun varchar(254)",
-        "uf varchar(2)",
-        "uc varchar(254)",
-        "geom geometry(MultiPolygon, 4674)",
-        "month_year varchar(10)",
+        "sensor varchar(10)",
+        "path_row varchar(10)",
+        "area_km double precision",
+        "geom geometry(MultiPolygon,4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
@@ -640,73 +645,66 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
 
     columns = [
         "classname:btree",
-        "date:btree",
+        "view_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",
     ]
 
-    db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
-    )
+    # db.create_indexes(
+    #    schema=schema,
+    #    name=name,
+    #    columns=columns,
+    #    force_recreate=force_recreate,
+    # )
 
 
-def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
+def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
     """Create the deter.tmp_data table."""
     columns = [
-        "gid varchar(254) NOT NULL",
+        "gid serial NOT NULL",
         "biome varchar(254)",
         "classname varchar(254)",
-        "date date",
-        "areamunkm double precision",
+        "view_date date",
+        "area_km double precision",
         "geom geometry(MultiPolygon, 4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
 
-    schema = "deter"
-    name = "tmp_data"
-
     db.create_table(
-        schema=schema,
+        schema="deter",
         name="tmp_data",
         columns=columns,
         force_recreate=force_recreate,
     )
 
-    columns = [
-        "classname:btree",
-        "date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
-
-    db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
-    )
-
 
 def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
-    """Create the deter.[deter, deter_auth, deter_history] tables."""
-    # deter, deter_auth, deter_history
-    names = ("deter", "deter_auth", "deter_history")
-    for name in names:
-        _create_deter_table(db=db, name=name, force_recreate=force_recreate)
+    """Create the deter.[deter, deter_auth] tables."""
+    for prefix in ("", "tmp_"):
+        force_recreate = len(prefix) > 0
 
-    # deter_publish_date
-    db.create_table(
-        schema="deter",
-        name="deter_publish_date",
-        columns=[
-            "date date",
-            "biome varchar(254)",
-        ],
-        force_recreate=force_recreate,
-    )
+        # deter, deter_auth, deter_history
+        names = ("deter", "deter_auth")  # , "deter_history")
+        for name in names:
+            _create_deter_table(
+                db=db, name=f"{prefix}{name}", force_recreate=force_recreate
+            )
+
+        # deter_publish_date
+        db.create_table(
+            schema="deter",
+            name=f"{prefix}deter_publish_date",
+            columns=[
+                "date date",
+                "biome varchar(254)",
+            ],
+            force_recreate=force_recreate,
+        )
 
     # tmp_data
-    _create_tmp_data_table(db=db, force_recreate=force_recreate)
+    _create_deter_tmp_data_table(db=db, force_recreate=force_recreate)
 
 
 def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False):
@@ -826,7 +824,10 @@ def create_biome_tables(db: DatabaseFacade, force_recreate: bool = False):
     ]
 
     db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
     )
 
 
@@ -902,14 +903,18 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (13, 'FOCOS', 5, 'Pantanal'),
             (14, 'FOCOS', 5, 'Caatinga'),
             (15, 'FOCOS', 5, 'Mata Atlântica'),
-            (16, 'FOCOS', 5, 'Pampa');
+            (16, 'FOCOS', 5, 'Pampa'),
+            (17, 'DESMATAMENTO_CR', 1, 'Pantanal'),
+            (18, 'DESMATAMENTO_VEG', 1, 'Pantanal'),
+            (19, 'CICATRIZ_DE_QUEIMADA', 2, 'Pantanal'),
+            (20, 'MINERACAO', 4, 'Pantanal');
     """
 
     db.execute(sql=sql)
 
 
 def create_land_use_table(
-    db: DatabaseFacade, land_use_type=str, force_recreate: bool = False
+    db: DatabaseFacade, land_use_type: str, force_recreate: bool = False
 ):
     """Create the public.land_use_ams table."""
     assert is_valid_land_use_type(land_use_type=land_use_type)
@@ -937,8 +942,10 @@ def create_land_use_table(
     if table_exists and not force_recreate:
         return
 
-    land_use_categories = (
-        [
+    land_use_categories = []
+
+    if land_use_type == AMS:
+        land_use_categories = [
             "Terra indígena",
             "Unidade de conservação de proteção integral",
             "Unidade de conservação de uso sustentável (sem APA)",
@@ -949,8 +956,8 @@ def create_land_use_table(
             "Floresta pública não destinada",
             "Área sem registro fundiário",
         ]
-        if land_use_type == AMS
-        else [
+    elif land_use_type == PPCDAM:
+        land_use_categories = [
             "Terra indígena",
             "Unidade de conservação",
             "Território quilombola",
@@ -966,7 +973,13 @@ def create_land_use_table(
             "Propriedade privada (Dados do CAR)",
             "Área sem registro fundiário",
         ]
-    )
+    else:  # prodes
+        land_use_categories = [
+            "Vegetacao Nativa",
+            "Desmatamento Recente",
+            "Desmatamento Consolidado",            
+            "Outros",
+        ]
 
     values = [
         f"({index+1}, '{value}', {index})"
@@ -1202,6 +1215,43 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "date_id:btree",
             "biome:btree",
             "geocode:btree",
+        ],
+        force_recreate=force_recreate,
+    )
+
+
+def create_processing_table(db: DatabaseFacade, force_recreate: bool):
+    schema = "public"
+    name = "processing"
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id SERIAL NOT NULL PRIMARY KEY",
+            "date DATE NOT NULL",
+            "indicator VARCHAR(40) NOT NULL",
+            "process VARCHAR(100) NOT NULL",
+            "start_process TIMESTAMP NOT NULL",
+            "end_process TIMESTAMP",
+            "status VARCHAR(20) DEFAULT 'pending'",
+            "CONSTRAINT valid_dates CHECK (end_process IS NULL OR end_process > start_process)",
+            "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam', 'classification-prodes'))",
+            "CONSTRAINT valid_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=[
+            "indicator:btree",
+            "date:btree",
+            "process:btree",
+            "start_process:btree",
+            "end_process:btree",
+            "status:btree",
         ],
         force_recreate=force_recreate,
     )
