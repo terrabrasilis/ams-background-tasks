@@ -8,27 +8,27 @@ The **DAG `ams-create-db`** is responsible for creating and updating the AMS dat
 
 - `check-variables`
 - `update-environment`
-- `check-recreate-db`
+- `check-create-db`
 - `create-db`
 - `update-biome`
 - `update-spatial-units`
-- `prepare-classification-{ams|ppcdam}`
+- `prepare-classification-{ams|ppcdam|prodes}`
 - `need-update-{deter|focos|risco}`
 - `decide-update-{deter|focos|risco}`
-- `update-{amz|cer}cer-deter`
+- `update-{amz|cer|pan}-deter`
 - `finalize-deter-update`
 - `update-active-fires`
 - `download-inpe-risk-file`
 - `update-inpe-risk`
-- `classify-{deter|focos|risco}-by-land-use-{ams|ppcdam}`
-- `finalize-classification-{deter|focos|risco}-{ams|ppcdam}`
+- `classify-{deter|fires|risk}-by-land-use-{ams|ppcdam|prodes}`
+- `finalize-classification-{ams|ppcdam|prodes}`
 - `retrieve-process-status`
 - `prepare-status-email`
 - `send-status-email`
 
 Each of these tasks is a Python command-line tool developed using the **Click** library.
 
-To run the DAG `ams-create-db`, three external databases are required: one for **DETER data** (for each biome), another for **active fires data**, and an **auxiliary database**.
+To run the DAG `create-db`, three external databases are required: one for **DETER data** (for each biome), another for **active fires data**, and an **auxiliary database**.
 
 From the auxiliary database, the following tables are required:
 
@@ -57,7 +57,6 @@ $ jupyter-notebook notebooks/update_auxiliary.ipynb
 ## Run on Production Environment
 
 This DAG is made to run from "DagBag", this means that all the dag files are inside the root folder.
-Assuming that the Airflow environment is using 
 
 ### Initializing production airflow connections and variables
 
@@ -73,6 +72,8 @@ Setup this connections ids:
 5) `AMS_DB_URL` (AMS ouput database, ex: ams_new)
 6) `AMS_FTP_URL` (FTP to get the risk file provided by IBAMA)
 7) `smtp_default` (stmp server configuration to send the processing status mail)
+8) `AMS_PAN_DETER_B_DB_URL` (Deter Pantanal, database, ex: deter_pantanal_nb)
+9) `AMS_FC_DB_URL` (Fires dashboard database, ex: fires_dashboard)
 
 
 Example how to setup the connection fields:
