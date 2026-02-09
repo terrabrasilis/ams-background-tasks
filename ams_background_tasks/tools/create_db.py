@@ -230,7 +230,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.score) AS score
                             FROM public."municipalities_land_use" mlu
                             WHERE
-                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                 AND mlu.land_use_id = ANY (land_use_ids)
                                 AND mlu.classname = clsname
                                 AND mlu.date > enddate
@@ -386,7 +386,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    SUM(slu.counts) AS counts,
                                    SUM(slu.score) AS score
                             FROM public."states_land_use" slu
-                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                 AND slu.land_use_id = ANY (land_use_ids)
                                 AND slu.classname = clsname
                                 AND slu.date > enddate
@@ -545,7 +545,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.counts) AS counts,
                                                SUM(cls.score) AS score
                                         FROM public."cs_{cell}_land_use" cls
-                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                             AND cls.land_use_id = ANY (land_use_ids)
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
@@ -873,7 +873,7 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (5, 'AF', 'Focos (Programa Queimadas)', 4),
             (6, 'RK', 'Risco de desmatamento (IBAMA)', 5),
             (7, 'RI', 'Risco de desmatamento', 6),
-            (8, 'FS', 'Risco de espalhamento de fogo', 7)
+            (8, 'FS', 'Risco de espalhamento do fogo', 7)
     """
 
     db.execute(sql=sql)
