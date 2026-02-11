@@ -152,6 +152,7 @@ def recreate_spatial_table(
             "counts int4",
             "risk double precision NOT NULL DEFAULT 0.0",
             "score double precision NOT NULL DEFAULT 0.0",
+            "units int4",
             "geocode character varying(80)",
             "biome character varying(254)",
         ],

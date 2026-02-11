@@ -176,7 +176,7 @@ def insert_data_in_land_use_tables(
         risk_column = ",risk" if risk else ""
         sql = f"""
             INSERT INTO "{spatial_unit}_land_use{land_use_type_suffix}" (
-                suid, land_use_id, classname, "date", {measure}, biome, geocode {risk_column}
+                suid, land_use_id, classname, "date", {measure}, units, biome, geocode {risk_column}
             )
             VALUES {','.join(values)};
         """
@@ -250,6 +250,7 @@ def insert_data_in_land_use_tables(
                             '{key[2]}',
                             TIMESTAMP '{key[3].year}-{key[3].month}-{key[3].day}',
                             {value * multiplier},
+                            {value},
                             '{key[4]}',
                             '{key[5]}'
                             {(','+str(key[6]) if risk else '')}
