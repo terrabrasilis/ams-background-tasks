@@ -180,7 +180,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -217,7 +217,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(mlu_j.perc, 0) AS percentage, 
                             COALESCE(mlu_j.total, 0) AS area, 
                             COALESCE(mlu_j.counts, 0) AS counts,
-                            COALESCE(mlu_j.score, 0) AS score
+                            COALESCE(mlu_j.score, 0) AS score,
+                            COALESCE(mlu_j.units, 0) AS units
                         FROM public."municipalities" mun
                         INNER JOIN (
                             SELECT 
@@ -227,7 +228,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.percentage) AS perc, 
                                 SUM(mlu.area) AS total, 
                                 SUM(mlu.counts) AS counts,
-                                SUM(mlu.score) AS score
+                                SUM(mlu.score) AS score,
+                                SUM(mlu.units) AS units
                             FROM public."municipalities_land_use" mlu
                             WHERE
                                 (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
@@ -337,7 +339,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -375,7 +377,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(slu_j.perc, 0) AS percentage, 
                             COALESCE(slu_j.total, 0) AS area, 
                             COALESCE(slu_j.counts, 0) AS counts,
-                            COALESCE(slu_j.score, 0) AS score
+                            COALESCE(slu_j.score, 0) AS score,
+                            COALESCE(slu_j.units, 0) AS units
                         FROM public."states" sta
                         INNER JOIN (
                             SELECT slu.suid, 
@@ -384,7 +387,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    SUM(slu.percentage) AS perc, 
                                    SUM(slu.area) AS total, 
                                    SUM(slu.counts) AS counts,
-                                   SUM(slu.score) AS score
+                                   SUM(slu.score) AS score,
+                                   SUM(slu.units) AS units
                             FROM public."states_land_use" slu
                             WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                 AND slu.land_use_id = ANY (land_use_ids)
@@ -497,7 +501,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False
         )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -534,7 +538,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                         COALESCE(cls_j.perc, 0) AS percentage, 
                                         COALESCE(cls_j.total, 0) AS area, 
                                         COALESCE(cls_j.counts, 0) AS counts,
-                                        COALESCE(cls_j.score, 0) AS score
+                                        COALESCE(cls_j.score, 0) AS score,
+                                        COALESCE(cls_j.units, 0) AS units
                                 FROM public."cs_{cell}" cel
                                 LEFT JOIN (
                                         SELECT cls.suid, 
@@ -543,7 +548,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.percentage) AS perc, 
                                                SUM(cls.area) AS total, 
                                                SUM(cls.counts) AS counts,
-                                               SUM(cls.score) AS score
+                                               SUM(cls.score) AS score,
+                                               SUM(cls.units) AS units
                                         FROM public."cs_{cell}_land_use" cls
                                         WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                             AND cls.land_use_id = ANY (land_use_ids)
