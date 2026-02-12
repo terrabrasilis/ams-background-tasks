@@ -196,8 +196,8 @@ def insert_data_in_land_use_tables(
     elif indicator == ACTIVE_FIRES_INDICATOR or indicator is RISK_IBAMA_INDICATOR:
         measure = "counts"
     elif indicator == FIRE_SPREADING_RISK_INDICATOR:
-        measure = "area"
-        multiplier = FIRE_SPREADING_RISK_PIXEL_AREA
+        measure = "counts"
+        # multiplier = FIRE_SPREADING_RISK_PIXEL_AREA
     elif indicator == RISK_INPE_INDICATOR:
         measure = "counts"
     else:

@@ -78,7 +78,7 @@ def main(
 
     delete_land_use_tables_from_tmp(db=db, land_use_type=land_use_type)
 
-    if DETER_INDICATOR in indicators or FIRE_SPREADING_RISK_INDICATOR in indicators:
+    if DETER_INDICATOR in indicators:  # or FIRE_SPREADING_RISK_INDICATOR in indicators:
         percentage_calculation_for_areas(
             db=db, is_temp=True, land_use_type=land_use_type
         )
