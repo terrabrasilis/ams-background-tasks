@@ -59,14 +59,25 @@ def _path_to_pathlib(ctx, param, value):
     default=False,
     help="Force to process the fire spreading risk files.",
 )
+@click.option(
+    "--last",
+    required=False,
+    is_flag=True,
+    default=True,
+    help="Only processes the most recent fire spreading risk files.",
+)
 @click.option("--srid", type=int, default=4674, help="SRID of the risk points.")
-def main(db_url: str, save_dir: Path, srid: str, force: bool):
+def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
     """Process all files in the dir."""
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
     db = DatabaseFacade.create(db_url=db_url)
+
+    if last:
+        db.truncate(table=_FIRE_SPREADING_RISK_DB_DATA_TABLE)
+        force = True
 
     cond = "" if force else "WHERE is_new=True"
 
@@ -104,6 +115,7 @@ def main(db_url: str, save_dir: Path, srid: str, force: bool):
             process_fire_spreading_risk_file(db=db, zip_path=zip_path, srid=srid)
         else:
             logger.debug("file %s not found.", zip_path)
+            continue
 
         db.execute(
             sql=f"""
@@ -112,6 +124,9 @@ def main(db_url: str, save_dir: Path, srid: str, force: bool):
                 WHERE file_name='{zip_path.name}';
             """
         )
+
+        if last:
+            break
 
     sql = f"""
         UPDATE {_FIRE_SPREADING_RISK_DB_DATA_TABLE} AS rk
