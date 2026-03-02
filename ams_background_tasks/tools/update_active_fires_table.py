@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import sys
 from time import sleep
 
 import click
@@ -12,6 +12,7 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
+from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_INDICATOR,
     BIOMES,
@@ -22,7 +23,7 @@ from ams_background_tasks.tools.common import (
     prepare_table_to_update,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 
 @click.command("update-active-fires")
