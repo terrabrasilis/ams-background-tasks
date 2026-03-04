@@ -12,6 +12,8 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
+    ACTIVE_FIRES_TODAY_CLASSNAME,
+    ACTIVE_FIRES_TODAY_INDICATOR,
     AMS,
     DETER_INDICATOR,
     FIRE_SPREADING_RISK_INDICATOR,
@@ -126,7 +128,7 @@ def percentage_calculation_for_areas(
             WHERE
                 public."{tmpspatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
                 AND public."{tmpspatial_unit}_land_use{land_use_type_suffix}".classname NOT IN (
-                    '{ACTIVE_FIRES_CLASSNAME}','{RISK_IBAMA_CLASSNAME}', '{RISK_INPE_CLASSNAME}'
+                    '{ACTIVE_FIRES_TODAY_CLASSNAME}', '{ACTIVE_FIRES_CLASSNAME}','{RISK_IBAMA_CLASSNAME}', '{RISK_INPE_CLASSNAME}'
                 )
         """
         db.execute(sql)
@@ -181,8 +183,13 @@ def copy_data_to_final_tables(db: DatabaseFacade, indicators: list, land_use_typ
     if DETER_INDICATOR in indicators:
         copy_deter_land_structure(db=db, land_use_type=land_use_type)
 
-    if ACTIVE_FIRES_INDICATOR in indicators:
-        copy_fires_land_structure(db=db, land_use_type=land_use_type)
+    if (
+        ACTIVE_FIRES_INDICATOR in indicators
+        or ACTIVE_FIRES_TODAY_INDICATOR in indicators
+    ):
+        copy_fires_land_structure(
+            db=db, land_use_type=land_use_type, indicators=indicators
+        )
 
     if RISK_INPE_INDICATOR in indicators:
         copy_risk_land_structure(db=db, land_use_type=land_use_type)
@@ -235,23 +242,35 @@ def copy_deter_land_structure(db: DatabaseFacade, land_use_type: str):
     optimize_land_structure_table(db=db, table=table)
 
 
-def copy_fires_land_structure(db: DatabaseFacade, land_use_type: str):
+def copy_fires_land_structure(db: DatabaseFacade, land_use_type: str, indicators: list):
+    def _copy_fires_land_structure(db: DatabaseFacade, table_name: str):
+        logger.info(
+            "copying data from %s to %s.",
+            get_prefix(is_temp=True) + table_name,
+            table_name,
+        )
+
+        create_land_structure_table(db=db, table=table_name, force_recreate=True)
+
+        # copy data from temporary table
+        db.copy_table(
+            src=f"{get_prefix(is_temp=True)}{table_name}",
+            dst=table_name,
+            cols_to_ignore=[],
+            with_commit=False,
+        )
+
+        optimize_land_structure_table(db=db, table=table_name)
+
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
-    table = f"fires_land_structure{land_use_type_suffix}"
 
-    logger.info("copying data from %s to %s.", get_prefix(is_temp=True) + table, table)
+    if ACTIVE_FIRES_INDICATOR in indicators:
+        table_name = f"fires_land_structure{land_use_type_suffix}"
+        _copy_fires_land_structure(db=db, table_name=table_name)
 
-    create_land_structure_table(db=db, table=table, force_recreate=True)
-
-    # copy data from temporary table
-    db.copy_table(
-        src=f"{get_prefix(is_temp=True)}{table}",
-        dst=table,
-        cols_to_ignore=[],
-        with_commit=False,
-    )
-
-    optimize_land_structure_table(db=db, table=table)
+    if ACTIVE_FIRES_TODAY_INDICATOR in indicators:
+        table_name = f"fires_today_land_structure{land_use_type_suffix}"
+        _copy_fires_land_structure(db=db, table_name=table_name)
 
 
 def copy_risk_land_structure(db: DatabaseFacade, land_use_type: str):
