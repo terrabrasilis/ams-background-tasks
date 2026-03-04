@@ -22,8 +22,11 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     ACTIVE_FIRES_CLASSNAME,
     ACTIVE_FIRES_INDICATOR,
+    ACTIVE_FIRES_TODAY_CLASSNAME,
+    ACTIVE_FIRES_TODAY_INDICATOR,
     AMAZONIA,
     AMS,
+    BIOMES,
     DETER_INDICATOR,
     FIRE_SPREADING_RISK_CLASSNAME,
     FIRE_SPREADING_RISK_INDICATOR,
@@ -42,6 +45,7 @@ from ams_background_tasks.tools.common import (
     get_prefix,
     is_valid_biome,
     is_valid_indicator,
+    map_indicator_to_table_name,
     read_spatial_units,
 )
 
@@ -79,7 +83,14 @@ logger = get_logger(__name__, sys.stdout)
     default=False,
     help="if True, all data of external database will be processed.",
 )
-@click.option("--biome", type=str, required=True, help="Biome.", multiple=True)
+@click.option(
+    "--biome",
+    type=click.Choice(BIOMES),
+    required=True,
+    help="Biome.",
+    multiple=True,
+    default=BIOMES,
+)
 @click.option(
     "--indicator",
     type=str,
@@ -109,6 +120,8 @@ def main(
     logger.debug(land_use_dir)
     logger.debug(biome)
 
+    logger.info("processing %s", indicator)
+
     if land_use_type != PRODES:
         assert Path(land_use_dir).exists()
 
@@ -122,7 +135,6 @@ def main(
     )
 
     if indicator == DETER_INDICATOR:
-        logger.info("processing deter")
         process_deter(
             db=db,
             biome_list=list(biome),
@@ -130,17 +142,16 @@ def main(
             land_use_type=land_use_type,
         )
 
-    if indicator == ACTIVE_FIRES_INDICATOR:
-        logger.info("processing active fires")
+    if indicator in [ACTIVE_FIRES_INDICATOR, ACTIVE_FIRES_TODAY_INDICATOR]:
         process_active_fires(
             db=db,
+            indicator=indicator,
             biome_list=list(biome),
             land_use_dir=Path(land_use_dir),
             land_use_type=land_use_type,
         )
 
     if indicator == FIRE_SPREADING_RISK_INDICATOR:
-        logger.info("processing fire spreading risk")
         process_fire_spreading_risk(
             db=db,
             biome_list=list(biome),
@@ -193,7 +204,11 @@ def insert_data_in_land_use_tables(
     if indicator == DETER_INDICATOR:
         measure = "area"
         multiplier = PIXEL_LAND_USE_AREA
-    elif indicator == ACTIVE_FIRES_INDICATOR or indicator is RISK_IBAMA_INDICATOR:
+    elif indicator in [
+        ACTIVE_FIRES_INDICATOR,
+        RISK_IBAMA_INDICATOR,
+        ACTIVE_FIRES_TODAY_INDICATOR,
+    ]:
         measure = "counts"
     elif indicator == FIRE_SPREADING_RISK_INDICATOR:
         measure = "area"
@@ -286,7 +301,11 @@ def insert_data_in_land_use_tables(
 
 
 def process_active_fires(
-    db: DatabaseFacade, biome_list: list, land_use_dir: Path, land_use_type: str
+    db: DatabaseFacade,
+    indicator: str,
+    biome_list: list,
+    land_use_dir: Path,
+    land_use_type: str,
 ):
     for biome in biome_list:
         logger.info("processing biome %s", biome)
@@ -299,6 +318,7 @@ def process_active_fires(
 
             process_active_fires_land_structure(
                 db=db,
+                indicator=indicator,
                 is_temp=True,
                 land_use_image=land_use_image,
                 land_use_type=land_use_type,
@@ -309,7 +329,9 @@ def process_active_fires(
                 db=db, is_temp=True, biome=biome
             )
 
-    insert_fires_in_land_use_tables(db=db, is_temp=True, land_use_type=land_use_type)
+    insert_fires_in_land_use_tables(
+        db=db, indicator=indicator, is_temp=True, land_use_type=land_use_type
+    )
 
 
 def process_active_fires_land_structure_for_prodes(
@@ -336,6 +358,7 @@ def process_active_fires_land_structure_for_prodes(
 
 
 def process_active_fires_land_structure(
+    indicator: str,
     is_temp: bool,
     land_use_image: Path,
     land_use_type: str,
@@ -345,23 +368,33 @@ def process_active_fires_land_structure(
     assert is_temp
 
     def _insert_into_active_fires_land_structure(
-        db: DatabaseFacade, table_prefix: str, values
+        db: DatabaseFacade, table_prefix: str, table_name: str, values
     ):
         land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
         sql = f"""
-            INSERT INTO {table_prefix}fires_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
+            INSERT INTO {table_prefix}{table_name}_land_structure{land_use_type_suffix} (gid, biome, geocode, land_use_id, num_pixels)
             VALUES {','.join(values)};
         """
         logger.info(
-            "inserting into %sfires_land_structure_%s", table_prefix, land_use_type
+            "inserting into %s%s_land_structure_%s",
+            table_prefix,
+            table_name,
+            land_use_type,
         )
         db.execute(sql=sql, log=False)
 
     table_prefix = get_prefix(is_temp=is_temp)
+    table_name = map_indicator_to_table_name(indicator=indicator)
+
+    fires_table = (
+        "fires.active_fires_today"
+        if indicator == ACTIVE_FIRES_TODAY_INDICATOR
+        else "fires.active_fires"
+    )
 
     sql = f"""
         SELECT id as gid, biome, geocode, geom
-        FROM fires.active_fires
+        FROM {fires_table}
         WHERE biome='{biome}' AND geocode IS NOT NULL
     """
 
@@ -392,13 +425,16 @@ def process_active_fires_land_structure(
 
             if len(values) >= OPT_MAX_VALUES:  # optimizing
                 _insert_into_active_fires_land_structure(
-                    db=db, table_prefix=table_prefix, values=values
+                    db=db,
+                    table_prefix=table_prefix,
+                    table_name=table_name,
+                    values=values,
                 )
                 values = []
 
     if len(values) > 0:
         _insert_into_active_fires_land_structure(
-            db=db, table_prefix=table_prefix, values=values
+            db=db, table_prefix=table_prefix, table_name=table_name, values=values
         )
         values = []
 
@@ -407,15 +443,27 @@ def process_active_fires_land_structure(
 
 
 def insert_fires_in_land_use_tables(
-    db: DatabaseFacade, is_temp: bool, land_use_type: str
+    db: DatabaseFacade, indicator: str, is_temp: bool, land_use_type: str
 ):
     assert is_temp
 
-    logger.info("Insert ACTIVE FIRES data in land use tables for each spatial units.")
+    logger.info("Insert data in land use tables for each spatial units.")
 
     land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
+    table_name = map_indicator_to_table_name(indicator=indicator)
     table_prefix = get_prefix(is_temp=is_temp)
+
+    fires_table = (
+        "fires.active_fires_today"
+        if indicator == ACTIVE_FIRES_TODAY_INDICATOR
+        else "fires.active_fires"
+    )
+    classname = (
+        ACTIVE_FIRES_TODAY_CLASSNAME
+        if indicator == ACTIVE_FIRES_TODAY_INDICATOR
+        else ACTIVE_FIRES_CLASSNAME
+    )
 
     data = gpd.GeoDataFrame.from_postgis(
         sql=f"""
@@ -425,13 +473,13 @@ def insert_fires_in_land_use_tables(
                 a.num_pixels,
                 a.biome,
                 a.geocode,
-                '{ACTIVE_FIRES_CLASSNAME}' as classname,
+                '{classname}' as classname,
                 b.view_date AS date,
                 b.geom AS geometry
             FROM
-                {table_prefix}fires_land_structure{land_use_type_suffix} a 
+                {table_prefix}{table_name}_land_structure{land_use_type_suffix} a 
             INNER JOIN
-                fires.active_fires b ON a.gid = b.id AND a.biome = b.biome AND a.geocode = b.geocode;
+                {fires_table} b ON a.gid = b.id AND a.biome = b.biome AND a.geocode = b.geocode;
         """,
         con=db.conn,
         geom_col="geometry",
@@ -439,7 +487,7 @@ def insert_fires_in_land_use_tables(
     )
 
     insert_data_in_land_use_tables(
-        indicator=ACTIVE_FIRES_INDICATOR,
+        indicator=indicator,
         db=db,
         data=data,
         table_prefix=table_prefix,

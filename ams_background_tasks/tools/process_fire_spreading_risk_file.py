@@ -16,16 +16,11 @@ from shapely.geometry import Point
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-
-
 from ams_background_tasks.tools.common import (
     analyze_table,
-    create_processing,
-    finalize_processing,
     optimize_table,
     prepare_table_to_update,
 )
-
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -99,7 +94,10 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
     ]
 
     prepare_table_to_update(
-        db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE, columns=index_columns
+        db=db,
+        schema=_FIRE_SPREADING_RISK_SCHEMA,
+        name=_FIRE_SPREADING_RISK_DATA_TABLE,
+        columns=index_columns,
     )
 
     cond = "" if force else "WHERE is_new=True"
@@ -166,12 +164,17 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
     db.execute(sql)
 
     optimize_table(
-        db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE, columns=index_columns
+        db=db,
+        schema=_FIRE_SPREADING_RISK_SCHEMA,
+        name=_FIRE_SPREADING_RISK_DATA_TABLE,
+        columns=index_columns,
     )
 
     db.commit()
 
-    analyze_table(db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE)
+    analyze_table(
+        db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE
+    )
 
 
 def process_fire_spreading_risk_file(db: DatabaseFacade, zip_path: Path, srid: str):

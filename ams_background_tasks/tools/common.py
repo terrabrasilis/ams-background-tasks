@@ -81,6 +81,18 @@ def is_valid_indicator(indicator: str):
     return indicator in INDICATORS
 
 
+def map_indicator_to_table_name(indicator):
+    assert is_valid_indicator(indicator)
+    return {
+        DETER_INDICATOR: "deter",
+        FIRE_SPREADING_RISK_INDICATOR: "fire_sr",
+        ACTIVE_FIRES_INDICATOR: "fires",
+        ACTIVE_FIRES_TODAY_INDICATOR: "fires_today",
+        RISK_INPE_INDICATOR: "risk",
+        RISK_IBAMA_INDICATOR: "risk_ibama",
+    }[indicator]
+
+
 def is_valid_land_use_type(land_use_type: str):
     return land_use_type in LAND_USE_TYPES
 
