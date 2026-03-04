@@ -17,17 +17,27 @@ from shapely.geometry import Point
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
 
+
+from ams_background_tasks.tools.common import (
+    analyze_table,
+    create_processing,
+    finalize_processing,
+    optimize_table,
+    prepare_table_to_update,
+)
+
+
 logger = get_logger(__name__, sys.stdout)
 
 _FIRE_SPREADING_RISK_VALUE = 0
-_FIRE_SPREADING_RISK_DB_SCHEMA = "fire_spreading_risk"
-_FIRE_SPREADING_RISK_DB_FILE_TABLE_NAME = "risk_file"
-_FIRE_SPREADING_RISK_DB_DATA_TABLE_NAME = "risk_data"
-_FIRE_SPREADING_RISK_DB_DATA_TABLE = (
-    f"{_FIRE_SPREADING_RISK_DB_SCHEMA}.{_FIRE_SPREADING_RISK_DB_DATA_TABLE_NAME}"
+_FIRE_SPREADING_RISK_SCHEMA = "fire_spreading_risk"
+_FIRE_SPREADING_RISK_FILE_LOG_TABLE = "risk_file"
+_FIRE_SPREADING_RISK_DATA_TABLE = "risk_data"
+_FIRE_SPREADING_RISK_TABLE_FQN = (
+    f"{_FIRE_SPREADING_RISK_SCHEMA}.{_FIRE_SPREADING_RISK_DATA_TABLE}"
 )
-_FIRE_SPREADING_RISK_DB_FILE_TABLE = (
-    f"{_FIRE_SPREADING_RISK_DB_SCHEMA}.{_FIRE_SPREADING_RISK_DB_FILE_TABLE_NAME}"
+_FIRE_SPREADING_RISK_FILE_LOG_TABLE_FQN = (
+    f"{_FIRE_SPREADING_RISK_SCHEMA}.{_FIRE_SPREADING_RISK_FILE_LOG_TABLE}"
 )
 
 
@@ -76,14 +86,27 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
     db = DatabaseFacade.create(db_url=db_url)
 
     if last:
-        db.truncate(table=_FIRE_SPREADING_RISK_DB_DATA_TABLE)
+        db.truncate(table=_FIRE_SPREADING_RISK_TABLE_FQN)
         force = True
+
+    index_columns = [
+        "view_date:btree",
+        "biome:btree",
+        "geocode:btree",
+        "biome,view_date:btree",
+        "view_date,id,biome:btree",
+        "geom:gist",
+    ]
+
+    prepare_table_to_update(
+        db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE, columns=index_columns
+    )
 
     cond = "" if force else "WHERE is_new=True"
 
     sql = f"""
         SELECT file_name
-        FROM {_FIRE_SPREADING_RISK_DB_FILE_TABLE}
+        FROM {_FIRE_SPREADING_RISK_FILE_LOG_TABLE_FQN}
         {cond}
     """
 
@@ -97,7 +120,7 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
 
         sql = f"""
             SELECT view_date
-            FROM {_FIRE_SPREADING_RISK_DB_DATA_TABLE}
+            FROM {_FIRE_SPREADING_RISK_TABLE_FQN}
             WHERE view_date='{file_date}'::date
         """
         res = db.fetchall(sql)
@@ -119,7 +142,7 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
 
         db.execute(
             sql=f"""
-                UPDATE {_FIRE_SPREADING_RISK_DB_FILE_TABLE}
+                UPDATE {_FIRE_SPREADING_RISK_FILE_LOG_TABLE_FQN}
                 SET is_new=False, processed_at=now()
                 WHERE file_name='{zip_path.name}';
             """
@@ -129,7 +152,7 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
             break
 
     sql = f"""
-        UPDATE {_FIRE_SPREADING_RISK_DB_DATA_TABLE} AS rk
+        UPDATE {_FIRE_SPREADING_RISK_TABLE_FQN} AS rk
         SET geocode=mun.geocode, municipality=mun.name
         FROM public.municipalities_biome mub
         JOIN public.municipalities mun
@@ -142,14 +165,20 @@ def main(db_url: str, save_dir: Path, srid: str, last: bool, force: bool):
 
     db.execute(sql)
 
+    optimize_table(
+        db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE, columns=index_columns
+    )
+
     db.commit()
+
+    analyze_table(db=db, schema=_FIRE_SPREADING_RISK_SCHEMA, name=_FIRE_SPREADING_RISK_DATA_TABLE)
 
 
 def process_fire_spreading_risk_file(db: DatabaseFacade, zip_path: Path, srid: str):
     """Extract risk point data from a ZIP file and store it in the database."""
 
     def _insert_into_risk_data_table(values: list):
-        sql = f"INSERT INTO {_FIRE_SPREADING_RISK_DB_DATA_TABLE} (geom, biome, view_date, src) VALUES {','.join(values)};"
+        sql = f"INSERT INTO {_FIRE_SPREADING_RISK_TABLE_FQN} (geom, biome, view_date, src) VALUES {','.join(values)};"
         db.execute(sql=sql, log=False)
 
     with zipfile.ZipFile(zip_path, "r") as zipf:
