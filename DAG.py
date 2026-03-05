@@ -207,6 +207,21 @@ def update_active_fires(dag):
     )
 
 
+def update_active_fires_today(dag):
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-update-active-fires-today {_get_all_biomes()} "
+        f"--limit={Variable.get('AMS_LIMIT', 0)}"
+    )
+    return BashOperator(
+        task_id="update-active-fires-today",
+        bash_command=bash_command,
+        env=get_conn_secrets_uri(["AMS_DB_URL"]),
+        append_env=True,
+        dag=dag,
+    )
+
+
 def update_amz_deter(dag):
     bash_command = f"source {venv_path}/bin/activate && "
     bash_command += (
@@ -387,6 +402,39 @@ def classify_fires_by_land_use_ppcdam(dag):
 
 def classify_fires_by_land_use_prodes(dag):
     return _classify_fires_by_land_use(dag=dag, land_use_type="prodes")
+
+
+# active fires today data classification
+
+
+def _classify_fires_today_by_land_use(dag, land_use_type: str):
+    bash_command = f"source {venv_path}/bin/activate && "
+    bash_command += (
+        f"ams-classify-by-land-use "
+        f"{('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
+        f"{_get_all_biomes()} "
+        "--indicator='focos-hoje' "
+        f"--land-use-type={land_use_type} "
+        "--land-use-dir=" + land_use_dir
+    )
+
+    env = get_conn_secrets_uri(["AMS_DB_URL"])
+
+    return BashOperator(
+        task_id=f"classify-fires-today-by-land-use-{land_use_type}",
+        bash_command=bash_command,
+        env=env,
+        append_env=True,
+        dag=dag,
+    )
+
+
+def classify_fires_today_by_land_use_ams(dag):
+    return _classify_fires_today_by_land_use(dag=dag, land_use_type="ams")
+
+
+def classify_fires_today_by_land_use_ppcdam(dag):
+    return _classify_fires_today_by_land_use(dag=dag, land_use_type="ppcdam")
 
 
 # fire spreading risk classification
@@ -618,6 +666,8 @@ def decide_update_indicator(**context):
             return "update-amz-deter"
         elif indicator == "focos":
             return "update-active-fires"
+        elif indicator == "focos-hoje":
+            return "update-active-fires-today"
         elif indicator == "risco":
             return "download-inpe-risk-file"
         elif indicator == "risco-espalhamento-fogo":
@@ -633,6 +683,10 @@ def need_update_deter(dag):
 
 def need_update_fires(dag):
     return _need_update_indicator(dag=dag, indicator="focos")
+
+
+def need_update_fires_today(dag):
+    return _need_update_indicator(dag=dag, indicator="focos-hoje")
 
 
 def need_update_risk(dag):
@@ -745,6 +799,7 @@ with DAG(
 
     # indicators
     run_update_active_fires = update_active_fires(dag=dag)
+    run_update_active_fires_today = update_active_fires_today(dag=dag)
     run_update_amz_deter = update_amz_deter(dag=dag)
     run_update_cer_deter = update_cer_deter(dag=dag)
     run_update_pan_deter = update_pan_deter(dag=dag)
@@ -768,6 +823,9 @@ with DAG(
     run_classify_fires_ams = classify_fires_by_land_use_ams(dag=dag)
     run_classify_fires_ppcdam = classify_fires_by_land_use_ppcdam(dag=dag)
     run_classify_fires_prodes = classify_fires_by_land_use_prodes(dag=dag)
+
+    run_classify_fires_today_ams = classify_fires_today_by_land_use_ams(dag=dag)
+    run_classify_fires_today_ppcdam = classify_fires_today_by_land_use_ppcdam(dag=dag)
 
     run_classify_risk_ams = classify_risk_by_land_use_ams(dag=dag)
     run_classify_risk_ppcdam = classify_risk_by_land_use_ppcdam(dag=dag)
@@ -809,6 +867,7 @@ with DAG(
 
     run_check_update_deter = need_update_deter(dag=dag)
     run_check_update_fires = need_update_fires(dag=dag)
+    run_check_update_fires_today = need_update_fires_today(dag=dag)
     run_check_update_risk = need_update_risk(dag=dag)
     run_check_update_fire_sr = need_update_fire_sr(dag=dag)
 
@@ -816,9 +875,11 @@ with DAG(
         run_check_update_risk,
         run_check_update_deter,
         run_check_update_fires,
+        run_check_update_fires_today,
         run_check_update_fire_sr,
     ]
 
+    # deter
     decide_deter = BranchPythonOperator(
         task_id="decide-update-deter",
         python_callable=decide_update_indicator,
@@ -839,6 +900,7 @@ with DAG(
         ]
     )
 
+    # fires
     decide_fires = BranchPythonOperator(
         task_id="decide-update-fires",
         python_callable=decide_update_indicator,
@@ -859,6 +921,28 @@ with DAG(
         ]
     )
 
+    # fires today
+    decide_fires_today = BranchPythonOperator(
+        task_id="decide-update-fires-today",
+        python_callable=decide_update_indicator,
+        provide_context=True,
+        op_kwargs={
+            "indicator": "focos-hoje",
+        },
+    )
+
+    run_skip_update_active_fires_today = EmptyOperator(task_id="skip-update-focos-hoje")
+
+    (
+        run_check_update_fires_today
+        >> decide_fires_today
+        >> [
+            run_update_active_fires_today,
+            run_skip_update_active_fires_today,
+        ]
+    )
+
+    # risk
     decide_risk = BranchPythonOperator(
         task_id="decide-update-risk",
         python_callable=decide_update_indicator,
@@ -870,6 +954,16 @@ with DAG(
 
     run_skip_update_risk = EmptyOperator(task_id="skip-update-risco")
 
+    (
+        run_check_update_risk
+        >> decide_risk
+        >> [
+            run_download_risk_file,
+            run_skip_update_risk,
+        ]
+    )
+
+    # fire spreading risk
     decide_fire_sr = BranchPythonOperator(
         task_id="decide-update-fire-spreading-risk",
         python_callable=decide_update_indicator,
@@ -894,14 +988,7 @@ with DAG(
 
     run_import_fire_sr >> run_update_fire_sr
 
-    (
-        run_check_update_risk
-        >> decide_risk
-        >> [
-            run_download_risk_file,
-            run_skip_update_risk,
-        ]
-    )
+    # classification
 
     (
         run_download_risk_file
@@ -913,6 +1000,11 @@ with DAG(
         run_classify_fires_ams,
         run_classify_fires_ppcdam,
         run_classify_fires_prodes,
+    ]
+
+    run_update_active_fires_today >> [
+        run_classify_fires_today_ams,
+        run_classify_fires_today_ppcdam,
     ]
 
     (
@@ -932,6 +1024,7 @@ with DAG(
     (
         run_classify_deter_ams,
         run_classify_fires_ams,
+        run_classify_fires_today_ams,
         run_classify_risk_ams,
         run_skip_update_deter,
         run_skip_update_active_fires,
@@ -943,6 +1036,7 @@ with DAG(
     [
         run_classify_deter_ppcdam,
         run_classify_fires_ppcdam,
+        run_classify_fires_today_ppcdam,
         run_classify_risk_ppcdam,
         run_skip_update_deter,
         run_skip_update_active_fires,
