@@ -73,6 +73,18 @@ def main(
         force_recreate=force_recreate,
     )
 
+    # fires today
+    create_land_structure_table(
+        db=db,
+        table=f"tmp_fires_today_land_structure{land_use_type_suffix}",
+        force_recreate=True,
+    )
+    create_land_structure_table(
+        db=db,
+        table=f"fires_today_land_structure{land_use_type_suffix}",
+        force_recreate=force_recreate,
+    )
+
     # deter
     create_land_structure_table(
         db=db,

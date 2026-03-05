@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import sys
 
 import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
+from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     DETER_INDICATOR,
     analyze_table,
@@ -16,7 +17,7 @@ from ams_background_tasks.tools.common import (
     prepare_table_to_update,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 
 @click.command()

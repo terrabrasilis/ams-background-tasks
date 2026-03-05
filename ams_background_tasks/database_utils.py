@@ -183,9 +183,10 @@ class DatabaseFacade(BaseModel):
         """Create an index for each column."""
         for _ in columns:
             col, method = _.split(":")
+            iname = f"{name}_{col.replace(',', '_')}_idx"
             self.create_index(
                 schema=schema,
-                name=f"{name}_{col.replace(',', '_')}_idx",
+                name="_".join([_[:3] for _ in iname.split("_")]),
                 table=name,
                 method=method,
                 column=col,

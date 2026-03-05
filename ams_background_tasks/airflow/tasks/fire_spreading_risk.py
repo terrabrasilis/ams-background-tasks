@@ -2,6 +2,11 @@ from airflow.models import Variable
 
 from ams_background_tasks.airflow.common.env import FIRE_SR_DIR, LAND_USE_DIR
 from ams_background_tasks.airflow.common.tasks import bash_task
+from ams_background_tasks.airflow.common.vars import (
+    CONN_DB_URL,
+    VAR_ALL_DATA_DB,
+    VAR_FREQUENCY_UPDATE_FIRE_SPREADING_RISK,
+)
 
 
 def download_fire_sr_file(dag):
@@ -11,7 +16,7 @@ def download_fire_sr_file(dag):
         dag=dag,
         task_id="download-fire-spreading-risk-file",
         command=command,
-        env_keys=["AMS_DB_URL"],
+        env_keys=[CONN_DB_URL],
     )
 
 
@@ -22,7 +27,7 @@ def process_fire_sr_file(dag):
         dag=dag,
         task_id="process-fire-spreading-risk-file",
         command=command,
-        env_keys=["AMS_DB_URL"],
+        env_keys=[CONN_DB_URL],
     )
 
 
@@ -33,7 +38,7 @@ def import_fire_sr(dag):
         dag=dag,
         task_id="import-fire-spreading-risk-file",
         command=command,
-        env_keys=["AMS_DB_URL"],
+        env_keys=[CONN_DB_URL],
     )
 
 
@@ -44,14 +49,14 @@ def update_fire_sr(dag):
         dag=dag,
         task_id="update-fire-spreading-risk",
         command=command,
-        env_keys=["AMS_DB_URL"],
+        env_keys=[CONN_DB_URL],
     )
 
 
 def _classify_fire_sr_by_land_use(dag, land_use_type: str):
     command = (
         f"ams-classify-by-land-use "
-        f"{('--all-data' if Variable.get('AMS_ALL_DATA_DB')=='1' else '')} "
+        f"{('--all-data' if Variable.get(VAR_ALL_DATA_DB)=='1' else '')} "
         "--biome='Cerrado' "
         "--indicator='risco-espalhamento-fogo' "
         f"--land-use-type={land_use_type} "
@@ -62,7 +67,7 @@ def _classify_fire_sr_by_land_use(dag, land_use_type: str):
         dag=dag,
         task_id=f"classify-fire-spreading-risk-by-land-use-{land_use_type}",
         command=command,
-        env_keys=["AMS_DB_URL"],
+        env_keys=[CONN_DB_URL],
     )
 
 
@@ -77,14 +82,14 @@ def classify_fire_sr_by_land_use_ppcdam(dag):
 def need_update_fire_sr(dag):
     command = (
         f"ams-need-update-indicator --indicator=risco-espalhamento-fogo "
-        f"--frequency={Variable.get('AMS_FREQUENCY_TO_UPDATE_FIRE_SR')}"
+        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_FIRE_SPREADING_RISK)}"
     )
 
     return bash_task(
         dag=dag,
         command=command,
         task_id="need-update-fire-sr",
-        env_keys=["AMS_DB_URL"],
+        env_keys=[CONN_DB_URL],
     )
 
 

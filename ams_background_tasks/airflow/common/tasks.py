@@ -1,3 +1,5 @@
+from typing import Optional
+
 from airflow.operators.bash import BashOperator  # type: ignore
 
 from ams_background_tasks.airflow.common.env import VENV_CMD
@@ -9,11 +11,13 @@ def bash_task(  # pylint: disable=dangerous-default-value
     dag,
     task_id: str,
     command: str,
-    env_keys: list = [],
+    env_keys: Optional[list] = None,
     trigger_rule="all_success",
     env_dict: dict = {},
 ):
     bash_command = f"{VENV_CMD} {command}"
+
+    env_keys = env_keys or []
 
     print(env_keys)
 

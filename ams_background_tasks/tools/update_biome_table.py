@@ -30,7 +30,12 @@ logger = get_logger(__name__, sys.stdout)
     help="Auxiliary database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
-    "--biome", type=click.Choice(BIOMES), required=True, help="Biome.", multiple=True
+    "--biome",
+    type=click.Choice(BIOMES),
+    required=False,
+    help="Biome.",
+    multiple=True,
+    default=BIOMES,
 )
 def main(db_url: str, aux_db_url: str, biome: tuple):
     """Update the biome border table."""

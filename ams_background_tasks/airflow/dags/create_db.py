@@ -17,6 +17,13 @@ from ams_background_tasks.airflow.tasks.active_fires import (
     need_update_fires,
     update_active_fires,
 )
+from ams_background_tasks.airflow.tasks.active_fires_today import (
+    classify_fires_today_by_land_use_ams,
+    classify_fires_today_by_land_use_ppcdam,
+    decide_update_fires_today,
+    need_update_fires_today,
+    update_active_fires_today,
+)
 from ams_background_tasks.airflow.tasks.biomes import update_biome
 from ams_background_tasks.airflow.tasks.classification import (
     finalize_classification_ams,
@@ -129,13 +136,20 @@ def build_ams_create_db_dag():
             >> run_join2
         )
 
-        # checking the need for an upddate
+        # checking the need for an update
         run_check_update_fires = need_update_fires(dag=dag)
+        run_check_update_fires_today = need_update_fires_today(dag=dag)
         run_check_update_deter = need_update_deter(dag=dag)
         run_check_update_risk = need_update_risk(dag=dag)
         run_check_update_fire_sr = need_update_fire_sr(dag=dag)
 
-        run_join2 >> [run_check_update_fires, run_check_update_deter, run_check_update_risk, run_check_update_fire_sr]  # type: ignore
+        run_join2 >> [  # type: ignore
+            run_check_update_fires,
+            run_check_update_fires_today,
+            run_check_update_deter,
+            run_check_update_risk,
+            run_check_update_fire_sr,
+        ]
 
         # active fires
         run_decide_update_fires = BranchPythonOperator(
@@ -153,6 +167,24 @@ def build_ams_create_db_dag():
             run_check_update_fires
             >> run_decide_update_fires
             >> [run_skip_update_fires, run_update_fires]
+        )
+
+        # active fires today
+        run_decide_update_fires_today = BranchPythonOperator(
+            task_id="decide-update-fires-today",
+            python_callable=decide_update_fires_today,
+            provide_context=True,
+            op_kwargs={},
+        )
+
+        run_skip_update_fires_today = EmptyOperator(task_id="skip-update-fires-today")
+
+        run_update_fires_today = update_active_fires_today(dag=dag)
+
+        (  # type: ignore
+            run_check_update_fires_today
+            >> run_decide_update_fires_today
+            >> [run_skip_update_fires_today, run_update_fires_today]
         )
 
         # deter
@@ -250,6 +282,17 @@ def build_ams_create_db_dag():
             run_classify_fires_prodes,
         ]
 
+        # active fires today
+        run_classify_fires_today_ams = classify_fires_today_by_land_use_ams(dag=dag)
+        run_classify_fires_today_ppcdam = classify_fires_today_by_land_use_ppcdam(
+            dag=dag
+        )
+
+        run_update_fires_today >> [  # type: ignore
+            run_classify_fires_today_ams,
+            run_classify_fires_today_ppcdam,
+        ]
+
         # deter
         run_classify_deter_ams = classify_deter_by_land_use_ams(dag=dag)
         run_classify_deter_ppcdam = classify_deter_by_land_use_ppcdam(dag=dag)
@@ -280,9 +323,11 @@ def build_ams_create_db_dag():
         (  # type: ignore
             run_classify_deter_ams,
             run_classify_fires_ams,
+            run_classify_fires_today_ams,
             run_classify_risk_ams,
             run_skip_update_deter,
             run_skip_update_fires,
+            run_skip_update_fires_today,
             run_skip_update_risk,
             run_classify_fire_sr_ams,
             run_skip_update_fire_sr,
@@ -291,9 +336,11 @@ def build_ams_create_db_dag():
         [  # type: ignore
             run_classify_deter_ppcdam,
             run_classify_fires_ppcdam,
+            run_classify_fires_today_ppcdam,
             run_classify_risk_ppcdam,
             run_skip_update_deter,
             run_skip_update_fires,
+            run_skip_update_fires_today,
             run_skip_update_risk,
             run_classify_fire_sr_ppcdam,
             run_skip_update_fire_sr,

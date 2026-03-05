@@ -40,6 +40,7 @@ ACTIVE_FIRES_CLASSNAME = "AF"
 RISK_IBAMA_CLASSNAME = "RK"
 RISK_INPE_CLASSNAME = "RI"
 FIRE_SPREADING_RISK_CLASSNAME = "FS"
+ACTIVE_FIRES_TODAY_CLASSNAME = "FT"
 
 # indicators
 DETER_INDICATOR = "deter"
@@ -47,6 +48,7 @@ ACTIVE_FIRES_INDICATOR = "focos"
 RISK_IBAMA_INDICATOR = "risco-ibama"
 RISK_INPE_INDICATOR = "risco"
 FIRE_SPREADING_RISK_INDICATOR = "risco-espalhamento-fogo"
+ACTIVE_FIRES_TODAY_INDICATOR = "focos-hoje"
 
 RISK_INDICATORS = [RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR]
 
@@ -56,6 +58,7 @@ INDICATORS = [
     RISK_IBAMA_INDICATOR,
     RISK_INPE_INDICATOR,
     FIRE_SPREADING_RISK_INDICATOR,
+    ACTIVE_FIRES_TODAY_INDICATOR,
 ]
 
 # land_use_type
@@ -76,6 +79,18 @@ def is_valid_cell(cell: str):
 
 def is_valid_indicator(indicator: str):
     return indicator in INDICATORS
+
+
+def map_indicator_to_table_name(indicator):
+    assert is_valid_indicator(indicator)
+    return {
+        DETER_INDICATOR: "deter",
+        FIRE_SPREADING_RISK_INDICATOR: "fire_sr",
+        ACTIVE_FIRES_INDICATOR: "fires",
+        ACTIVE_FIRES_TODAY_INDICATOR: "fires_today",
+        RISK_INPE_INDICATOR: "risk",
+        RISK_IBAMA_INDICATOR: "risk_ibama",
+    }[indicator]
 
 
 def is_valid_land_use_type(land_use_type: str):
@@ -152,6 +167,7 @@ def recreate_spatial_table(
             "counts int4",
             "risk double precision NOT NULL DEFAULT 0.0",
             "score double precision NOT NULL DEFAULT 0.0",
+            "units int4",
             "geocode character varying(80)",
             "biome character varying(254)",
         ],

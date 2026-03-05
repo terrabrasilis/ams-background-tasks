@@ -75,6 +75,7 @@ def main(db_url: str, force_recreate: bool):
 
     # active_fires
     create_active_fires_table(db=db, force_recreate=force_recreate)
+    create_active_fires_today_table(db=db, force_recreate=force_recreate)
 
     # deter
     create_deter_tables(db=db, force_recreate=force_recreate)
@@ -180,7 +181,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -217,7 +218,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(mlu_j.perc, 0) AS percentage, 
                             COALESCE(mlu_j.total, 0) AS area, 
                             COALESCE(mlu_j.counts, 0) AS counts,
-                            COALESCE(mlu_j.score, 0) AS score
+                            COALESCE(mlu_j.score, 0) AS score,
+                            COALESCE(mlu_j.units, 0) AS units
                         FROM public."municipalities" mun
                         INNER JOIN (
                             SELECT 
@@ -227,10 +229,11 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.percentage) AS perc, 
                                 SUM(mlu.area) AS total, 
                                 SUM(mlu.counts) AS counts,
-                                SUM(mlu.score) AS score
+                                SUM(mlu.score) AS score,
+                                SUM(mlu.units) AS units
                             FROM public."municipalities_land_use" mlu
                             WHERE
-                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                 AND mlu.land_use_id = ANY (land_use_ids)
                                 AND mlu.classname = clsname
                                 AND mlu.date > enddate
@@ -337,7 +340,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -375,7 +378,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(slu_j.perc, 0) AS percentage, 
                             COALESCE(slu_j.total, 0) AS area, 
                             COALESCE(slu_j.counts, 0) AS counts,
-                            COALESCE(slu_j.score, 0) AS score
+                            COALESCE(slu_j.score, 0) AS score,
+                            COALESCE(slu_j.units, 0) AS units
                         FROM public."states" sta
                         INNER JOIN (
                             SELECT slu.suid, 
@@ -384,9 +388,10 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    SUM(slu.percentage) AS perc, 
                                    SUM(slu.area) AS total, 
                                    SUM(slu.counts) AS counts,
-                                   SUM(slu.score) AS score
+                                   SUM(slu.score) AS score,
+                                   SUM(slu.units) AS units
                             FROM public."states_land_use" slu
-                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                 AND slu.land_use_id = ANY (land_use_ids)
                                 AND slu.classname = clsname
                                 AND slu.date > enddate
@@ -497,7 +502,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False
         )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -534,7 +539,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                         COALESCE(cls_j.perc, 0) AS percentage, 
                                         COALESCE(cls_j.total, 0) AS area, 
                                         COALESCE(cls_j.counts, 0) AS counts,
-                                        COALESCE(cls_j.score, 0) AS score
+                                        COALESCE(cls_j.score, 0) AS score,
+                                        COALESCE(cls_j.units, 0) AS units
                                 FROM public."cs_{cell}" cel
                                 LEFT JOIN (
                                         SELECT cls.suid, 
@@ -543,9 +549,10 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.percentage) AS perc, 
                                                SUM(cls.area) AS total, 
                                                SUM(cls.counts) AS counts,
-                                               SUM(cls.score) AS score
+                                               SUM(cls.score) AS score,
+                                               SUM(cls.units) AS units
                                         FROM public."cs_{cell}_land_use" cls
-                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS'))
                                             AND cls.land_use_id = ANY (land_use_ids)
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
@@ -603,21 +610,42 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    # columns = [
-    # "view_date:btree",
-    # "uuid:btree",
-    # "biome:btree",
-    # "geocode:btree",
-    # "prodes_class:btree",
-    # "geom:gist",
-    # ]
 
-    # db.create_indexes(
-    # schema=schema,
-    # name=name,
-    # columns=columns,
-    # force_recreate=force_recreate,
-    # )
+def create_active_fires_today_table(db: DatabaseFacade, force_recreate: bool = False):
+    """Create the active fires today tables."""
+    schema = "fires"
+
+    db.create_table(
+        schema=schema,
+        name="active_fires_today",
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "uuid character varying(254) UNIQUE",
+            "biome varchar(254)",
+            "view_date date",
+            "viewed_at TIMESTAMP NOT NULL",
+            "satelite varchar(254)",
+            "municipio varchar(254)",
+            "geom geometry(Point, 4674)",
+            "geocode varchar(80)",
+            "src varchar(254)",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    db.create_table(
+        schema=schema,
+        name="active_fires_today_file",
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar",
+            "process_status int4",
+            "process_message varchar",
+            "file_date TIMESTAMP NOT NULL",
+            "processed_at timestamp with time zone",
+        ],
+        force_recreate=force_recreate,
+    )
 
 
 def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
@@ -873,7 +901,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (5, 'AF', 'Focos (Programa Queimadas)', 4),
             (6, 'RK', 'Risco de desmatamento (IBAMA)', 5),
             (7, 'RI', 'Risco de desmatamento', 6),
-            (8, 'FS', 'Risco de espalhamento de fogo', 7)
+            (8, 'FS', 'Risco de espalhamento do fogo', 7),
+            (9, 'FT', 'Focos de Hoje (Programa Queimadas)', 8)
     """
 
     db.execute(sql=sql)
@@ -918,7 +947,13 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (18, 'DESMATAMENTO_VEG', 1, 'Pantanal'),
             (19, 'CICATRIZ_DE_QUEIMADA', 2, 'Pantanal'),
             (20, 'MINERACAO', 4, 'Pantanal'),
-            (21, 'RISCO_ESPALHAMENTO_FOGO', 8, 'Cerrado');
+            (21, 'RISCO_ESPALHAMENTO_FOGO', 8, 'Cerrado'),
+            (22, 'FOCOS_HOJE', 9, 'Amazônia'),
+            (23, 'FOCOS_HOJE', 9, 'Cerrado'),
+            (24, 'FOCOS_HOJE', 9, 'Pantanal'),
+            (25, 'FOCOS_HOJE', 9, 'Caatinga'),
+            (26, 'FOCOS_HOJE', 9, 'Mata Atlântica'),
+            (27, 'FOCOS_HOJE', 9, 'Pampa');
     """
 
     db.execute(sql=sql)
