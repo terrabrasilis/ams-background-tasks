@@ -14,7 +14,7 @@ def download_fire_sr_file(dag):
 
     return bash_task(
         dag=dag,
-        task_id="download-fire-spreading-risk-file",
+        task_id="download-fire-sr-file",
         command=command,
         env_keys=[CONN_DB_URL],
     )
@@ -25,7 +25,7 @@ def process_fire_sr_file(dag):
 
     return bash_task(
         dag=dag,
-        task_id="process-fire-spreading-risk-file",
+        task_id="process-fire-sr-file",
         command=command,
         env_keys=[CONN_DB_URL],
     )
@@ -36,7 +36,7 @@ def import_fire_sr(dag):
 
     return bash_task(
         dag=dag,
-        task_id="import-fire-spreading-risk-file",
+        task_id="import-fire-sr-file",
         command=command,
         env_keys=[CONN_DB_URL],
     )
@@ -47,7 +47,7 @@ def update_fire_sr(dag):
 
     return bash_task(
         dag=dag,
-        task_id="update-fire-spreading-risk",
+        task_id="update-fire-sr",
         command=command,
         env_keys=[CONN_DB_URL],
     )
@@ -65,7 +65,7 @@ def _classify_fire_sr_by_land_use(dag, land_use_type: str):
 
     return bash_task(
         dag=dag,
-        task_id=f"classify-fire-spreading-risk-by-land-use-{land_use_type}",
+        task_id=f"classify-fire-sr-by-land-use-{land_use_type}",
         command=command,
         env_keys=[CONN_DB_URL],
     )
@@ -99,6 +99,6 @@ def decide_update_fire_sr(**context):
     bash_result = bash_result.strip().lower()
 
     if bash_result == "true":
-        return "import-fire-spreading-risk-file"
+        return "import-fire-sr-file"
 
     return "skip-update-fire-sr"
