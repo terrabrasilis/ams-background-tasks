@@ -213,6 +213,8 @@ def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: 
     logger.info("creating %s.", table)
     logger.debug("%s:%s", "force_recreate", force_recreate)
 
+    cname = f"{table}_gblg"
+
     db.create_table(
         schema="public",
         name=table,
@@ -223,7 +225,7 @@ def create_land_structure_table(db: DatabaseFacade, table: str, force_recreate: 
             "num_pixels int4 NULL",
             "geocode varchar(80) NULL",
             "biome varchar(254) NULL",
-            "UNIQUE (gid, biome, land_use_id, geocode)",
+            f"CONSTRAINT {cname} UNIQUE (gid, biome, land_use_id, geocode)",
         ],
         force_recreate=force_recreate,
     )

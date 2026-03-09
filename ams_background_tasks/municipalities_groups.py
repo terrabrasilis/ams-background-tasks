@@ -1,12 +1,13 @@
 """Municipalities groups."""
 
-import logging
+import sys
 
 import requests
 
 from ams_background_tasks.database_utils import DatabaseFacade
+from ams_background_tasks.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 MUNICIPALITIES_GROUPS = {
     "prioritários_amz_2024": [

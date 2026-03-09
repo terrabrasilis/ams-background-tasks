@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import sys
 
 import click
 
@@ -11,6 +11,7 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
+from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     BIOMES,
     DETER_INDICATOR,
@@ -20,7 +21,7 @@ from ams_background_tasks.tools.common import (
     prepare_table_to_update,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 
 @click.command("update-deter")
