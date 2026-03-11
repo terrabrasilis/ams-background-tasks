@@ -306,6 +306,9 @@ def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
 
     classnames = ",".join(list(set(classnames_list)))
 
+    if not classnames:
+        return []
+
     titles = [
         _[0]
         for _ in db.fetchall(
