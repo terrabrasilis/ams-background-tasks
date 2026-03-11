@@ -73,6 +73,7 @@ def main(
     db = DatabaseFacade.create(db_url=db_url)
 
     indicators = get_indicators_from_tmp(db=db, land_use_type=land_use_type)
+
     logger.debug(indicators)
 
     if len(indicators) == 0:

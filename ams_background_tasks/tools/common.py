@@ -319,6 +319,10 @@ def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
             indicators.append(DETER_INDICATOR)
             continue
 
+        if "focos de hoje" in title.lower():
+            indicators.append(ACTIVE_FIRES_TODAY_INDICATOR)
+            continue
+
         if "focos" in title.lower():
             indicators.append(ACTIVE_FIRES_INDICATOR)
             continue
@@ -329,10 +333,6 @@ def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
 
         if "risco" in title.lower():
             indicators.append(RISK_INPE_INDICATOR)
-            continue
-
-        if "focos de hoje" in title.lower():
-            indicators.append(ACTIVE_FIRES_TODAY_INDICATOR)
             continue
 
     return list(set(indicators))
