@@ -5,6 +5,7 @@ from ams_background_tasks.airflow.common.tasks import bash_task
 from ams_background_tasks.airflow.common.vars import (
     CONN_DB_URL,
     VAR_ALL_DATA_DB,
+    VAR_FORCE_UPDATE_AT,
     VAR_FREQUENCY_UPDATE_FIRE_SPREADING_RISK,
 )
 
@@ -82,7 +83,8 @@ def classify_fire_sr_by_land_use_ppcdam(dag):
 def need_update_fire_sr(dag):
     command = (
         f"ams-need-update-indicator --indicator=risco-espalhamento-fogo "
-        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_FIRE_SPREADING_RISK)}"
+        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_FIRE_SPREADING_RISK)} "
+        f"--hour-force-update={Variable.get(VAR_FORCE_UPDATE_AT)}"
     )
 
     return bash_task(

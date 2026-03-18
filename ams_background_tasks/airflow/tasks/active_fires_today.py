@@ -6,6 +6,7 @@ from ams_background_tasks.airflow.common.tasks import bash_task
 from ams_background_tasks.airflow.common.vars import (
     CONN_DB_URL,
     VAR_ALL_DATA_DB,
+    VAR_FORCE_UPDATE_AT,
     VAR_FREQUENCY_UPDATE_FIRES_TODAY,
     VAR_LIMIT,
 )
@@ -55,7 +56,8 @@ def classify_fires_today_by_land_use_ppcdam(dag):
 def need_update_fires_today(dag):
     command = (
         f"ams-need-update-indicator --indicator=focos-hoje "
-        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_FIRES_TODAY)}"
+        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_FIRES_TODAY)} "
+        f"--hour-force-update={Variable.get(VAR_FORCE_UPDATE_AT)}"
     )
 
     return bash_task(

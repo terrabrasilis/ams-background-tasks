@@ -19,6 +19,7 @@ from ams_background_tasks.tools.common import (
     is_valid_cell,
     is_valid_land_use_type,
 )
+from ams_background_tasks.tools.indicators import get_description_from_classname
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -869,6 +870,9 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     """Create the public.class and public.class_group tables."""
     schema = "public"
 
+    def sql_string(value: str) -> str:
+        return value.replace("'", "''")
+
     if db.table_exist(schema=schema, table="class") and not force_recreate:
         return
 
@@ -885,24 +889,35 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             "id serial NOT NULL PRIMARY KEY",
             "name varchar NOT NULL UNIQUE",
             "title varchar NOT NULL",
+            "subtitle varchar",
             "orderby int4",
+            "description varchar",
         ],
         force_recreate=False,
     )
 
+    desc_ds = get_description_from_classname("DS")
+    desc_dg = get_description_from_classname("DG")
+    desc_cs = get_description_from_classname("CS")
+    desc_mn = get_description_from_classname("MN")
+    desc_af = get_description_from_classname("AF")
+    desc_ri = get_description_from_classname("RI")
+    desc_fs = get_description_from_classname("FS")
+    desc_ft = get_description_from_classname("FT")
+
     sql = f"""
         INSERT INTO
-            {schema}.{name} (id, name, title, orderby)
+            {schema}.{name} (id, name, title, subtitle, orderby, description)
         VALUES
-            (1, 'DS', 'DETER Desmatamento', 0),
-            (2, 'DG', 'DETER Degradação', 1),
-            (3, 'CS', 'DETER Corte seletivo', 2),
-            (4, 'MN', 'DETER Mineração', 3),
-            (5, 'AF', 'Focos (Programa Queimadas)', 4),
-            (6, 'RK', 'Risco de desmatamento (IBAMA)', 5),
-            (7, 'RI', 'Risco de desmatamento', 6),
-            (8, 'FS', 'Risco de espalhamento do fogo', 7),
-            (9, 'FT', 'Focos de Hoje (Programa Queimadas)', 8)
+            (1, 'DS', 'DETER Desmatamento', '', 0, '{sql_string(desc_ds)}'),
+            (2, 'DG', 'DETER Degradação', '', 1, '{sql_string(desc_dg)}'),
+            (3, 'CS', 'DETER Corte seletivo', '', 2, '{sql_string(desc_cs)}'),
+            (4, 'MN', 'DETER Mineração', '', 3, '{sql_string(desc_mn)}'),
+            (5, 'AF', 'Histórico de Focos', 'Programa Queimadas', 4, '{sql_string(desc_af)}'),
+            (6, 'RK', 'Risco de desmatamento', 'IBAMA', 8, ''),
+            (7, 'RI', 'Risco de desmatamento', '', 7, '{sql_string(desc_ri)}'),
+            (8, 'FS', 'Risco de espalhamento do fogo', '', 6, '{sql_string(desc_fs)}'),
+            (9, 'FT', 'Focos de hoje', 'Programa Queimadas', 5, '{sql_string(desc_ft)}')
     """
 
     db.execute(sql=sql)
@@ -1278,8 +1293,8 @@ def create_processing_table(db: DatabaseFacade, force_recreate: bool):
             "date DATE NOT NULL",
             "indicator VARCHAR(40) NOT NULL",
             "process VARCHAR(100) NOT NULL",
-            "start_process TIMESTAMP NOT NULL",
-            "end_process TIMESTAMP",
+            "start_process TIMESTAMP WITH TIME ZONE NOT NULL",
+            "end_process TIMESTAMP WITH TIME ZONE",
             "status VARCHAR(20) DEFAULT 'pending'",
             "CONSTRAINT valid_dates CHECK (end_process IS NULL OR end_process > start_process)",
             "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam', 'classification-prodes'))",

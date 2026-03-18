@@ -37,7 +37,14 @@ logger = get_logger(__name__, sys.stdout)
     default=0,
     help="Frequency in seconds to update the indicator.",
 )
-def main(db_url: str, indicator: str, frequency: int):
+@click.option(
+    "--hour-force-update",
+    type=click.IntRange(0, 23),
+    required=False,
+    default=0,
+    help="Hour in UTC after which one update is forced.",
+)
+def main(db_url: str, indicator: str, frequency: int, hour_force_update: int):
     """Check if is necessary to update the indicator data."""
     assert indicator in INDICATORS
 
@@ -68,9 +75,18 @@ def main(db_url: str, indicator: str, frequency: int):
 
     logger.info(res)
 
-    utc_now = datetime.now(pytz.UTC)
-    now = utc_now.replace(tzinfo=None) - utc_now.utcoffset()
+    now = datetime.now(pytz.UTC)
 
-    status = (now - res).total_seconds() > frequency
+    force_update_at = now.replace(
+        hour=hour_force_update,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    should_force_update = now >= force_update_at and res < force_update_at
+    should_update_by_frequency = (now - res).total_seconds() > frequency
+
+    status = should_force_update or should_update_by_frequency
 
     print(status)

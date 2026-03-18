@@ -76,7 +76,7 @@ def build_ams_create_db_dag():
     with DAG(
         "ams-create-db",
         default_args=default_args,
-        schedule_interval="0 4 * * *",
+        schedule_interval="15 * * * *",
         catchup=False,
         concurrency=4,
         max_active_runs=1,

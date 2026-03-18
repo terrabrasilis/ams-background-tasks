@@ -398,9 +398,7 @@ def create_processing(
     schema = "public"
     name = "processing"
 
-    utc_now = datetime.now(pytz.UTC)
-    now = utc_now.replace(tzinfo=None) - utc_now.utcoffset()
-    now = now.isoformat(sep=" ")
+    now = datetime.now(pytz.UTC).isoformat(sep=" ")
 
     sql = f"""
         INSERT INTO {schema}.{name} (date, start_process, indicator, process, status)
@@ -414,9 +412,7 @@ def finalize_processing(db: DatabaseFacade, indicator: str, process: str, status
     schema = "public"
     name = "processing"
 
-    utc_now = datetime.now(pytz.UTC)
-    now = utc_now.replace(tzinfo=None) - utc_now.utcoffset()
-    now = now.isoformat(sep=" ")
+    now = datetime.now(pytz.UTC).isoformat(sep=" ")
 
     sql = f"""
         UPDATE {schema}.{name}

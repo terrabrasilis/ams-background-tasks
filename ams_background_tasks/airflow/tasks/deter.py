@@ -9,6 +9,7 @@ from ams_background_tasks.airflow.common.vars import (
     CONN_DB_URL,
     CONN_PAN_DETER_B_DB_URL,
     VAR_ALL_DATA_DB,
+    VAR_FORCE_UPDATE_AT,
     VAR_FREQUENCY_UPDATE_DETER,
     VAR_LIMIT,
 )
@@ -115,7 +116,8 @@ def classify_deter_by_land_use_ppcdam(dag):
 def need_update_deter(dag):
     command = (
         f"ams-need-update-indicator --indicator=deter "
-        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_DETER)}"
+        f"--frequency={Variable.get(VAR_FREQUENCY_UPDATE_DETER)} "
+        f"--hour-force-update={Variable.get(VAR_FORCE_UPDATE_AT)}"
     )
 
     return bash_task(
