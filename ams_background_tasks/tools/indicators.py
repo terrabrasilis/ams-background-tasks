@@ -51,7 +51,7 @@ O indicador varia de 0 a 1, representando do menor ao maior risco.
 """
 
 _RISCO_DE_ESPALHAMENTO_DO_FOGO = """
-Esse indicador apresenta dados de um Modelo de simulação de espalhamento do fogo, baseado em
+Esse indicador do Projeto FIP Cerrado apresenta dados de um modelo de simulação de espalhamento do fogo, baseado em
 pontos de ignição mapeados por satélite pelo Programa Queimadas (INPE), no combustível (biomassa seca) e
 na umidade da vegetação, derivados de imagens de satélite MODIS/Terra.
 """
