@@ -1,0 +1,766 @@
+#pylint: disable=too-many-statements
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Final
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import rasterio as rio
+from rasterio.warp import Resampling, reproject
+from rasterio.windows import Window, from_bounds
+from shapely.geometry import Point, box
+
+from ams_background_tasks.database_utils import DatabaseFacade
+from ams_background_tasks.tools.common import AMS, LAND_USE_TYPES, read_spatial_units
+
+PRODES_DEFORESTATION_PIXEL_BASE_YEAR: Final = 2000
+PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR: Final = 1960
+PRODES_FIRST_YEAR: Final = 2000
+PRODES_LAST_YEAR: Final = 2025
+PRODES_DB_SCHEMA: Final = "prodes"
+PRODES_DEFORESTATION_POINTS_TABLE_FQN = (
+    f"{PRODES_DB_SCHEMA}.deforestation_land_structure_points"
+)
+PRODES_DEFORESTATION_PIXEL_AREA = 29.875 * 29.875 * (10**-6)  # km^2
+
+
+def calculate_intersection(
+    ds_a: rio.io.DatasetReader, ds_b: rio.io.DatasetReader
+) -> tuple[float, float, float, float]:
+    """Return the intersection bounding box between two raster datasets."""
+    bounds_a = ds_a.bounds
+    bounds_b = ds_b.bounds
+
+    left = max(bounds_a.left, bounds_b.left)
+    right = min(bounds_a.right, bounds_b.right)
+    bottom = max(bounds_a.bottom, bounds_b.bottom)
+    top = min(bounds_a.top, bounds_b.top)
+
+    return left, bottom, right, top
+
+
+def has_intersection(ds_a: rio.io.DatasetReader, ds_b: rio.io.DatasetReader) -> bool:  # type: ignore
+    """Return whether two raster datasets overlap spatially."""
+    left, bottom, right, top = calculate_intersection(ds_a=ds_a, ds_b=ds_b)
+
+    return left < right and bottom < top
+
+
+def calculate_chunks_coordinates(
+    shape: tuple[int, int, int],
+    chunk_size: int,
+) -> list[tuple[int, int]]:
+    """Return the upper-left coordinates of single-band raster chunks."""
+    assert len(shape) == 3
+
+    count, height, width = shape
+
+    assert count == 1 and 0 < chunk_size <= height and chunk_size <= width
+
+    range_line = np.arange(0, height // chunk_size) * chunk_size
+    if height % chunk_size:
+        range_line = np.append(range_line, (height - chunk_size))
+
+    range_column = np.arange(0, width // chunk_size) * chunk_size
+    if width % chunk_size:
+        range_column = np.append(range_column, (width - chunk_size))
+
+    lines, columns = np.meshgrid(range_line, range_column, indexing="ij")
+
+    return list(zip(lines.flatten(), columns.flatten()))
+
+
+def raster_partition(
+    src_ds: rio.io.DatasetReader,  # type: ignore
+    chunk_size: int,
+    save_dir: Path,
+    output_prefix: str,
+) -> list[Path]:
+    """Split a single-band raster into fixed-size chunks and save them to disk."""
+    assert save_dir.exists()
+
+    coords = calculate_chunks_coordinates(
+        shape=(src_ds.count, src_ds.height, src_ds.width),
+        chunk_size=chunk_size,
+    )
+
+    output_paths: list[Path] = []
+
+    for row_off, col_off in coords:
+        output_path = save_dir / f"{output_prefix}_r{row_off}_c{col_off}.tif"
+
+        if output_path.exists():
+            output_paths.append(output_path)
+            continue
+
+        window = Window(col_off=col_off, row_off=row_off, width=chunk_size, height=chunk_size)  # type: ignore
+
+        data = src_ds.read(1, window=window)
+
+        is_all_nodata = src_ds.nodata is not None and np.all(data == src_ds.nodata)
+
+        if is_all_nodata:
+            continue
+
+        transform = rio.windows.transform(window, src_ds.transform)  # type: ignore
+
+        profile = src_ds.profile.copy()
+        profile.update(
+            {
+                "width": chunk_size,
+                "height": chunk_size,
+                "transform": transform,
+            }
+        )
+
+        with rio.open(output_path, "w", **profile) as dst_ds:
+            dst_ds.write(data, 1)
+
+        output_paths.append(output_path)
+
+    return output_paths
+
+
+def raster_reproject(
+    ref_ds: rio.io.DatasetReader,
+    src_ds: rio.io.DatasetReader,
+    save_dir: Path,
+    resampling: Resampling,
+    dst_nodata: float | int | None = None,
+) -> Path:
+    """Reproject a source raster to the reference grid within their intersection area."""
+    assert save_dir.exists()
+
+    if not has_intersection(ds_a=ref_ds, ds_b=src_ds):
+        raise ValueError("there is no intersection between the given rasters")
+
+    left, bottom, right, top = calculate_intersection(ds_a=ref_ds, ds_b=src_ds)
+
+    # building a window and a transform for the common bounding box
+    dst_window = from_bounds(left, bottom, right, top, transform=ref_ds.transform)
+    dst_window = dst_window.round_offsets().round_lengths()
+
+    dst_transform = rio.windows.transform(dst_window, ref_ds.transform)
+
+    dst_width = int(dst_window.width)
+    dst_height = int(dst_window.height)
+
+    dst_crs = ref_ds.crs
+
+    dst_nodata = dst_nodata if dst_nodata is not None else src_ds.nodata
+    assert dst_nodata is not None
+
+    dst_data = np.full((1, dst_height, dst_width), dst_nodata, dtype=src_ds.dtypes[0])
+
+    reproject(
+        source=rio.band(src_ds, 1),
+        destination=dst_data[0],
+        src_transform=src_ds.transform,
+        src_crs=src_ds.crs,
+        src_nodata=src_ds.nodata,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        dst_nodata=dst_nodata,
+        resampling=resampling,
+    )
+
+    profile = src_ds.profile.copy()
+    profile.update(
+        {
+            "width": dst_width,
+            "height": dst_height,
+            "transform": dst_transform,
+            "crs": dst_crs,
+        }
+    )
+
+    output_path = save_dir / Path(ref_ds.name).name
+
+    with rio.open(output_path, "w", **profile) as dst_ds:
+        dst_ds.write(dst_data)
+
+    return output_path
+
+
+def build_deforestation_mask(data: np.ndarray, year: int) -> np.ndarray:
+    """Return a binary mask for the deforestation classes associated with a given year."""
+    assert PRODES_FIRST_YEAR <= year <= PRODES_LAST_YEAR
+
+    deforestation_pixel_value = year - PRODES_DEFORESTATION_PIXEL_BASE_YEAR
+    remaining_deforestation_pixel_value = (
+        year - PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR
+    )
+
+    return np.isin(
+        data, [deforestation_pixel_value, remaining_deforestation_pixel_value]
+    ).astype(np.uint8)
+
+
+def build_deforestation_points_with_geocode_geodataframe(
+    ds: rio.io.DatasetReader,
+    deforestation_mask: np.ndarray,
+    landuse_data: np.ndarray,
+    municipalities_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Build a point GeoDataFrame for deforested pixels with land-use values and municipality geocodes."""
+    assert deforestation_mask.shape == landuse_data.shape
+    assert not np.any(landuse_data == 0)
+
+    rows, cols = np.where(deforestation_mask == 1)
+
+    xs, ys = ds.transform * (cols + 0.5, rows + 0.5)
+
+    geometry = [Point(x, y) for x, y in zip(xs, ys)]
+    values = landuse_data[rows, cols]
+    source = Path(ds.name).name
+
+    deforestation_points_gdf = gpd.GeoDataFrame(
+        {"geometry": geometry, "land_use_id": values, "source": source}, crs=ds.crs
+    )
+
+    municipalities_in_bounds_gdf = filter_municipalities_by_raster_bounds(
+        ds=ds, municipalities_gdf=municipalities_gdf
+    )
+
+    return gpd.sjoin(
+        deforestation_points_gdf,
+        municipalities_in_bounds_gdf[["geocode", "geometry"]],  # type: ignore
+        how="inner",
+        predicate="within",
+    )[
+        ["geometry", "geocode", "land_use_id", "source"]
+    ]  # type: ignore
+
+
+def filter_municipalities_by_raster_bounds(
+    ds: rio.io.DatasetReader,
+    municipalities_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Return the municipalities whose geometries intersect the raster bounds."""
+    bounds = ds.bounds
+    geom = box(bounds.left, bounds.bottom, bounds.right, bounds.top)
+    bounds_gdf = gpd.GeoDataFrame(
+        geometry=[geom],
+        crs=ds.crs,
+    )
+    return gpd.sjoin(
+        municipalities_gdf, bounds_gdf, how="inner", predicate="intersects"
+    )
+
+
+def load_spatial_units_gdf(
+    db: DatabaseFacade, spatial_unit: str, biome: str
+) -> gpd.GeoDataFrame:
+    """Load the spatial units associated with a biome from PostGIS."""
+    ckey = {
+        "cs_5km": "id",
+        "cs_25km": "id",
+        "cs_150km": "id",
+        "municipalities": "geocode",
+        "states": "name",
+    }[spatial_unit]
+
+    sql = f"""
+        SELECT suid, geometry FROM public.{spatial_unit} su
+        JOIN public.{spatial_unit}_biome sub ON sub.{ckey}=su.{ckey}
+        WHERE sub.biome='{biome}'
+    """
+
+    spatial_units_gdf = gpd.GeoDataFrame.from_postgis(
+        sql=sql, con=db.conn, geom_col="geometry"
+    )
+
+    return spatial_units_gdf
+
+
+def build_deforestation_points_geodataframe_from_postgis(
+    db: DatabaseFacade,
+    ds: rio.io.DatasetReader,
+    deforestation_mask: np.ndarray,
+    landuse_data: np.ndarray,
+    municipalities_gdf: gpd.GeoDataFrame,
+    biome: str,
+) -> gpd.GeoDataFrame:
+    """Build a deforestation points GeoDataFrame by loading point candidates into PostGIS and fetching geocodes."""
+
+    def _insert_into_points_table(values: list[str]) -> None:
+        sql = f"INSERT INTO {PRODES_DEFORESTATION_POINTS_TABLE_FQN} (geometry, land_use_id, biome, source) VALUES {','.join(values)};"
+        db.execute(sql=sql, log=False)
+
+    assert deforestation_mask.shape == landuse_data.shape
+    assert not np.any(landuse_data == 0)
+
+    data = deforestation_mask * landuse_data
+
+    rows, cols = np.where(data != 0)
+
+    xs, ys = ds.transform * (cols + 0.5, rows + 0.5)
+    land_use_values = landuse_data[rows, cols]
+
+    srid = ds.crs.to_epsg()
+    assert srid is not None
+
+    src = Path(ds.name).name
+
+    # inserting into database to get geocode
+    values = []
+    for index, (x, y) in enumerate(zip(xs, ys)):
+        land_use_id = land_use_values[index]
+        values.append(
+            f"(ST_SetSRID(ST_MakePoint({x}, {y}), {srid}), {land_use_id}, '{biome}', '{src}')"
+        )
+        if len(values) > 1e5:
+            _insert_into_points_table(values=values)
+            values = []
+
+    if len(values) > 0:
+        _insert_into_points_table(values=values)
+
+    municipalities_in_bounds_gdf = filter_municipalities_by_raster_bounds(
+        ds=ds,
+        municipalities_gdf=municipalities_gdf,
+    )
+
+    geocodes = ",".join(
+        [f"'{_}'" for _ in municipalities_in_bounds_gdf["geocode"].tolist()]
+    )
+
+    sql = f"""
+        UPDATE {PRODES_DEFORESTATION_POINTS_TABLE_FQN} AS dp
+        SET geocode=mun.geocode
+        FROM public.municipalities_biome mub
+        JOIN public.municipalities mun
+            ON mun.geocode=mub.geocode
+        WHERE
+            mun.geocode in ({geocodes})
+            AND dp.geometry && mun.geometry
+	        AND ST_Within(dp.geometry, mun.geometry);
+    """
+
+    db.execute(sql)
+    db.commit()
+
+    gdf = gpd.GeoDataFrame.from_postgis(
+        sql=f"SELECT * FROM {PRODES_DEFORESTATION_POINTS_TABLE_FQN}",
+        con=db.conn,  # type: ignore
+        geom_col="geometry",
+    )
+
+    # db.execute(f"DELETE FROM {PRODES_DEFORESTATION_POINTS_TABLE_FQN}")
+
+    return gdf
+
+
+def aggregate_deforestation_by_spatial_unit(
+    db: DatabaseFacade,
+    spatial_unit: str,
+    deforestation_points_geocode_gdf: gpd.GeoDataFrame,
+    year: int,
+    biome: str,
+) -> pd.DataFrame:
+    """Aggregate geocoded deforestation points by spatial unit and land-use class."""
+    spatial_units_gdf = load_spatial_units_gdf(
+        db=db, spatial_unit=spatial_unit, biome=biome
+    )
+    spatial_unit_landuse_counts = gpd.sjoin(
+        deforestation_points_geocode_gdf,
+        spatial_units_gdf,
+        how="inner",
+        predicate="within",
+    )
+    spatial_unit_landuse_counts = spatial_unit_landuse_counts.groupby(
+        ["suid", "land_use_id", "geocode", "source"],
+        as_index=False,
+    ).agg(num_pixels=("geometry", "count"))
+
+    spatial_unit_landuse_counts["spatial_unit"] = spatial_unit
+    spatial_unit_landuse_counts["year"] = year
+    spatial_unit_landuse_counts["biome"] = biome
+
+    return spatial_unit_landuse_counts
+
+
+def build_deforestation_land_use_counts_dataframe(
+    *,
+    db_url: str,
+    force_recreate: bool,
+    land_use_tiff_file: Path,
+    prodes_tiff_file: Path,
+    chunk_size: int,
+    chunk_dir: Path,
+    reprojected_dir: Path,
+    counts_dir: Path,
+    biome: str,
+    year: int,
+    chunk_list: list[Path] | None = None,
+):
+    """Build an aggregated PRODES deforestation indicator DataFrame and persist partial chunk results to disk."""
+    assert chunk_dir.exists()
+    assert reprojected_dir.exists()
+    assert counts_dir.exists()
+    assert PRODES_FIRST_YEAR <= year <= PRODES_LAST_YEAR
+
+    # use_year_cache = not chunk_list
+    chunk_counts_year_path = (
+        counts_dir / f"spatial_unit_deforestation_landuse_counts_b{biome}_y{year}.pkl"
+    )
+
+    # if use_year_cache and
+    if chunk_counts_year_path.exists():
+        return pd.read_pickle(chunk_counts_year_path)
+
+    db = DatabaseFacade.create(db_url=db_url)
+    year_counts_dir = counts_dir / str(year)
+    year_counts_dir.mkdir(exist_ok=True)
+
+    print("creating tables ...")
+    if force_recreate:
+        create_prodes_deforestation_indicator_tables(
+            db=db, force_recreate=force_recreate
+        )
+
+    output_prefix = f"prodes_{biome}"
+
+    print("partitioning ...")
+    with rio.open(prodes_tiff_file) as prodes_ds:
+        chunks = raster_partition(
+            src_ds=prodes_ds,
+            chunk_size=chunk_size,
+            save_dir=chunk_dir,
+            output_prefix=output_prefix,
+        )
+
+    print("municipalities gdf...")
+
+    sql = f"""
+        SELECT mu.geocode, mu.geometry
+        FROM public.municipalities mu
+        JOIN public.municipalities_biome mub ON mu.geocode=mub.geocode
+        WHERE biome='{biome}'
+    """
+
+    municipalities_gdf = gpd.GeoDataFrame.from_postgis(
+        sql=sql, con=db.conn, geom_col="geometry"
+    )
+
+    spatial_units = list(read_spatial_units(db=db).keys())
+
+    spatial_unit_landuse_counts_list = []
+
+    with rio.open(land_use_tiff_file) as land_use_ds:
+        for index_chunk, chunk in enumerate(chunks):
+            if chunk_list and not chunk in chunk_list:
+                continue
+
+            print(f"processing chunk {chunk} ({index_chunk+1}/{len(chunks)}) ...")
+
+            with rio.open(chunk) as chunk_ds:
+                prodes_chunk_stem = Path(chunk_ds.name).stem
+
+                chunk_counts_path = (
+                    year_counts_dir
+                    / f"spatial_unit_deforestation_landuse_counts_{prodes_chunk_stem}.pkl"
+                )
+
+                if chunk_counts_path.exists():
+                    spatial_unit_landuse_counts = pd.read_pickle(chunk_counts_path)
+                    spatial_unit_landuse_counts_list.append(spatial_unit_landuse_counts)
+                    continue
+
+                prodes_chunk_data = chunk_ds.read(1)
+
+                land_use_chunk = raster_reproject(
+                    ref_ds=chunk_ds,
+                    src_ds=land_use_ds,
+                    save_dir=reprojected_dir,
+                    resampling=Resampling.nearest,
+                )
+
+                with rio.open(land_use_chunk) as land_use_chunk_ds:
+                    land_use_chunk_data = land_use_chunk_ds.read(1)
+
+                    spatial_unit_landuse_counts_list_by_chunk = []
+
+                    print(f"processing year {year} ...")
+
+                    deforestation_mask = build_deforestation_mask(
+                        data=prodes_chunk_data, year=year
+                    )
+
+                    if not np.any(deforestation_mask == 1):
+                        continue
+
+                    print("build deforestation points ...")
+
+                    deforestation_points_geocode_gdf = (
+                        build_deforestation_points_with_geocode_geodataframe(
+                            ds=chunk_ds,
+                            deforestation_mask=deforestation_mask,
+                            landuse_data=land_use_chunk_data,
+                            municipalities_gdf=municipalities_gdf,
+                        )
+                    )
+
+                    for spatial_unit in spatial_units:
+                        print(f"processing {spatial_unit} ...")
+
+                        spatial_unit_landuse_counts = aggregate_deforestation_by_spatial_unit(
+                            db=db,
+                            spatial_unit=spatial_unit,
+                            deforestation_points_geocode_gdf=deforestation_points_geocode_gdf,
+                            year=year,
+                            biome=biome,
+                        )
+
+                        print(spatial_unit_landuse_counts.shape)
+
+                        if not spatial_unit_landuse_counts:
+                            continue
+
+                        spatial_unit_landuse_counts_list_by_chunk.append(
+                            spatial_unit_landuse_counts
+                        )
+
+                if not spatial_unit_landuse_counts_list_by_chunk:
+                    continue
+
+                _tmp: pd.DataFrame = pd.concat(
+                    spatial_unit_landuse_counts_list_by_chunk
+                )
+                _tmp.to_pickle(chunk_counts_path)
+                spatial_unit_landuse_counts_list.append(_tmp)
+
+    if not spatial_unit_landuse_counts_list:
+        return pd.DataFrame()
+
+    spatial_unit_landuse_counts = pd.concat(spatial_unit_landuse_counts_list)
+    spatial_unit_landuse_counts = spatial_unit_landuse_counts.groupby(
+        ["suid", "land_use_id", "geocode", "spatial_unit", "year", "biome"],
+        as_index=False,
+    ).agg(num_pixels=("num_pixels", "sum"))
+
+    # if use_year_cache:
+    spatial_unit_landuse_counts.to_pickle(chunk_counts_year_path)
+
+    return spatial_unit_landuse_counts
+
+
+def build_accumulated_deforestation_indicator_dataframe(
+    *,
+    db_url: str,
+    force_recreate: bool,
+    land_use_tiff_file: Path,
+    prodes_tiff_file: Path,
+    chunk_size: int,
+    chunk_dir: Path,
+    reprojected_dir: Path,
+    counts_dir: Path,
+    biome: str,
+    years: list[int],
+    chunk_list: list[Path] | None = None,
+) -> pd.DataFrame:
+    """Build the cumulative deforestation indicator across the requested years.
+
+    For each year in `years`, the returned dataframe contains the sum of all
+    deforestation counts observed from the first available year up to that year,
+    grouped by spatial unit, land-use class, geocode and biome.
+    """
+    deforestation_land_use_counts_list = [
+        build_deforestation_land_use_counts_dataframe(
+            db_url=db_url,
+            force_recreate=force_recreate and index_year == 0,
+            land_use_tiff_file=land_use_tiff_file,
+            prodes_tiff_file=prodes_tiff_file,
+            chunk_size=chunk_size,
+            chunk_dir=chunk_dir,
+            reprojected_dir=reprojected_dir,
+            counts_dir=counts_dir,
+            biome=biome,
+            year=year,
+            chunk_list=chunk_list,
+        )
+        for index_year, year in enumerate(years)
+    ]
+
+    deforestation_land_use_counts_list = [
+        _ for _ in deforestation_land_use_counts_list if _
+    ]
+
+    if not deforestation_land_use_counts_list:
+        return pd.DataFrame()
+
+    dfr = pd.concat(deforestation_land_use_counts_list)
+
+    dfr_list: list[pd.DataFrame] = []
+
+    for year in years:
+        dfr2 = dfr[dfr["year"] <= year]  # type: ignore
+        dfr2: pd.DataFrame = dfr2.groupby(
+            ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
+            as_index=False,
+        ).agg(counts=("num_pixels", "sum"))
+        dfr2["year"] = year
+        dfr_list.append(dfr2)
+
+    if not dfr_list:
+        return pd.DataFrame()
+
+    dfr = pd.concat(dfr_list)
+    dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
+    dfr["score"] = 0.0
+    dfr["percentage"] = 0.0
+
+    return dfr
+
+
+def build_total_deforestation_indicator_dataframe(
+    *,
+    db_url: str,
+    force_recreate: bool,
+    land_use_tiff_file: Path,
+    prodes_tiff_file: Path,
+    chunk_size: int,
+    chunk_dir: Path,
+    reprojected_dir: Path,
+    counts_dir: Path,
+    biome: str,
+    years: list[int],
+    chunk_list: list[Path] | None = None,
+) -> pd.DataFrame:
+    """Build the annual deforestation indicator from yearly land-use counts.
+
+    The returned dataframe keeps one row per input year and spatial aggregation,
+    with the deforestation count, estimated area, score and percentage fields
+    populated for downstream persistence or analysis.
+    """
+    deforestation_land_use_counts_list = [
+        build_deforestation_land_use_counts_dataframe(
+            db_url=db_url,
+            force_recreate=force_recreate and index_year == 0,
+            land_use_tiff_file=land_use_tiff_file,
+            prodes_tiff_file=prodes_tiff_file,
+            chunk_size=chunk_size,
+            chunk_dir=chunk_dir,
+            reprojected_dir=reprojected_dir,
+            counts_dir=counts_dir,
+            biome=biome,
+            year=year,
+            chunk_list=chunk_list,
+        )
+        for index_year, year in enumerate(years)
+    ]
+
+    deforestation_land_use_counts_list = [
+        _ for _ in deforestation_land_use_counts_list if _
+    ]
+
+    if not deforestation_land_use_counts_list:
+        return pd.DataFrame()
+
+    dfr = pd.concat(deforestation_land_use_counts_list)
+    dfr["counts"] = dfr["num_pixels"]
+    dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
+    dfr["score"] = 0.0
+    dfr["percentage"] = 0.0
+
+    return dfr
+
+
+def save_indicator(
+    db: DatabaseFacade,
+    indicator_dataframe: pd.DataFrame,
+    spatial_unit: str,
+    classname: str,
+):
+    """Persist an indicator dataframe into the PRODES land-use table.
+
+    The dataframe must contain the columns used in the INSERT statement:
+    `suid`, `land_use_id`, `geocode`, `biome`, `counts`, `area`,
+    `percentage`, and `score`. Rows are written in batches to the
+    `{PRODES_DB_SCHEMA}.{spatial_unit}_land_use` table using the provided
+    `classname`.
+    """
+    if indicator_dataframe.empty:
+        return
+
+    assert np.all(indicator_dataframe["spatial_unit"] == spatial_unit)
+
+    table_name = f"{PRODES_DB_SCHEMA}.{spatial_unit}_land_use"
+
+    def _insert_into_land_use_table(values: list):
+        sql = f"INSERT INTO {table_name} (classname, date, suid, land_use_id, geocode, biome, counts, area, percentage, score) VALUES {','.join(values)};"
+        db.execute(sql=sql, log=False)
+
+    values = []
+    for row in indicator_dataframe.itertuples():
+        values.append(
+            f"('{classname}', '{row.year}-01-01'::date, {row.suid}, {row.land_use_id}, '{row.geocode}', '{row.biome}', {row.counts}, {row.area}, {row.percentage}, {row.score})"
+        )
+
+        if len(values) > 1e5:
+            _insert_into_land_use_table(values=values)
+            values = []
+
+    if len(values) > 0:
+        _insert_into_land_use_table(values=values)
+        values = []
+
+
+def create_prodes_deforestation_indicator_tables(
+    db: DatabaseFacade, force_recreate: bool
+):
+    db.create_schema(name=PRODES_DB_SCHEMA, force_recreate=False)
+
+    for spatial_unit in read_spatial_units(db=db):
+        create_prodes_spatial_unit_tables(
+            db=db, spatial_unit=spatial_unit, force_recreate=force_recreate
+        )
+
+
+def create_prodes_spatial_unit_tables(
+    db: DatabaseFacade,
+    spatial_unit: str,
+    force_recreate: bool = True,
+) -> None:
+    """Create the PRODES output tables associated with a spatial unit."""
+    for land_use_type in LAND_USE_TYPES:
+        if land_use_type != AMS:
+            continue
+
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+        land_use_table = f"{spatial_unit}_land_use{land_use_type_suffix}"
+
+        db.create_table(
+            schema=PRODES_DB_SCHEMA,
+            name=land_use_table,
+            columns=[
+                "id serial NOT NULL PRIMARY KEY",
+                "suid int NOT NULL",
+                "land_use_id int NOT NULL",
+                "classname varchar(2) NOT NULL",
+                "date date NOT NULL",
+                "counts int4",
+                "area double precision",
+                "percentage double precision",
+                "score double precision NOT NULL DEFAULT 0.0",
+                "geocode character varying(80)",
+                "biome character varying(254)",
+            ],
+            force_recreate=force_recreate,
+        )
+
+        db.create_indexes(
+            schema=PRODES_DB_SCHEMA,
+            name=land_use_table,
+            columns=[
+                "classname:btree",
+                "date:btree",
+                "biome:btree",
+                "geocode:btree",
+                "suid:btree",
+            ],
+            force_recreate=force_recreate,
+        )
