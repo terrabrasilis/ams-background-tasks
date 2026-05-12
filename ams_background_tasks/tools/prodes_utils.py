@@ -53,20 +53,22 @@ def calculate_chunks_coordinates(
     shape: tuple[int, int, int],
     chunk_size: int,
 ) -> list[tuple[int, int]]:
-    """Return the upper-left coordinates of single-band raster chunks."""
+    """Return the upper-left coordinates of single-band raster chunks.
+
+    The coordinates are computed against the raster dimensions padded up to the
+    next multiple of ``chunk_size`` so the generated windows do not overlap.
+    """
     assert len(shape) == 3
 
     count, height, width = shape
 
     assert count == 1 and 0 < chunk_size <= height and chunk_size <= width
 
-    range_line = np.arange(0, height // chunk_size) * chunk_size
-    if height % chunk_size:
-        range_line = np.append(range_line, (height - chunk_size))
+    padded_height = ((height + chunk_size - 1) // chunk_size) * chunk_size
+    padded_width = ((width + chunk_size - 1) // chunk_size) * chunk_size
 
-    range_column = np.arange(0, width // chunk_size) * chunk_size
-    if width % chunk_size:
-        range_column = np.append(range_column, (width - chunk_size))
+    range_line = np.arange(0, padded_height, chunk_size)
+    range_column = np.arange(0, padded_width, chunk_size)
 
     lines, columns = np.meshgrid(range_line, range_column, indexing="ij")
 
@@ -81,6 +83,7 @@ def raster_partition(
 ) -> list[Path]:
     """Split a single-band raster into fixed-size chunks and save them to disk."""
     assert save_dir.exists()
+    assert src_ds.nodata is not None
 
     coords = calculate_chunks_coordinates(
         shape=(src_ds.count, src_ds.height, src_ds.width),
@@ -91,19 +94,25 @@ def raster_partition(
 
     for row_off, col_off in coords:
         output_path = save_dir / f"{output_prefix}_r{row_off}_c{col_off}.tif"
+        nodata_path = save_dir / f"{output_prefix}_r{row_off}_c{col_off}.tif.nodata"
 
         if output_path.exists():
-            output_paths.append(output_path)
+            if not nodata_path.exists():
+                output_paths.append(output_path)
             continue
 
         window = Window(col_off=col_off, row_off=row_off, width=chunk_size, height=chunk_size)  # type: ignore
 
-        data = src_ds.read(1, window=window)
+        data = src_ds.read(
+            1,
+            window=window,
+            boundless=True,
+            fill_value=src_ds.nodata,
+        )
 
-        is_all_nodata = src_ds.nodata is not None and np.all(data == src_ds.nodata)
-
-        if is_all_nodata:
-            continue
+        # is_all_nodata = src_ds.nodata is not None and np.all(data == src_ds.nodata)
+        # if is_all_nodata:
+        # continue
 
         transform = rio.windows.transform(window, src_ds.transform)  # type: ignore
 
@@ -368,8 +377,8 @@ def build_deforestation_land_use_counts_dataframe(
     for spatial_unit in spatial_units:
         spatial_units_gdf_map[spatial_unit] = load_spatial_units_gdf(
             db=db, spatial_unit=spatial_unit, biome=biome
-    )
-        
+        )
+
     spatial_unit_landuse_counts_list = []
 
     chunk_size = len(chunks)
@@ -382,6 +391,11 @@ def build_deforestation_land_use_counts_dataframe(
             logger.info(
                 "processing the chunk %s (%s/%s)", chunk, index_chunk + 1, chunk_size
             )
+
+            nodata_file = Path(f"{chunk}.nodata")
+
+            if nodata_file.exists():
+                continue
 
             with rio.open(chunk) as chunk_ds:
                 prodes_chunk_stem = Path(chunk_ds.name).stem
@@ -396,14 +410,22 @@ def build_deforestation_land_use_counts_dataframe(
                     spatial_unit_landuse_counts_list.append(spatial_unit_landuse_counts)
                     continue
 
+                prodes_chunk_data = chunk_ds.read(1)
+
+                is_all_nodata = chunk_ds.nodata is not None and np.all(
+                    prodes_chunk_data == chunk_ds.nodata
+                )
+
+                if is_all_nodata:
+                    nodata_file.touch()
+                    continue
+
                 land_use_chunk = raster_reproject(
                     ref_ds=chunk_ds,
                     src_ds=land_use_ds,
                     save_dir=reproject_dir,
                     resampling=Resampling.nearest,
                 )
-
-                prodes_chunk_data = chunk_ds.read(1)
 
                 logger.info("building deforestation mask")
 
@@ -442,7 +464,10 @@ def build_deforestation_land_use_counts_dataframe(
                             biome=biome,
                         )
 
-                        if spatial_unit_landuse_counts is None or spatial_unit_landuse_counts.empty:
+                        if (
+                            spatial_unit_landuse_counts is None
+                            or spatial_unit_landuse_counts.empty
+                        ):
                             continue
 
                         spatial_unit_landuse_counts_list_by_chunk.append(
