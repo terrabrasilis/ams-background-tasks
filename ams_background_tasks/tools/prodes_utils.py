@@ -19,6 +19,8 @@ from ams_background_tasks.tools.common import AMS, LAND_USE_TYPES, read_spatial_
 
 PRODES_DEFORESTATION_PIXEL_BASE_YEAR: Final = 2000
 PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR: Final = 1960
+PRODES_NATIVE_FOREST_VEGETATION_PIXEL_VALUE: Final = 100
+PRODES_NATIVE_NON_FOREST_VEGETATION_PIXEL_VALUE: Final = 101
 PRODES_FIRST_YEAR: Final = 2000
 PRODES_LAST_YEAR: Final = 2025
 PRODES_DB_SCHEMA: Final = "prodes"
@@ -210,6 +212,21 @@ def build_deforestation_mask(data: np.ndarray, year: int) -> np.ndarray:
     ).astype(np.uint8)
 
 
+def build_native_vegetation_mask(data: np.ndarray) -> np.ndarray:
+    """Return a binary mask for native vegetation pixels for the given year.
+
+    The PRODES raster encodes native vegetation with the values
+    ``100`` (native forest) and ``101`` (native non-forest).
+    """
+    return np.isin(
+        data,
+        [
+            PRODES_NATIVE_FOREST_VEGETATION_PIXEL_VALUE,
+            PRODES_NATIVE_NON_FOREST_VEGETATION_PIXEL_VALUE,
+        ],
+    ).astype(np.uint8)
+
+
 def build_deforestation_points_with_geocode_geodataframe(
     ds: rio.io.DatasetReader,
     deforestation_mask: np.ndarray,
@@ -335,8 +352,16 @@ def build_deforestation_land_use_counts_dataframe(
     chunk_counts_year_path = (
         count_dir / f"spatial_unit_deforestation_landuse_counts_b{biome}_y{year}.pkl"
     )
+    nodata_year_path = (
+        count_dir
+        / f"spatial_unit_deforestation_landuse_counts_b{biome}_y{year}.pkl.nodata"
+    )
+
+    if nodata_year_path.exists():
+        return pd.DataFrame()
 
     if chunk_counts_year_path.exists():
+        logger.info("loading %s", chunk_counts_year_path)
         return pd.read_pickle(chunk_counts_year_path)
 
     year_count_dir = count_dir / str(year)
@@ -427,7 +452,7 @@ def build_deforestation_land_use_counts_dataframe(
                     resampling=Resampling.nearest,
                 )
 
-                logger.info("building deforestation mask")
+                logger.info("building deforestation mask for %s", year)
 
                 deforestation_mask = build_deforestation_mask(
                     data=prodes_chunk_data, year=year
@@ -484,6 +509,7 @@ def build_deforestation_land_use_counts_dataframe(
                 spatial_unit_landuse_counts_list.append(_tmp)
 
     if not spatial_unit_landuse_counts_list:
+        Path(f"{chunk_counts_year_path}.nodata").touch()
         return pd.DataFrame()
 
     spatial_unit_landuse_counts = pd.concat(spatial_unit_landuse_counts_list)
@@ -533,7 +559,7 @@ def build_accumulated_deforestation_indicator_dataframe(
     ]
 
     deforestation_land_use_counts_list = [
-        _ for _ in deforestation_land_use_counts_list if _
+        _ for _ in deforestation_land_use_counts_list if _ is not None and not _.empty
     ]
 
     if not deforestation_land_use_counts_list:
@@ -599,7 +625,7 @@ def build_total_deforestation_indicator_dataframe(
     ]
 
     deforestation_land_use_counts_list = [
-        _ for _ in deforestation_land_use_counts_list if _
+        _ for _ in deforestation_land_use_counts_list if _ is not None and not _.empty
     ]
 
     if not deforestation_land_use_counts_list:
@@ -610,6 +636,72 @@ def build_total_deforestation_indicator_dataframe(
     dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
     dfr["score"] = 0.0
     dfr["percentage"] = 0.0
+
+    return dfr
+
+
+def build_vegetation_from_deforestation_dataframe(
+    *,
+    db: DatabaseFacade,
+    land_use_tiff_file: Path,
+    prodes_tiff_file: Path,
+    chunk_size: int,
+    chunk_dir: Path,
+    reproject_dir: Path,
+    count_dir: Path,
+    biome: str,
+    years: list[int],
+    chunk_list: list[Path] | None = None,
+) -> pd.DataFrame:
+    """Build a vegetation indicator from the deforestation timeline.
+
+    For each year in ``years``, this returns the pixels that remain available as
+    vegetation by counting deforestation pixels occurring in later years of the
+    same range. The result preserves the grouped spatial-unit columns together
+    with ``num_pixels`` and ``year``.
+    """
+    deforestation_land_use_counts_list = [
+        build_deforestation_land_use_counts_dataframe(
+            db=db,
+            land_use_tiff_file=land_use_tiff_file,
+            prodes_tiff_file=prodes_tiff_file,
+            chunk_size=chunk_size,
+            chunk_dir=chunk_dir,
+            reproject_dir=reproject_dir,
+            count_dir=count_dir,
+            biome=biome,
+            year=year,
+            chunk_list=chunk_list,
+        )
+        for _, year in enumerate(years)
+    ]
+
+    deforestation_land_use_counts_list = [
+        _ for _ in deforestation_land_use_counts_list if _ is not None and not _.empty
+    ]
+
+    if not deforestation_land_use_counts_list:
+        return pd.DataFrame()
+
+    dfr = pd.concat(deforestation_land_use_counts_list)
+
+    dfr_list: list[pd.DataFrame] = []
+
+    for year in years:
+        dfr2 = dfr[dfr["year"] > year]  # type: ignore
+        dfr2: pd.DataFrame = dfr2.groupby(
+            ["suid", "spatial_unit", "biome"],
+            as_index=False,
+        ).agg(num_pixels=("num_pixels", "sum"))
+        dfr2["year"] = year
+        dfr_list.append(dfr2)
+
+    if not dfr_list:
+        return pd.DataFrame()
+
+    dfr = pd.concat(dfr_list)
+
+    dfr["source"] = "deforestation"
 
     return dfr
 
@@ -710,3 +802,262 @@ def create_prodes_spatial_unit_tables(
             ],
             force_recreate=force_recreate,
         )
+
+
+def aggregate_vegetation_by_spatial_unit(
+    spatial_unit: str,
+    spatial_units_gdf: gpd.GeoDataFrame,
+    vegetation_points_gdf: gpd.GeoDataFrame,
+    biome: str,
+) -> pd.DataFrame:
+    """Aggregate native vegetation points by spatial unit."""
+    spatial_unit_vegetation_counts = gpd.sjoin(
+        vegetation_points_gdf,
+        spatial_units_gdf,
+        how="inner",
+        predicate="within",
+    )
+    spatial_unit_vegetation_counts = spatial_unit_vegetation_counts.groupby(
+        ["suid", "source"],
+        as_index=False,
+    ).agg(num_pixels=("geometry", "count"))
+
+    spatial_unit_vegetation_counts["spatial_unit"] = spatial_unit
+    spatial_unit_vegetation_counts["biome"] = biome
+
+    return spatial_unit_vegetation_counts
+
+
+def build_vegetation_counts_dataframe(
+    *,
+    db: DatabaseFacade,
+    chunk_dir: Path,
+    cache_dir: Path,
+    vegetation_count_dir: Path,
+    biome: str,
+    chunk_list: list[Path] | None = None,
+):
+    """Build and cache native vegetation counts aggregated by spatial unit.
+
+    The function reads the PRODES chunk rasters, detects pixels classified as
+    native vegetation, converts them to point geometries, and aggregates the
+    counts inside each spatial unit for the requested biome.
+
+    Intermediate results are cached per chunk, and the consolidated dataframe
+    is cached under ``vegetation_count_dir`` for reuse on subsequent runs.
+    """
+    assert chunk_dir.exists()
+    assert vegetation_count_dir.exists()
+    assert cache_dir.exists()
+
+    # consolidated dataframe
+    vegetation_count_path = cache_dir / f"vegetation_from_mask_b{biome}.pkl"
+
+    if vegetation_count_path.exists():
+        return pd.read_pickle(vegetation_count_path)
+
+    vegetation_count_dir.mkdir(exist_ok=True)
+
+    spatial_units = list(read_spatial_units(db=db).keys())
+
+    spatial_units_gdf_map = {}
+    for spatial_unit in spatial_units:
+        spatial_units_gdf_map[spatial_unit] = load_spatial_units_gdf(
+            db=db, spatial_unit=spatial_unit, biome=biome
+        )
+
+    spatial_unit_vegetation_counts_list = []
+
+    chunks = list(chunk_dir.glob("*.tif"))
+    chunk_size = len(chunks)
+
+    for index_chunk, chunk in enumerate(chunks):
+        if chunk_list and not chunk in chunk_list:
+            continue
+
+        logger.info(
+            "processing the chunk %s (%s/%s)", chunk, index_chunk + 1, chunk_size
+        )
+
+        nodata_file = Path(f"{chunk}.nodata")
+
+        if nodata_file.exists():
+            continue
+
+        with rio.open(chunk) as chunk_ds:
+            prodes_chunk_stem = Path(chunk_ds.name).stem
+
+            chunk_counts_path = (
+                vegetation_count_dir
+                / f"spatial_unit_vegetation_counts_{prodes_chunk_stem}.pkl"
+            )
+
+            if chunk_counts_path.exists():
+                spatial_unit_vegetation_counts = pd.read_pickle(chunk_counts_path)
+                spatial_unit_vegetation_counts_list.append(
+                    spatial_unit_vegetation_counts
+                )
+                continue
+
+            prodes_chunk_data = chunk_ds.read(1)
+
+            logger.info("building vegetation mask")
+
+            vegetation_mask = build_native_vegetation_mask(data=prodes_chunk_data)
+
+            if not np.any(vegetation_mask == 1):
+                logger.info("there is no vegetation points")
+                continue
+
+            logger.info("building vegetation points geodataframe")
+
+            rows, cols = np.where(vegetation_mask == 1)
+
+            xs, ys = chunk_ds.transform * (cols + 0.5, rows + 0.5)
+
+            geometry = [Point(x, y) for x, y in zip(xs, ys)]
+            source = Path(chunk_ds.name).name
+
+            vegetation_points_gdf = gpd.GeoDataFrame(
+                {"geometry": geometry, "source": source}, crs=chunk_ds.crs
+            )
+
+            spatial_unit_vegetation_counts_list_by_chunk = []
+
+            for spatial_unit in spatial_units:
+                logger.info("aggregating by spatial unit %s", spatial_unit)
+
+                spatial_unit_vegetation_counts = aggregate_vegetation_by_spatial_unit(
+                    spatial_unit=spatial_unit,
+                    spatial_units_gdf=spatial_units_gdf_map[spatial_unit],
+                    vegetation_points_gdf=vegetation_points_gdf,
+                    biome=biome,
+                )
+
+                if (
+                    spatial_unit_vegetation_counts is None
+                    or spatial_unit_vegetation_counts.empty
+                ):
+                    continue
+
+                spatial_unit_vegetation_counts_list_by_chunk.append(
+                    spatial_unit_vegetation_counts
+                )
+
+            if not spatial_unit_vegetation_counts_list_by_chunk:
+                continue
+
+            _tmp: pd.DataFrame = pd.concat(spatial_unit_vegetation_counts_list_by_chunk)
+            _tmp.to_pickle(chunk_counts_path)
+
+            spatial_unit_vegetation_counts_list.append(_tmp)
+
+    if not spatial_unit_vegetation_counts_list:
+        return pd.DataFrame()
+
+    spatial_unit_vegetation_counts = pd.concat(spatial_unit_vegetation_counts_list)
+    spatial_unit_vegetation_counts = spatial_unit_vegetation_counts.groupby(
+        ["suid", "spatial_unit", "biome"],
+        as_index=False,
+    ).agg(num_pixels=("num_pixels", "sum"))
+
+    spatial_unit_vegetation_counts["source"] = "mask"
+
+    spatial_unit_vegetation_counts.to_pickle(vegetation_count_path)
+
+    return spatial_unit_vegetation_counts
+
+
+def build_total_vegetation_dataframe(
+    *,
+    db: DatabaseFacade,
+    land_use_tiff_file: Path,
+    prodes_tiff_file: Path,
+    chunk_size: int,
+    chunk_dir: Path,
+    reproject_dir: Path,
+    count_dir: Path,
+    cache_dir: Path,
+    vegetation_count_dir: Path,
+    biome: str,
+    years: list[int],
+    chunk_list: list[Path] | None = None,
+) -> pd.DataFrame:
+    """Build the total vegetation dataframe from mask and deforestation data.
+
+    The resulting dataframe combines the vegetation estimated from the native
+    vegetation mask with the vegetation derived from the deforestation timeline
+    for each year in ``years``. The output is cached to ``cache_dir`` and
+    contains one row per spatial aggregation and year, with ``num_pixels``
+    as the aggregated vegetation count.
+    """
+    assert chunk_dir.exists()
+    assert reproject_dir.exists()
+    assert count_dir.exists()
+    assert cache_dir.exists()
+    assert vegetation_count_dir.exists()
+
+    vegetation_from_mask_dfr = build_vegetation_counts_dataframe(
+        db=db,
+        chunk_dir=chunk_dir,
+        cache_dir=cache_dir,
+        vegetation_count_dir=vegetation_count_dir,
+        biome=biome,
+        chunk_list=chunk_list,
+    )
+
+    vegetation_from_deforestation_dfr = build_vegetation_from_deforestation_dataframe(
+        db=db,
+        land_use_tiff_file=land_use_tiff_file,
+        prodes_tiff_file=prodes_tiff_file,
+        chunk_size=chunk_size,
+        chunk_dir=chunk_dir,
+        reproject_dir=reproject_dir,
+        count_dir=count_dir,
+        biome=biome,
+        years=years,
+        chunk_list=chunk_list,
+    )
+
+    if vegetation_from_deforestation_dfr.empty and vegetation_from_mask_dfr.empty:
+        return pd.DataFrame()
+
+    vegetation_from_deforestation_filename = cache_dir / (
+        f"vegetation_from_deforestation_from_y{years[0]}_to_y{years[-1]}_b{biome}.pkl"
+    )
+
+    vegetation_from_deforestation_dfr.to_pickle(vegetation_from_deforestation_filename)
+
+    vegetation_dfr_list = []
+    for year in years:
+        year_dfr_list: list[pd.DataFrame] = []
+
+        if not vegetation_from_mask_dfr.empty:
+            year_dfr_list.append(vegetation_from_mask_dfr)
+
+        vdfr = vegetation_from_deforestation_dfr[
+            vegetation_from_deforestation_dfr["year"] == year
+        ]
+
+        if not vdfr.empty:
+            year_dfr_list.append(vdfr)
+
+        if not year_dfr_list:
+            continue
+
+        vdfr = pd.concat(year_dfr_list)
+        vdfr = vdfr.groupby(
+            ["suid", "spatial_unit", "biome"],
+            as_index=False,
+        ).agg(num_pixels=("num_pixels", "sum"))
+        vdfr["year"] = year
+        vdfr["biome"] = biome
+
+        vegetation_dfr_list.append(vdfr)
+
+    if not vegetation_dfr_list:
+        return pd.DataFrame()
+
+    vegetation_dfr = pd.concat(vegetation_dfr_list)
+
+    return vegetation_dfr
