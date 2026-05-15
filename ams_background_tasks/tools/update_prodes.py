@@ -1,4 +1,5 @@
 """Update the PRODES tables."""
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -8,11 +9,21 @@ from pathlib import Path
 
 import click
 import numpy as np
+import pandas as pd
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import BIOMES, LAND_USE_TYPES
+from ams_background_tasks.tools.common import (
+    BIOMES,
+    LAND_USE_TYPES,
+    PRODES_ACCUMULATED_DEFORESTATION,
+    PRODES_ANNUAL_INCREASE_DEFORESTATION,
+    PRODES_DEFORESTATION_RATIO,
+    PRODES_NATIVE_VEGETATION,
+    read_spatial_units,
+)
 from ams_background_tasks.tools.prodes_utils import (
+    PRODES_DEFORESTATION_PIXEL_AREA,
     PRODES_LAST_YEAR,
     build_accumulated_deforestation_indicator_dataframe,
     build_annual_increase_in_deforestation_indicator_dataframe,
@@ -21,6 +32,7 @@ from ams_background_tasks.tools.prodes_utils import (
     build_vegetation_from_deforestation_dataframe,
     build_vegetation_land_use_counts_dataframe,
     create_prodes_deforestation_indicator_tables,
+    save_indicator,
 )
 
 logger = get_logger(__name__, sys.stdout)
@@ -91,6 +103,13 @@ logger = get_logger(__name__, sys.stdout)
     default=False,
     help="Update cache and exit.",
 )
+@click.option(
+    "--save-indicators",
+    required=False,
+    is_flag=True,
+    default=False,
+    help="Persist the generated PRODES indicators to the database.",
+)
 def main(
     *,
     db_url: str,
@@ -103,6 +122,7 @@ def main(
     force_recreate: bool,
     chunk: tuple,
     only_cache: bool,
+    save_indicators: bool,
 ):
     """Update the PRODES tables."""
     assert years[1] >= years[0], "Last year must be greather than or equal first year."
@@ -189,6 +209,13 @@ def main(
 
     annual_increase_dfr.to_pickle(annual_increase_filename)
 
+    if save_indicators:
+        persist_count_based_indicator(
+            db=db,
+            indicator_dataframe=annual_increase_dfr,
+            classname=PRODES_ANNUAL_INCREASE_DEFORESTATION,
+        )
+
     # accumulated deforestation
     accumulated_deforestation_dfr = build_accumulated_deforestation_indicator_dataframe(
         db=db,
@@ -209,6 +236,13 @@ def main(
     )
 
     accumulated_deforestation_dfr.to_pickle(accumulated_deforestation_filename)
+
+    if save_indicators:
+        persist_count_based_indicator(
+            db=db,
+            indicator_dataframe=accumulated_deforestation_dfr,
+            classname=PRODES_ACCUMULATED_DEFORESTATION,
+        )
 
     # vegetation from future deforestation
     _ = build_vegetation_from_deforestation_dataframe(
@@ -246,6 +280,14 @@ def main(
 
     vegetation_dfr.to_pickle(vegetation_filename)
 
+    if save_indicators:
+        persist_count_based_indicator(
+            db=db,
+            indicator_dataframe=vegetation_dfr,
+            classname=PRODES_NATIVE_VEGETATION,
+            count_column="num_pixels",
+        )
+
     # ratio of accumulated deforestation to available native vegetation
     ratio_deforestation_vegetation_dfr = accumulated_deforestation_dfr.merge(
         vegetation_dfr,
@@ -273,3 +315,101 @@ def main(
     ratio_deforestation_vegetation_dfr.to_pickle(
         ratio_deforestation_vegetation_filename
     )
+
+    if save_indicators:
+        dfr = ratio_deforestation_vegetation_dfr.copy()
+        dfr["counts"] = dfr["deforestation_counts"]
+        dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
+        dfr["percentage"] = 0.0
+
+        vegetation_counts = dfr["vegetation_counts"].to_numpy(dtype=float)
+        deforestation_counts = dfr["deforestation_counts"].to_numpy(dtype=float)
+
+        score = np.zeros_like(deforestation_counts, dtype=float)
+
+        valid_vegetation_mask = vegetation_counts > 0
+        score[valid_vegetation_mask] = (
+            deforestation_counts[valid_vegetation_mask]
+            / vegetation_counts[valid_vegetation_mask]
+        )
+
+        if not np.all(valid_vegetation_mask):
+            logger.warning(
+                "Found %s ratio rows with vegetation_counts <= 0; using score=0.0 for them.",
+                int((~valid_vegetation_mask).sum()),
+            )
+        dfr["score"] = score
+        persist(db=db, indicator_dataframe=dfr, classname=PRODES_DEFORESTATION_RATIO)
+
+    db.commit()
+
+
+def persist(
+    db: DatabaseFacade, indicator_dataframe: pd.DataFrame, classname: str
+) -> None:
+    """Persist a PRODES indicator dataframe into the spatial-unit tables.
+
+    The dataframe must include the columns required by ``save_indicator`` and
+    a ``spatial_unit`` column that matches one of the configured spatial units
+    in the database. Rows are split by spatial unit and written to the
+    corresponding ``prodes.<spatial_unit>_land_use`` table.
+    """
+    required_columns = {
+        "suid",
+        "land_use_id",
+        "geocode",
+        "biome",
+        "counts",
+        "area",
+        "percentage",
+        "score",
+        "year",
+        "spatial_unit",
+    }
+
+    missing_columns = required_columns.difference(indicator_dataframe.columns)
+    assert not missing_columns, (
+        "indicator_dataframe missing columns: " f"{', '.join(sorted(missing_columns))}"
+    )
+
+    if indicator_dataframe.empty:
+        return
+
+    spatial_units = read_spatial_units(db=db)
+    unexpected_spatial_units = sorted(
+        set(indicator_dataframe["spatial_unit"].dropna().unique()) - set(spatial_units)
+    )
+    assert not unexpected_spatial_units, (
+        "indicator_dataframe has invalid spatial_unit values: "
+        f"{', '.join(unexpected_spatial_units)}"
+    )
+
+    for spatial_unit in spatial_units:
+        dfr = indicator_dataframe[indicator_dataframe["spatial_unit"] == spatial_unit]
+        save_indicator(
+            db=db,
+            indicator_dataframe=dfr,
+            classname=classname,
+            spatial_unit=spatial_unit,
+        )
+
+
+def persist_count_based_indicator(
+    *,
+    db: DatabaseFacade,
+    indicator_dataframe: pd.DataFrame,
+    classname: str,
+    count_column: str = "counts",
+) -> None:
+    """Persist a count-based PRODES indicator with derived area and zero score.
+
+    The source count column defaults to ``counts`` but can be overridden for
+    dataframes that expose their pixel total under a different name, such as
+    ``num_pixels``.
+    """
+    dfr = indicator_dataframe.copy()
+    dfr["counts"] = dfr[count_column]
+    dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
+    dfr["score"] = 0.0
+    dfr["percentage"] = 0.0
+    persist(db=db, indicator_dataframe=dfr, classname=classname)
