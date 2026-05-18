@@ -26,6 +26,7 @@ PRODES_FIRST_YEAR: Final = 2000
 PRODES_LAST_YEAR: Final = 2025
 PRODES_DB_SCHEMA: Final = "prodes"
 PRODES_DEFORESTATION_PIXEL_AREA = 29.875 * 29.875 * (10**-6)  # km^2
+PRODES_DB_FIRST_YEAR = 2019
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -653,7 +654,7 @@ def build_accumulated_deforestation_indicator_dataframe(
         dfr2: pd.DataFrame = dfr2.groupby(
             ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
             as_index=False,
-        ).agg(counts=("num_pixels", "sum"))
+        ).agg(num_pixels=("num_pixels", "sum"))
         dfr2["year"] = year
         dfr_list.append(dfr2)
 
@@ -661,9 +662,7 @@ def build_accumulated_deforestation_indicator_dataframe(
         return pd.DataFrame()
 
     dfr = pd.concat(dfr_list)
-    # dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
-    # dfr["score"] = 0.0
-    # dfr["percentage"] = 0.0
+    dfr = dfr.rename(columns={"num_pixels": "deforestation_pixels"})
 
     return dfr
 
@@ -711,10 +710,7 @@ def build_annual_increase_in_deforestation_indicator_dataframe(
         return pd.DataFrame()
 
     dfr = pd.concat(deforestation_land_use_counts_list)
-    dfr["counts"] = dfr["num_pixels"]
-    # dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
-    # dfr["score"] = 0.0
-    # dfr["percentage"] = 0.0
+    dfr = dfr.rename(columns={"num_pixels": "deforestation_pixels"})
 
     return dfr
 
@@ -815,6 +811,7 @@ def build_vegetation_from_deforestation_dataframe(
         return pd.DataFrame()
 
     dfr = pd.concat(dfr_list)
+    dfr = dfr.rename(columns={"num_pixels": "vegetation_pixels"})
 
     dfr["source"] = "deforestation"
 
@@ -829,14 +826,7 @@ def save_indicator(
     spatial_unit: str,
     classname: str,
 ):
-    """Persist an indicator dataframe into the PRODES land-use table.
-
-    The dataframe must contain the columns used in the INSERT statement:
-    `suid`, `land_use_id`, `geocode`, `biome`, `counts`, `area`,
-    `percentage`, and `score`. Rows are written in batches to the
-    `{PRODES_DB_SCHEMA}.{spatial_unit}_land_use` table using the provided
-    `classname`.
-    """
+    """Persist an indicator dataframe into the PRODES land-use table."""
     if indicator_dataframe.empty:
         return
 
@@ -845,13 +835,13 @@ def save_indicator(
     table_name = f"{PRODES_DB_SCHEMA}.{spatial_unit}_land_use"
 
     def _insert_into_land_use_table(values: list):
-        sql = f"INSERT INTO {table_name} (classname, date, suid, land_use_id, geocode, biome, counts, area, percentage, score) VALUES {','.join(values)};"
+        sql = f"INSERT INTO {table_name} (classname, date, suid, land_use_id, geocode, biome, counts, counts2, area) VALUES {','.join(values)};"
         db.execute(sql=sql, log=False)
 
     values = []
     for row in indicator_dataframe.itertuples():
         values.append(
-            f"('{classname}', '{row.year}-01-01'::date, {row.suid}, {row.land_use_id}, '{row.geocode}', '{row.biome}', {row.counts}, {row.area}, {row.percentage}, {row.score})"
+            f"('{classname}', '{row.year}-01-01'::date, {row.suid}, {row.land_use_id}, '{row.geocode}', '{row.biome}', {row.counts}, {row.counts2}, {row.area})"
         )
 
         if len(values) > 1e5:
@@ -898,9 +888,8 @@ def create_prodes_spatial_unit_tables(
                 "classname varchar(2) NOT NULL",
                 "date date NOT NULL",
                 "counts int4",
+                "counts2 int4",
                 "area double precision",
-                "percentage double precision",
-                "score double precision NOT NULL DEFAULT 0.0",
                 "geocode character varying(80)",
                 "biome character varying(254)",
             ],
@@ -984,6 +973,9 @@ def build_total_vegetation_indicator_dataframe(
         year=PRODES_LAST_YEAR,
         chunk_list=chunk_list,
     )
+    vegetation_from_mask_dfr = vegetation_from_mask_dfr.rename(
+        columns={"num_pixels": "vegetation_pixels"}
+    )
 
     vegetation_from_deforestation_dfr = build_vegetation_from_deforestation_dataframe(
         db=db,
@@ -1023,7 +1015,7 @@ def build_total_vegetation_indicator_dataframe(
         vdfr = vdfr.groupby(
             ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
             as_index=False,
-        ).agg(num_pixels=("num_pixels", "sum"))
+        ).agg(vegetation_pixels=("vegetation_pixels", "sum"))
         vdfr["year"] = year
         vdfr["biome"] = biome
 
