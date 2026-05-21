@@ -6,25 +6,29 @@ In short, **Airflow** is a platform created by the community to programmatically
 
 The **DAG `ams-create-db`** is responsible for creating and updating the AMS database. This DAG consists of following tasks:
 
-1. `check-variables`
-2. `update-environment`
-3. `check-recreate-db`
-4. `create-db`
-5. `update-biome`
-6. `update-spatial-units`
-7. `update-active-fires`
-8. `update-amz-deter`
-9. `update-cer-deter`
-10. `download-risk-file`
-11. `update-ibama-risk`
-12. `prepare-classification`
-13. `classify-deter-by-land-use`
-14. `classify-fires-by-land-use`
-15. `finalize-classification`
+- `check-variables`
+- `update-environment`
+- `check-create-db`
+- `create-db`
+- `update-biome`
+- `update-spatial-units`
+- `prepare-classification-{ams|ppcdam|prodes}`
+- `need-update-{deter|focos|risco}`
+- `decide-update-{deter|focos|risco}`
+- `update-{amz|cer|pan}-deter`
+- `finalize-deter-update`
+- `update-active-fires`
+- `download-inpe-risk-file`
+- `update-inpe-risk`
+- `classify-{deter|fires|risk}-by-land-use-{ams|ppcdam|prodes}`
+- `finalize-classification-{ams|ppcdam|prodes}`
+- `retrieve-process-status`
+- `prepare-status-email`
+- `send-status-email`
 
 Each of these tasks is a Python command-line tool developed using the **Click** library.
 
-To run the DAG `ams-create-db`, three external databases are required: one for **DETER data** (for each biome), another for **active fires data**, and an **auxiliary database**.
+To run the DAG `create-db`, three external databases are required: one for **DETER data** (for each biome), another for **active fires data**, and an **auxiliary database**.
 
 From the auxiliary database, the following tables are required:
 
@@ -53,7 +57,6 @@ $ jupyter-notebook notebooks/update_auxiliary.ipynb
 ## Run on Production Environment
 
 This DAG is made to run from "DagBag", this means that all the dag files are inside the root folder.
-Assuming that the Airflow environment is using 
 
 ### Initializing production airflow connections and variables
 
@@ -68,6 +71,9 @@ Setup this connections ids:
 4) `AMS_CER_DETER_B_DB_URL` (Deter Cerrado database, ex: deter_amazonia_nb)
 5) `AMS_DB_URL` (AMS ouput database, ex: ams_new)
 6) `AMS_FTP_URL` (FTP to get the risk file provided by IBAMA)
+7) `smtp_default` (stmp server configuration to send the processing status mail)
+8) `AMS_PAN_DETER_B_DB_URL` (Deter Pantanal, database, ex: deter_pantanal_nb)
+9) `AMS_FC_DB_URL` (Fires dashboard database, ex: fires_dashboard)
 
 
 Example how to setup the connection fields:
@@ -90,7 +96,12 @@ Setup the following variables:
 4) `AMS_BIOMES`: a list of biomes separated by semicolons. Example: AMS_BIOMES="AmazÃ´nia;Cerrado;".
 5) `AMS_STAC_API_URL`: the STAC API url to retrieve the risk image. Example: AMS_STAC_API_URL=https://terrabrasilis.dpi.inpe.br/stac-api/v1/
 6) `AMS_STAC_COLLECTION`: the STAC collection name. Example: AMS_STAC_COLLECTION=collection1
+7) `AMS_FREQUENCY_TO_UPDATE_DETER`: frequency in seconds for updating the indicator data. Default is 86400, for daily updates.
+8) `AMS_FREQUENCY_TO_UPDATE_FOCOS`: frequency in seconds for updating the indicator data. Default is 86400, for daily updates.
+9) `AMS_FREQUENCY_TO_UPDATE_RISCO`: frequency in seconds for updating the indicator data. Default is 86400, for daily updates.
+10) `AMS_LIMIT`: Limit the number of deter and active fire elements for testing purposes. Default is 0 (unlimited).
+11) `AMS_EMAIL_TO`: who will receive the processing status email.
 
 #### Files and Volumes
 
-Additionally, it is necessary to place the land use files in the `land_use` directory. The naming convention for the files is: `{BIOMA}_land_use`.tif (e.g., `Amazônia_land_use.tif`, `Cerrado_land_use.tif`, and so on).
+Additionally, it is necessary to place the land use files in the `land_use` directory (`LAND_USE_DIR/ams/land_use.tif` and `LAND_USE_DIR/ppcdam/land_use.tif`). 

@@ -15,9 +15,11 @@ from ams_background_tasks.tools.common import (
     CELL_25KM,
     CELL_150KM,
     PPCDAM,
+    PRODES,
     is_valid_cell,
     is_valid_land_use_type,
 )
+from ams_background_tasks.tools.indicators import get_description_from_classname
 
 logger = get_logger(__name__, sys.stdout)
 
@@ -39,11 +41,11 @@ logger = get_logger(__name__, sys.stdout)
 )
 def main(db_url: str, force_recreate: bool):
     """Create the AMS database."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
-    db = DatabaseFacade.from_url(db_url=db_url)
+    db = DatabaseFacade.create(db_url=db_url)
 
     db.create_postgis_extension()
     db.create_dblink_extension()
@@ -74,6 +76,7 @@ def main(db_url: str, force_recreate: bool):
 
     # active_fires
     create_active_fires_table(db=db, force_recreate=force_recreate)
+    create_active_fires_today_table(db=db, force_recreate=force_recreate)
 
     # deter
     create_deter_tables(db=db, force_recreate=force_recreate)
@@ -84,12 +87,21 @@ def main(db_url: str, force_recreate: bool):
     # land use
     create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=AMS)
     create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PPCDAM)
+    create_land_use_table(db=db, force_recreate=force_recreate, land_use_type=PRODES)
 
     # municipalities group
     create_municipalities_group_tables(db=db, force_recreate=force_recreate)
 
     # risk
     create_risk_tables(db=db, force_recreate=force_recreate)
+
+    # fire spreading risk
+    create_fire_spreading_risk_tables(db=db, force_recreate=force_recreate)
+
+    # processing
+    create_processing_table(db=db, force_recreate=force_recreate)
+
+    db.commit()
 
 
 def create_municipalities_table(db: DatabaseFacade, force_recreate: bool = False):
@@ -170,7 +182,7 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -207,7 +219,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(mlu_j.perc, 0) AS percentage, 
                             COALESCE(mlu_j.total, 0) AS area, 
                             COALESCE(mlu_j.counts, 0) AS counts,
-                            COALESCE(mlu_j.score, 0) AS score
+                            COALESCE(mlu_j.score, 0) AS score,
+                            COALESCE(mlu_j.units, 0) AS units
                         FROM public."municipalities" mun
                         INNER JOIN (
                             SELECT 
@@ -217,10 +230,11 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.percentage) AS perc, 
                                 SUM(mlu.area) AS total, 
                                 SUM(mlu.counts) AS counts,
-                                SUM(mlu.score) AS score
+                                SUM(mlu.score) AS score,
+                                SUM(mlu.units) AS units
                             FROM public."municipalities_land_use" mlu
                             WHERE
-                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                                (mlu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS', 'FT'))
                                 AND mlu.land_use_id = ANY (land_use_ids)
                                 AND mlu.classname = clsname
                                 AND mlu.date > enddate
@@ -327,7 +341,7 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False                
             )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -365,7 +379,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(slu_j.perc, 0) AS percentage, 
                             COALESCE(slu_j.total, 0) AS area, 
                             COALESCE(slu_j.counts, 0) AS counts,
-                            COALESCE(slu_j.score, 0) AS score
+                            COALESCE(slu_j.score, 0) AS score,
+                            COALESCE(slu_j.units, 0) AS units
                         FROM public."states" sta
                         INNER JOIN (
                             SELECT slu.suid, 
@@ -374,9 +389,10 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                    SUM(slu.percentage) AS perc, 
                                    SUM(slu.area) AS total, 
                                    SUM(slu.counts) AS counts,
-                                   SUM(slu.score) AS score
+                                   SUM(slu.score) AS score,
+                                   SUM(slu.units) AS units
                             FROM public."states_land_use" slu
-                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                            WHERE (slu.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS', 'FT'))
                                 AND slu.land_use_id = ANY (land_use_ids)
                                 AND slu.classname = clsname
                                 AND slu.date > enddate
@@ -487,7 +503,7 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                 riskThreshold float,
                 isAuthenticated boolean DEFAULT False
         )
-            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision)
+            RETURNS TABLE(suid integer, name character varying, geometry geometry, classname character varying, date date, percentage double precision, area double precision, counts bigint, score double precision, units bigint)
             LANGUAGE 'plpgsql'
             COST 100
             VOLATILE PARALLEL UNSAFE
@@ -524,7 +540,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                         COALESCE(cls_j.perc, 0) AS percentage, 
                                         COALESCE(cls_j.total, 0) AS area, 
                                         COALESCE(cls_j.counts, 0) AS counts,
-                                        COALESCE(cls_j.score, 0) AS score
+                                        COALESCE(cls_j.score, 0) AS score,
+                                        COALESCE(cls_j.units, 0) AS units
                                 FROM public."cs_{cell}" cel
                                 LEFT JOIN (
                                         SELECT cls.suid, 
@@ -533,9 +550,10 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.percentage) AS perc, 
                                                SUM(cls.area) AS total, 
                                                SUM(cls.counts) AS counts,
-                                               SUM(cls.score) AS score
+                                               SUM(cls.score) AS score,
+                                               SUM(cls.units) AS units
                                         FROM public."cs_{cell}_land_use" cls
-                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI'))
+                                        WHERE (cls.date <= effective_publish_date OR clsname IN ('AF', 'RK', 'RI', 'FS', 'FT'))
                                             AND cls.land_use_id = ANY (land_use_ids)
                                             AND cls.classname = clsname
                                             AND cls.date > enddate
@@ -571,16 +589,16 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
 def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the fires.active_fires table."""
     columns = [
-        "id int4 NOT NULL",
+        "id serial NOT NULL PRIMARY KEY",
         "uuid character varying(254)",
         "biome varchar(254)",
         "view_date date",
+        "prodes_class varchar(254)",
         "satelite varchar(254)",
         "estado varchar(254)",
         "municipio varchar(254)",
         "geom geometry(Point, 4674)",
         "geocode varchar(80)",
-        "PRIMARY KEY (id, biome)",
     ]
 
     schema = "fires"
@@ -593,38 +611,57 @@ def create_active_fires_table(db: DatabaseFacade, force_recreate: bool = False):
         force_recreate=force_recreate,
     )
 
-    columns = [
-        "view_date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
 
-    db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+def create_active_fires_today_table(db: DatabaseFacade, force_recreate: bool = False):
+    """Create the active fires today tables."""
+    schema = "fires"
+
+    db.create_table(
+        schema=schema,
+        name="active_fires_today",
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "uuid character varying(254) UNIQUE",
+            "biome varchar(254)",
+            "view_date date",
+            "viewed_at TIMESTAMP NOT NULL",
+            "satelite varchar(254)",
+            "municipio varchar(254)",
+            "geom geometry(Point, 4674)",
+            "geocode varchar(80)",
+            "src varchar(254)",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    db.create_table(
+        schema=schema,
+        name="active_fires_today_file",
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar",
+            "process_status int4",
+            "process_message varchar",
+            "file_date TIMESTAMP NOT NULL",
+            "processed_at timestamp with time zone",
+        ],
+        force_recreate=force_recreate,
     )
 
 
 def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
     """Create the deter.{name} table."""
     columns = [
-        "gid varchar(254) NOT NULL",
+        "gid serial NOT NULL",
+        "origin_gid varchar NOT NULL UNIQUE",
         "biome varchar(254)",
-        "origin_gid int4",
+        "view_date date",
         "classname varchar(254)",
-        "quadrant varchar(5)",
-        "orbitpoint varchar(10)",
-        "date date",
-        "sensor varchar(10)",
         "satellite varchar(13)",
-        "areatotalkm double precision",
-        "areamunkm double precision",
-        "areauckm double precision",
-        "mun varchar(254)",
-        "uf varchar(2)",
-        "uc varchar(254)",
-        "geom geometry(MultiPolygon, 4674)",
-        "month_year varchar(10)",
+        "sensor varchar(10)",
+        "path_row varchar(10)",
+        "area_km double precision",
+        "geom geometry(MultiPolygon,4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
@@ -640,78 +677,74 @@ def _create_deter_table(db: DatabaseFacade, name: str, force_recreate: bool):
 
     columns = [
         "classname:btree",
-        "date:btree",
+        "view_date:btree",
         "biome:btree",
         "geocode:btree",
         "geom:gist",
     ]
 
-    db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
-    )
+    # db.create_indexes(
+    #    schema=schema,
+    #    name=name,
+    #    columns=columns,
+    #    force_recreate=force_recreate,
+    # )
 
 
-def _create_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
+def _create_deter_tmp_data_table(db: DatabaseFacade, force_recreate: bool):
     """Create the deter.tmp_data table."""
     columns = [
-        "gid varchar(254) NOT NULL",
+        "gid serial NOT NULL",
         "biome varchar(254)",
         "classname varchar(254)",
-        "date date",
-        "areamunkm double precision",
+        "view_date date",
+        "area_km double precision",
         "geom geometry(MultiPolygon, 4674)",
         "geocode varchar(80)",
         "PRIMARY KEY (gid, biome)",
     ]
 
-    schema = "deter"
-    name = "tmp_data"
-
     db.create_table(
-        schema=schema,
+        schema="deter",
         name="tmp_data",
         columns=columns,
         force_recreate=force_recreate,
     )
 
-    columns = [
-        "classname:btree",
-        "date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
-
-    db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
-    )
-
 
 def create_deter_tables(db: DatabaseFacade, force_recreate: bool = False):
-    """Create the deter.[deter, deter_auth, deter_history] tables."""
-    # deter, deter_auth, deter_history
-    names = ("deter", "deter_auth", "deter_history")
-    for name in names:
-        _create_deter_table(db=db, name=name, force_recreate=force_recreate)
+    """Create the deter.[deter, deter_auth] tables."""
+    for prefix in ("", "tmp_"):
+        force_recreate = len(prefix) > 0
 
-    # deter_publish_date
-    db.create_table(
-        schema="deter",
-        name="deter_publish_date",
-        columns=[
-            "date date",
-            "biome varchar(254)",
-        ],
-        force_recreate=force_recreate,
-    )
+        # deter, deter_auth, deter_history
+        names = ("deter", "deter_auth")  # , "deter_history")
+        for name in names:
+            _create_deter_table(
+                db=db, name=f"{prefix}{name}", force_recreate=force_recreate
+            )
+
+        # deter_publish_date
+        db.create_table(
+            schema="deter",
+            name=f"{prefix}deter_publish_date",
+            columns=[
+                "date date",
+                "biome varchar(254)",
+            ],
+            force_recreate=force_recreate,
+        )
 
     # tmp_data
-    _create_tmp_data_table(db=db, force_recreate=force_recreate)
+    _create_deter_tmp_data_table(db=db, force_recreate=force_recreate)
 
 
 def create_spatial_units_table(db: DatabaseFacade, force_recreate: bool = False):
     """Create the public.spatial_units table."""
     schema = "public"
+
+    if db.table_exist(schema=schema, table="spatial_units") and not force_recreate:
+        return
 
     # spatial_units table
     if force_recreate:
@@ -826,13 +859,22 @@ def create_biome_tables(db: DatabaseFacade, force_recreate: bool = False):
     ]
 
     db.create_indexes(
-        schema=schema, name=name, columns=columns, force_recreate=force_recreate
+        schema=schema,
+        name=name,
+        columns=columns,
+        force_recreate=force_recreate,
     )
 
 
 def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     """Create the public.class and public.class_group tables."""
     schema = "public"
+
+    def sql_string(value: str) -> str:
+        return value.replace("'", "''")
+
+    if db.table_exist(schema=schema, table="class") and not force_recreate:
+        return
 
     if force_recreate:
         db.drop_table(table=f"{schema}.class")
@@ -847,22 +889,35 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             "id serial NOT NULL PRIMARY KEY",
             "name varchar NOT NULL UNIQUE",
             "title varchar NOT NULL",
+            "subtitle varchar",
             "orderby int4",
+            "description varchar",
         ],
         force_recreate=False,
     )
 
+    desc_ds = get_description_from_classname("DS")
+    desc_dg = get_description_from_classname("DG")
+    desc_cs = get_description_from_classname("CS")
+    desc_mn = get_description_from_classname("MN")
+    desc_af = get_description_from_classname("AF")
+    desc_ri = get_description_from_classname("RI")
+    desc_fs = get_description_from_classname("FS")
+    desc_ft = get_description_from_classname("FT")
+
     sql = f"""
         INSERT INTO
-            {schema}.{name} (id, name, title, orderby)
+            {schema}.{name} (id, name, title, subtitle, orderby, description)
         VALUES
-            (1, 'DS', 'DETER Desmatamento', 0),
-            (2, 'DG', 'DETER Degradação', 1),
-            (3, 'CS', 'DETER Corte seletivo', 2),
-            (4, 'MN', 'DETER Mineração', 3),
-            (5, 'AF', 'Focos (Programa Queimadas)', 4),
-            (6, 'RK', 'Risco de desmatamento (IBAMA)', 5),
-            (7, 'RI', 'Risco de desmatamento', 6);
+            (1, 'DS', 'DETER Desmatamento', '', 0, '{sql_string(desc_ds)}'),
+            (2, 'DG', 'DETER Degradação', '', 1, '{sql_string(desc_dg)}'),
+            (3, 'CS', 'DETER Corte seletivo', '', 2, '{sql_string(desc_cs)}'),
+            (4, 'MN', 'DETER Mineração', '', 3, '{sql_string(desc_mn)}'),
+            (5, 'AF', 'Histórico de Focos', 'Programa Queimadas', 4, '{sql_string(desc_af)}'),
+            (6, 'RK', 'Risco de desmatamento', 'IBAMA', 8, ''),
+            (7, 'RI', 'Risco de desmatamento', '', 7, '{sql_string(desc_ri)}'),
+            (8, 'FS', 'Risco de espalhamento do fogo', '', 6, '{sql_string(desc_fs)}'),
+            (9, 'FT', 'Focos de hoje', 'Programa Queimadas', 5, '{sql_string(desc_ft)}')
     """
 
     db.execute(sql=sql)
@@ -902,14 +957,25 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (13, 'FOCOS', 5, 'Pantanal'),
             (14, 'FOCOS', 5, 'Caatinga'),
             (15, 'FOCOS', 5, 'Mata Atlântica'),
-            (16, 'FOCOS', 5, 'Pampa');
+            (16, 'FOCOS', 5, 'Pampa'),
+            (17, 'DESMATAMENTO_CR', 1, 'Pantanal'),
+            (18, 'DESMATAMENTO_VEG', 1, 'Pantanal'),
+            (19, 'CICATRIZ_DE_QUEIMADA', 2, 'Pantanal'),
+            (20, 'MINERACAO', 4, 'Pantanal'),
+            (21, 'RISCO_ESPALHAMENTO_FOGO', 8, 'Cerrado'),
+            (22, 'FOCOS_HOJE', 9, 'Amazônia'),
+            (23, 'FOCOS_HOJE', 9, 'Cerrado'),
+            (24, 'FOCOS_HOJE', 9, 'Pantanal'),
+            (25, 'FOCOS_HOJE', 9, 'Caatinga'),
+            (26, 'FOCOS_HOJE', 9, 'Mata Atlântica'),
+            (27, 'FOCOS_HOJE', 9, 'Pampa');
     """
 
     db.execute(sql=sql)
 
 
 def create_land_use_table(
-    db: DatabaseFacade, land_use_type=str, force_recreate: bool = False
+    db: DatabaseFacade, land_use_type: str, force_recreate: bool = False
 ):
     """Create the public.land_use_ams table."""
     assert is_valid_land_use_type(land_use_type=land_use_type)
@@ -937,8 +1003,10 @@ def create_land_use_table(
     if table_exists and not force_recreate:
         return
 
-    land_use_categories = (
-        [
+    land_use_categories = []
+
+    if land_use_type == AMS:
+        land_use_categories = [
             "Terra indígena",
             "Unidade de conservação de proteção integral",
             "Unidade de conservação de uso sustentável (sem APA)",
@@ -949,8 +1017,8 @@ def create_land_use_table(
             "Floresta pública não destinada",
             "Área sem registro fundiário",
         ]
-        if land_use_type == AMS
-        else [
+    elif land_use_type == PPCDAM:
+        land_use_categories = [
             "Terra indígena",
             "Unidade de conservação",
             "Território quilombola",
@@ -966,7 +1034,13 @@ def create_land_use_table(
             "Propriedade privada (Dados do CAR)",
             "Área sem registro fundiário",
         ]
-    )
+    else:  # prodes
+        land_use_categories = [
+            "Vegetacao Nativa",
+            "Desmatamento Recente",
+            "Desmatamento Consolidado",
+            "Outros",
+        ]
 
     values = [
         f"({index+1}, '{value}', {index})"
@@ -1203,5 +1277,83 @@ def create_risk_tables(db: DatabaseFacade, force_recreate: bool):
             "biome:btree",
             "geocode:btree",
         ],
+        force_recreate=force_recreate,
+    )
+
+
+def create_processing_table(db: DatabaseFacade, force_recreate: bool):
+    schema = "public"
+    name = "processing"
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id SERIAL NOT NULL PRIMARY KEY",
+            "date DATE NOT NULL",
+            "indicator VARCHAR(40) NOT NULL",
+            "process VARCHAR(100) NOT NULL",
+            "start_process TIMESTAMP WITH TIME ZONE NOT NULL",
+            "end_process TIMESTAMP WITH TIME ZONE",
+            "status VARCHAR(20) DEFAULT 'pending'",
+            "CONSTRAINT valid_dates CHECK (end_process IS NULL OR end_process > start_process)",
+            "CONSTRAINT valid_process CHECK (process IN ('update', 'classification-ams', 'classification-ppcdam', 'classification-prodes'))",
+            "CONSTRAINT valid_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    db.create_indexes(
+        schema=schema,
+        name=name,
+        columns=[
+            "indicator:btree",
+            "date:btree",
+            "process:btree",
+            "start_process:btree",
+            "end_process:btree",
+            "status:btree",
+        ],
+        force_recreate=force_recreate,
+    )
+
+
+def create_fire_spreading_risk_tables(db: DatabaseFacade, force_recreate: bool):
+    """Create the fire spreading risk tables."""
+    schema = "fire_spreading_risk"
+
+    db.create_schema(name=schema, force_recreate=False)
+
+    name = "risk_file"
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=[
+            "id serial NOT NULL PRIMARY KEY",
+            "file_name varchar",
+            "process_status int4",
+            "process_message varchar",
+            "file_date TIMESTAMP NOT NULL",
+            "is_new boolean DEFAULT true",
+            "processed_at timestamp with time zone",
+        ],
+        force_recreate=force_recreate,
+    )
+
+    name = "risk_data"
+    columns = [
+        "id serial NOT NULL PRIMARY KEY",
+        "biome varchar(254)",
+        "view_date date",
+        "municipality varchar(254)",
+        "geom geometry(Point, 4674)",
+        "geocode varchar(80)",
+        "src varchar(254)",
+    ]
+
+    db.create_table(
+        schema=schema,
+        name=name,
+        columns=columns,
         force_recreate=force_recreate,
     )

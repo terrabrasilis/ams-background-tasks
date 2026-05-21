@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import sys
+from time import sleep
 
 import click
 
@@ -11,9 +12,18 @@ from ams_background_tasks.database_utils import (
     DatabaseFacade,
     get_connection_components,
 )
-from ams_background_tasks.tools.common import BIOMES
+from ams_background_tasks.log import get_logger
+from ams_background_tasks.tools.common import (
+    ACTIVE_FIRES_INDICATOR,
+    BIOMES,
+    analyze_table,
+    create_processing,
+    finalize_processing,
+    optimize_table,
+    prepare_table_to_update,
+)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, sys.stdout)
 
 
 @click.command("update-active-fires")
@@ -32,6 +42,13 @@ logger = logging.getLogger(__name__)
     help="External active fires database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
+    "--fc-db-url",
+    required=False,
+    type=str,
+    default="",
+    help="External fires class database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
+)
+@click.option(
     "--all-data",
     required=False,
     is_flag=True,
@@ -41,71 +58,89 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--biome", type=click.Choice(BIOMES), required=True, help="Biome.", multiple=True
 )
-def main(db_url: str, af_db_url: str, all_data: bool, biome: tuple):
+@click.option(
+    "--limit",
+    required=False,
+    type=int,
+    default=0,
+    help="Restrict the number of rows to update (test purpose).",
+)
+def main(
+    db_url: str,
+    af_db_url: str,
+    fc_db_url: str,
+    all_data: bool,
+    biome: tuple,
+    limit: int,
+):
     """Update the active fires table."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
-    af_db_url = os.getenv("AMS_AF_DB_URL") if not af_db_url else af_db_url
+    af_db_url = os.getenv("AMS_AF_DB_URL", "") if not af_db_url else af_db_url
     logger.debug(af_db_url)
     assert af_db_url
 
+    fc_db_url = os.getenv("AMS_FC_DB_URL", "") if not fc_db_url else fc_db_url
+    logger.debug(fc_db_url)
+    assert fc_db_url
+
     logger.debug(all_data)
 
-    update_active_fires_table(
-        db_url=db_url, af_db_url=af_db_url, all_data=all_data, biome_list=list(biome)
+    db = DatabaseFacade.create(db_url=db_url)
+
+    create_processing(
+        db=db, indicator=ACTIVE_FIRES_INDICATOR, process="update", status="processing"
     )
 
+    update_active_fires_table(
+        db=db,
+        af_db_url=af_db_url,
+        fc_db_url=fc_db_url,
+        all_data=all_data,
+        biome_list=list(biome),
+        limit=limit,
+    )
 
-def _prepare_table_before_updating(db: DatabaseFacade):
-    schema = "fires"
-    name = "active_fires"
+    finalize_processing(
+        db=db, indicator=ACTIVE_FIRES_INDICATOR, process="update", status="completed"
+    )
 
-    # disable autovacuum
-    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = off);")
+    db.commit()
 
-    # drop indexes
-    columns = [
-        "view_date",
-        "biome",
-        "geocode",
-        "geom",
-    ]
-
-    db.drop_indexes(schema=schema, name=name, columns=columns)
-
-
-def _prepare_table_after_updating(db: DatabaseFacade):
-    schema = "fires"
-    name = "active_fires"
-
-    # enable autovacuum
-    # db.execute(f"ALTER TABLE {schema}.{name} SET (autovacuum_enabled = on);")
-
-    # recreate indexes
-    columns = [
-        "view_date:btree",
-        "biome:btree",
-        "geocode:btree",
-        "geom:gist",
-    ]
-
-    db.create_indexes(schema=schema, name=name, columns=columns, force_recreate=False)
+    analyze_table(db=db, schema="fires", name="active_fires")
 
 
 def update_active_fires_table(
-    db_url: str, af_db_url: str, all_data: bool, biome_list: list
+    db: DatabaseFacade,
+    af_db_url: str,
+    fc_db_url: str,
+    all_data: bool,
+    biome_list: list,
+    limit: int,
 ):
     logger.info("updating the active_fires table")
 
-    db = DatabaseFacade.from_url(db_url=db_url)
+    assert all_data
 
-    # _prepare_table_before_updating(db=db)
+    index_columns = [
+        "view_date:btree",
+        "uuid:btree",
+        "biome:btree",
+        "geocode:btree",
+        "prodes_class:btree",
+        "biome,view_date:btree",
+        "view_date,id,biome:btree",
+        "geom:gist",
+    ]
+
+    prepare_table_to_update(
+        db=db, schema="fires", name="active_fires", columns=index_columns
+    )
 
     # creating a sql view for the external database
     logger.info("creating the sql view")
-    print("creating the sql view")
     user, password, host, port, db_name = get_connection_components(db_url=af_db_url)
 
     sql = f"""
@@ -129,27 +164,39 @@ def update_active_fires_table(
 
     # inserting data
     logger.info("inserting data from view")
-    print("inserting data from view")
 
     table = "fires.active_fires"
 
-    by_date = "a.view_date > '2016-01-01'::date "
+    by_date = "a.view_date > '2018-08-01'::date "
 
-    if all_data:
-        db.truncate(table=table)
-    else:
-        by_date = f"a.view_date > (SELECT MAX(view_date) FROM {table})"
+    db.truncate(table=table)
+
+    limit_sql = f"LIMIT {limit}" if limit > 0 else ""
 
     sql = f"""
         INSERT INTO {table} (
-            id, uuid, view_date, satelite, estado, municipio, biome, geom
+            uuid, view_date, prodes_class, satelite, estado, municipio, biome, geom
         )
-        SELECT a.id, a.uuid, a.view_date, a.satelite, a.estado, a.municipio, a.biome, a.geom
+        SELECT a.uuid, a.view_date, 'Nao Categorizado', a.satelite, a.estado, a.municipio, a.biome, a.geom
         FROM public.raw_active_fires a
         WHERE {by_date} AND a.biome IN ({",".join(repr(_) for _ in biome_list)})
+        {limit_sql};
     """
 
     db.execute(sql)
+
+    # creating the essentials indices to update some columns
+    tmp_index_columns = [
+        "biome:btree",
+        "uuid:btree",
+        "geom:gist",
+    ]
+    db.create_indexes(
+        schema="fires",
+        name="active_fires",
+        columns=tmp_index_columns,
+        force_recreate=False,
+    )
 
     # intersecting with municipalities
     logger.info("intersecting with municipalities")
@@ -178,4 +225,58 @@ def update_active_fires_table(
 
     db.execute(sql)
 
-    # _prepare_table_after_updating(db=db)
+    # sql view for retrieve fire classes
+    logger.info("creating a sql view to qualify fires from prodes class")
+    user, password, host, port, db_name = get_connection_components(db_url=fc_db_url)
+
+    view = "public.fires_class"
+
+    sql = f"""
+        CREATE OR REPLACE VIEW {view}
+        AS
+        SELECT remote_data.id,
+            remote_data.uuid,
+            remote_data.classe_prodes
+        FROM dblink(
+                'hostaddr={host} port={port} dbname={db_name} user={user} password={password}'::text,
+                'SELECT id, uuid, classe_prodes FROM public.focos_aqua_referencia'::text
+            )
+            AS remote_data(
+                id integer,
+                uuid varchar,
+                classe_prodes varchar
+            );
+    """
+
+    db.execute(sql)
+
+    stop = False
+    tries = 0
+
+    while not stop:
+        sql = f"""
+            UPDATE {table} AS af
+            SET prodes_class = fc.classe_prodes
+            FROM {view} fc
+            WHERE af.uuid=fc.uuid;
+        """
+
+        db.execute(sql)
+
+        count = db.count_rows(table=table, conditions="prodes_class='0'")
+
+        logger.info(count)
+
+        stop = count == 0 or tries >= 30
+        tries += 1
+
+        if not stop:
+            sleep(300)
+
+    logger.debug(tries)
+
+    logger.debug(
+        db.count_rows(table=table, conditions="prodes_class='Nao Categorizado'")
+    )
+
+    optimize_table(db=db, schema="fires", name="active_fires", columns=index_columns)

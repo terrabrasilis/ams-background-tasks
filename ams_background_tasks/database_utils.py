@@ -15,7 +15,7 @@ from ams_background_tasks.log import get_logger
 logger = get_logger(__name__, sys.stdout)
 
 
-def get_connection_components(db_url: str):
+def get_connection_components(db_url: str) -> tuple:
     parsed_url = urlparse(db_url)
 
     user = parsed_url.username
@@ -37,7 +37,7 @@ class DatabaseFacade(BaseModel):
     _conn: Optional[connection] = None
 
     @classmethod
-    def from_url(cls, db_url: str) -> "DatabaseFacade":
+    def create(cls, db_url: str) -> "DatabaseFacade":
         user, password, host, port, db_name = get_connection_components(db_url=db_url)
         return cls(
             user=user,
@@ -66,18 +66,44 @@ class DatabaseFacade(BaseModel):
             assert self._conn.status == 1
         return self._conn
 
-    def execute(self, sql: str, log: bool = True):
+    def execute(self, sql: str, with_commit: bool = False, log: bool = True):
         """Execute a sql string."""
         if log:
             logger.debug(" ".join(sql.split()))
 
         self.conn.cursor().execute(sql)
-        self.conn.commit()
+
+        if with_commit:
+            assert False
+            self.commit()
+
+    def execute_many(self, query: str, data: Any, with_commit: bool = False):
+        """Execute a sql string."""
+        logger.debug(query.strip())
+
+        self.conn.cursor().executemany(query, data)
+
+        if with_commit:
+            assert False
+            self.commit()
 
     def commit(self):
-        self.conn.commit()
+        try:
+            self.conn.commit()
+        except Exception as e:
+            logger.error(
+                "database commit failed with error: %s. Initiating rollback.", e
+            )
+            self.conn.rollback()
+            raise
 
-    def create_schema(self, name: str, comment: str = "", force_recreate: bool = False):
+    def create_schema(
+        self,
+        name: str,
+        with_commit: bool = False,
+        comment: str = "",
+        force_recreate: bool = False,
+    ):
         """Create a schema."""
         sql = ""
 
@@ -91,10 +117,16 @@ class DatabaseFacade(BaseModel):
 
         sql += f"GRANT ALL ON SCHEMA {name} TO {self.user};"
 
-        self.execute(sql)
+        self.execute(sql, with_commit=with_commit)
 
     def create_table(
-        self, *, schema: str, name: str, columns: list, force_recreate: bool = False
+        self,
+        *,
+        schema: str,
+        name: str,
+        columns: list,
+        with_commit: bool = False,
+        force_recreate: bool = False,
     ):
         """Create a database table."""
         table = f'{schema}."{name}"'
@@ -111,7 +143,7 @@ class DatabaseFacade(BaseModel):
             )
         """
 
-        self.execute(sql)
+        self.execute(sql, with_commit=with_commit)
 
     def create_index(
         self,
@@ -121,6 +153,7 @@ class DatabaseFacade(BaseModel):
         table: str,
         method: str,
         column: str,
+        with_commit: bool = False,
         force_recreate: bool = False,
     ):
         """Create an index."""
@@ -137,20 +170,27 @@ class DatabaseFacade(BaseModel):
             ON {table} USING {method}
             ({column});
         """
-        self.execute(sql)
+        self.execute(sql, with_commit=with_commit)
 
     def create_indexes(
-        self, schema: str, name: str, columns: tuple, force_recreate: bool
+        self,
+        schema: str,
+        name: str,
+        columns: list,
+        force_recreate: bool,
+        with_commit: bool = False,
     ):
         """Create an index for each column."""
         for _ in columns:
             col, method = _.split(":")
+            iname = f"{name}_{col.replace(',', '_')}_idx"
             self.create_index(
                 schema=schema,
-                name=f"{name}_{col.replace(',', '_')}_idx",
+                name="_".join([_[:3] for _ in iname.split("_")]),
                 table=name,
                 method=method,
                 column=col,
+                with_commit=with_commit,
                 force_recreate=force_recreate,
             )
 
@@ -158,25 +198,29 @@ class DatabaseFacade(BaseModel):
         self,
         schema: str,
         name: str,
+        with_commit: bool = False,
     ):
         """Create an index."""
         index = f"{schema}.{name}"
 
         sql = f"DROP INDEX IF EXISTS {index};"
 
-        self.execute(sql)
+        self.execute(sql, with_commit=with_commit)
 
     def drop_indexes(
         self,
         schema: str,
         name: str,
         columns: list,
+        with_commit: bool = False,
     ):
         """Create an index for each column."""
         for col in columns:
+            col = col.split(":")[0]
             self.drop_index(
                 schema=schema,
                 name=f"{name}_{col.replace(',', '_')}_idx",
+                with_commit=with_commit,
             )
 
     def fetchall(self, query):
@@ -201,26 +245,49 @@ class DatabaseFacade(BaseModel):
         cursor.close()
         return data
 
-    def insert(self, query: str, data: Any):
-        logger.debug(query.strip())
+    def insert(self, query: str, data: Any, with_commit: bool = False):
+        self.execute_many(query=query, data=data, with_commit=with_commit)
 
-        cursor = self.conn.cursor()
-        cursor.executemany(query, data)
-        self.conn.commit()
-        cursor.close()
-
-    def truncate(self, table: str, cascade: bool = False, restart: bool = False):
+    def truncate(
+        self,
+        table: str,
+        with_commit: bool = False,
+        cascade: bool = False,
+        restart: bool = False,
+    ):
         _cascade = "CASCADE" if cascade else ""
         _restart = "RESTART IDENTITY" if restart else ""
         sql = f"TRUNCATE {table} {_restart} {_cascade};"
-        self.execute(sql=sql)
+        self.execute(sql=sql, with_commit=with_commit)
 
-    def copy_table(self, src: str, dst: str):
-        self.execute(f"INSERT INTO {dst} SELECT * FROM {src}")
+    def copy_table(
+        self,
+        src: str,
+        dst: str,
+        with_commit: bool,
+        cols_to_ignore: list,
+        conditions: str = "",
+    ):
+        schema = dst.split(".")[0] if len(dst.split(".")) == 2 else "public"
+        table = dst.split(".")[1] if len(dst.split(".")) == 2 else dst
 
-    def drop_table(self, table: str, cascade: bool = False):
+        cols = [
+            _
+            for _ in self.get_columns(schema=schema, table=table)
+            if _ not in cols_to_ignore
+        ]
+        cols_str = ", ".join(cols)
+
+        self.execute(
+            f"INSERT INTO {dst} ({cols_str}) SELECT {cols_str} FROM {src} {conditions}",
+            with_commit=with_commit,
+        )
+
+    def drop_table(self, table: str, with_commit: bool = False, cascade: bool = False):
         _cascade = "CASCADE" if cascade else ""
-        self.execute(f"DROP TABLE IF EXISTS {table} {_cascade};")
+        self.execute(
+            f"DROP TABLE IF EXISTS {table} {_cascade};", with_commit=with_commit
+        )
 
     def create_postgis_extension(self):
         self.execute("CREATE EXTENSION IF NOT EXISTS POSTGIS")
@@ -251,3 +318,38 @@ class DatabaseFacade(BaseModel):
             );
         """
         return self.fetchone(query=query)
+
+    def delete_where(self, schema: str, table: str, condition: str):
+        sql = f"DELETE FROM {schema}.{table} WHERE {condition};"
+        self.execute(sql=sql, log=True)
+
+    def get_columns(self, schema: str, table: str):
+        query = f"""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = '{schema}' AND table_name = '{table}';
+        """
+
+        return [_[0] for _ in self.fetchall(query=query)]
+
+    def analyze(self, schema: str, table: str):
+        """Update the table stats."""
+        sql = f"VACUUM ANALYZE {schema}.{table};"
+
+        logger.debug(sql)
+
+        conn = connect(
+            user=self.user,
+            password=self.password,
+            host=self.host,
+            port=self.port,
+            dbname=self.db_name,
+        )
+
+        conn.set_session(autocommit=True)
+
+        cur = conn.cursor()
+        cur.execute(sql)
+
+        cur.close()
+        conn.close()

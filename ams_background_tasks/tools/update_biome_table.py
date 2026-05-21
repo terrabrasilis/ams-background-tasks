@@ -30,21 +30,29 @@ logger = get_logger(__name__, sys.stdout)
     help="Auxiliary database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
 @click.option(
-    "--biome", type=click.Choice(BIOMES), required=True, help="Biome.", multiple=True
+    "--biome",
+    type=click.Choice(BIOMES),
+    required=False,
+    help="Biome.",
+    multiple=True,
+    default=BIOMES,
 )
 def main(db_url: str, aux_db_url: str, biome: tuple):
     """Update the biome border table."""
     db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
     logger.info(db_url)
     assert db_url
-    db = DatabaseFacade.from_url(db_url=db_url)
 
     aux_db_url = os.getenv("AMS_AUX_DB_URL") if not aux_db_url else aux_db_url
     logger.info(aux_db_url)
     assert aux_db_url
-    aux_db = DatabaseFacade.from_url(db_url=aux_db_url)
+
+    db = DatabaseFacade.create(db_url=db_url)
+    aux_db = DatabaseFacade.create(db_url=aux_db_url)
 
     update_biome_border_table(db=db, aux_db=aux_db, biome_list=list(biome))
+
+    db.commit()
 
 
 def update_biome_border_table(
