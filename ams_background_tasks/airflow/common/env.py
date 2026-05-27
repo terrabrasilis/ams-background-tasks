@@ -14,6 +14,12 @@ VENV_CMD = f"source {VENV_PATH}/bin/activate && "
 LAND_USE_DIR = PROJECT_DIR / "land_use"
 RISK_DIR = PROJECT_DIR / "risk"
 FIRE_SR_DIR = PROJECT_DIR / "fire_spreading_risk"
+PRODES_DIR = PROJECT_DIR / "prodes"
+PRODES_ROOT_DIR = PRODES_DIR
+PRODES_CACHE_DIR = PRODES_ROOT_DIR / "cache"
+PRODES_CHUNK_DIR = PRODES_CACHE_DIR / "chunk"
+PRODES_REPROJECT_DIR = PRODES_CACHE_DIR / "reproject"
+PRODES_COUNT_DIR = PRODES_CACHE_DIR / "count"
 
 
 def update_environment(dag):

@@ -890,6 +890,7 @@ def create_prodes_spatial_unit_tables(
                 "counts int4",
                 "counts2 int4",
                 "area double precision",
+                "percentage double precision NOT NULL DEFAULT 0.0",
                 "geocode character varying(80)",
                 "biome character varying(254)",
             ],
@@ -1027,3 +1028,23 @@ def build_total_vegetation_indicator_dataframe(
     vegetation_dfr = pd.concat(vegetation_dfr_list)
 
     return vegetation_dfr
+
+
+def calculate_percentage(db: DatabaseFacade, land_use_type: str):
+    """Update the percentage of each land-use record relative to its spatial unit.
+
+    For every spatial unit returned by :func:`read_spatial_units`, this function
+    updates the corresponding ``*_land_use`` table so that ``percentage`` is
+    calculated as ``area / spatial_unit.area * 100``.
+    """
+    for spatial_unit in read_spatial_units(db=db):
+        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+        sql = f"""
+            UPDATE public."{spatial_unit}_land_use{land_use_type_suffix}"
+            SET percentage=public."{spatial_unit}_land_use{land_use_type_suffix}".area/su.area*100
+            FROM public."{spatial_unit}" su
+            WHERE
+                public."{spatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
+        """
+        db.execute(sql)

@@ -1,4 +1,5 @@
 """Update the AMS active fires tables."""
+
 # pylint: disable=too-many-try-statements,broad-exception-caught
 
 from __future__ import annotations

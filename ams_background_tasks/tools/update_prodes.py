@@ -13,6 +13,7 @@ import pandas as pd
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
+    AMS,
     BIOMES,
     LAND_USE_TYPES,
     PRODES_ACCUMULATED_DEFORESTATION,
@@ -43,6 +44,7 @@ from ams_background_tasks.tools.prodes_utils import (
 )
 from ams_background_tasks.tools.prodes_utils import (
     build_vegetation_land_use_counts_dataframe,
+    calculate_percentage,
     create_prodes_deforestation_indicator_tables,
     save_indicator,
 )
@@ -496,6 +498,9 @@ def main(
         years=years_list,
         save_indicators=save_indicators,
     )
+
+    if save_indicators:
+        calculate_percentage(db=db, land_use_type=AMS)
 
     db.commit()
 

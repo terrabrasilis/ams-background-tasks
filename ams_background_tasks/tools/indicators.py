@@ -73,6 +73,10 @@ def get_description_from_classname(classname: str):
         "RI": normalize_text(_RISCO_DE_DESMATAMENTO),
         "FS": normalize_text(_RISCO_DE_ESPALHAMENTO_DO_FOGO),
         "FT": normalize_text(_FOCOS_DE_HOJE),
+        "AI": "",
+        "AD": "",
+        "DR": "",
+        "NV": "",
     }
 
     assert classname in descriptions
