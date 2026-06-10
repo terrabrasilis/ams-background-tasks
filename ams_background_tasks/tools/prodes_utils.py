@@ -16,7 +16,12 @@ from shapely.geometry import Point, box
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import AMS, LAND_USE_TYPES, read_spatial_units
+from ams_background_tasks.tools.common import (
+    AMS,
+    LAND_USE_TYPES,
+    PRODES,
+    read_spatial_units,
+)
 
 PRODES_DEFORESTATION_PIXEL_BASE_YEAR: Final = 2000
 PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR: Final = 1960
@@ -823,6 +828,7 @@ def build_vegetation_from_deforestation_dataframe(
 def save_indicator(
     db: DatabaseFacade,
     indicator_dataframe: pd.DataFrame,
+    land_use_type: str,
     spatial_unit: str,
     classname: str,
 ):
@@ -832,7 +838,9 @@ def save_indicator(
 
     assert np.all(indicator_dataframe["spatial_unit"] == spatial_unit)
 
-    table_name = f"{PRODES_DB_SCHEMA}.{spatial_unit}_land_use"
+    table_name = get_land_use_table_name(
+        spatial_unit=spatial_unit, land_use_type=land_use_type, schema=PRODES_DB_SCHEMA
+    )
 
     def _insert_into_land_use_table(values: list):
         sql = f"INSERT INTO {table_name} (classname, date, suid, land_use_id, geocode, biome, counts, counts2, area) VALUES {','.join(values)};"
@@ -860,8 +868,28 @@ def create_prodes_deforestation_indicator_tables(
 
     for spatial_unit in read_spatial_units(db=db):
         create_prodes_spatial_unit_tables(
-            db=db, spatial_unit=spatial_unit, force_recreate=force_recreate
+            db=db,
+            spatial_unit=spatial_unit,
+            force_recreate=force_recreate,
         )
+
+
+def get_land_use_table_name(
+    spatial_unit: str, land_use_type: str, schema: str = ""
+) -> str:
+    """Return the full land-use table name for a spatial unit.
+
+    The table name follows ``{spatial_unit}_land_use`` and, for non-AMS land-use
+    types, appends ``_{land_use_type}``. When ``schema`` is provided, it is
+    prepended as ``{schema}.``.
+    """
+    assert land_use_type in LAND_USE_TYPES
+
+    land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
+
+    schema = f"{schema}." if schema else ""
+
+    return f"{schema}{spatial_unit}_land_use{land_use_type_suffix}"
 
 
 def create_prodes_spatial_unit_tables(
@@ -871,12 +899,12 @@ def create_prodes_spatial_unit_tables(
 ) -> None:
     """Create the PRODES output tables associated with a spatial unit."""
     for land_use_type in LAND_USE_TYPES:
-        if land_use_type != AMS:
+        if land_use_type == PRODES:
             continue
 
-        land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
-
-        land_use_table = f"{spatial_unit}_land_use{land_use_type_suffix}"
+        land_use_table = get_land_use_table_name(
+            spatial_unit=spatial_unit, land_use_type=land_use_type
+        )
 
         db.create_table(
             schema=PRODES_DB_SCHEMA,
@@ -1041,10 +1069,10 @@ def calculate_percentage(db: DatabaseFacade, land_use_type: str):
         land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
         sql = f"""
-            UPDATE public."{spatial_unit}_land_use{land_use_type_suffix}"
-            SET percentage=public."{spatial_unit}_land_use{land_use_type_suffix}".area/su.area*100
+            UPDATE prodes."{spatial_unit}_land_use{land_use_type_suffix}"
+            SET percentage=prodes."{spatial_unit}_land_use{land_use_type_suffix}".area/su.area*100
             FROM public."{spatial_unit}" su
             WHERE
-                public."{spatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
+                prodes."{spatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
         """
         db.execute(sql)

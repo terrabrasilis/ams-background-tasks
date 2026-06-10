@@ -13,13 +13,11 @@ import pandas as pd
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
-    AMS,
     BIOMES,
     LAND_USE_TYPES,
     PRODES_ACCUMULATED_DEFORESTATION,
     PRODES_ANNUAL_INCREASE_DEFORESTATION,
     PRODES_DEFORESTATION_RATIO,
-    PRODES_NATIVE_VEGETATION,
     read_spatial_units,
 )
 from ams_background_tasks.tools.prodes_utils import (
@@ -57,6 +55,7 @@ def build_annual_increase_in_deforestation_indicator_dataframe(
     db: DatabaseFacade,
     prodes_tiff_file: Path,
     land_use_tiff_file: Path,
+    land_use_type: str,
     chunk_size: int,
     chunk_dir: Path,
     reproject_dir: Path,
@@ -90,9 +89,11 @@ def build_annual_increase_in_deforestation_indicator_dataframe(
     dfr.to_pickle(annual_increase_filename)
 
     if save_indicators:
+        dfr2 = dfr[dfr["year"] >= PRODES_DB_FIRST_YEAR]
         persist_count_based_indicator(
             db=db,
-            indicator_dataframe=dfr,
+            indicator_dataframe=dfr2,
+            land_use_type=land_use_type,
             classname=PRODES_ANNUAL_INCREASE_DEFORESTATION,
             count_column="deforestation_pixels",
         )
@@ -105,6 +106,7 @@ def build_accumulated_deforestation_indicator_dataframe(
     db: DatabaseFacade,
     prodes_tiff_file: Path,
     land_use_tiff_file: Path,
+    land_use_type: str,
     chunk_size: int,
     chunk_dir: Path,
     reproject_dir: Path,
@@ -138,9 +140,11 @@ def build_accumulated_deforestation_indicator_dataframe(
     dfr.to_pickle(accumulated_deforestation_filename)
 
     if save_indicators:
+        dfr2 = dfr[dfr["year"] >= PRODES_DB_FIRST_YEAR]
         persist_count_based_indicator(
             db=db,
-            indicator_dataframe=dfr,
+            indicator_dataframe=dfr2,
+            land_use_type=land_use_type,
             classname=PRODES_ACCUMULATED_DEFORESTATION,
             count_column="deforestation_pixels",
         )
@@ -192,6 +196,7 @@ def build_total_vegetation_indicator_dataframe(
     db: DatabaseFacade,
     prodes_tiff_file: Path,
     land_use_tiff_file: Path,
+    land_use_type: str,
     chunk_size: int,
     chunk_dir: Path,
     reproject_dir: Path,
@@ -224,13 +229,15 @@ def build_total_vegetation_indicator_dataframe(
     )
     dfr.to_pickle(vegetation_filename)
 
-    if save_indicators:
-        persist_count_based_indicator(
-            db=db,
-            indicator_dataframe=dfr,
-            classname=PRODES_NATIVE_VEGETATION,
-            count_column="vegetation_pixels",
-        )
+    _ = land_use_type
+    _ = save_indicators  # no warn
+    #    persist_count_based_indicator(
+    #        db=db,
+    #        indicator_dataframe=dfr,
+    #        land_use_type=land_use_type,
+    #        classname=PRODES_NATIVE_VEGETATION,
+    #        count_column="vegetation_pixels",
+    #    )
 
     return dfr
 
@@ -243,6 +250,7 @@ def build_ratio_deforestation_vegetation_dataframe(
     prodes_cache_dir: Path,
     biome: str,
     years: list[int],
+    land_use_type: str,
     save_indicators: bool = False,
 ) -> pd.DataFrame:
     """Build, save and optionally persist the deforestation/vegetation ratio."""
@@ -271,7 +279,13 @@ def build_ratio_deforestation_vegetation_dataframe(
     dfr.to_pickle(ratio_deforestation_vegetation_filename)
 
     if save_indicators:
-        persist(db=db, indicator_dataframe=dfr, classname=PRODES_DEFORESTATION_RATIO)
+        dfr2 = dfr[dfr["year"] >= PRODES_DB_FIRST_YEAR]
+        persist(
+            db=db,
+            indicator_dataframe=dfr2,
+            classname=PRODES_DEFORESTATION_RATIO,
+            land_use_type=land_use_type,
+        )
 
     return dfr
 
@@ -368,16 +382,20 @@ def main(
     prodes_tiff_file = Path(prodes_root_dir) / f"prodes_{biome}.tif"
     assert prodes_tiff_file.exists(), f"{prodes_tiff_file} not found"
 
-    prodes_cache_dir = Path(prodes_root_dir) / "cache"
+    prodes_cache_dir = Path(prodes_root_dir) / "cache" / f"{land_use_type}"
+    prodes_cache_dir.mkdir(parents=True, exist_ok=True)
     assert prodes_cache_dir.exists(), f"{prodes_cache_dir} not found"
 
-    chunk_dir = prodes_cache_dir / "chunk"
+    chunk_dir = prodes_cache_dir / ".." / "chunk"
+    chunk_dir.mkdir(parents=True, exist_ok=True)
     assert chunk_dir.exists(), f"{chunk_dir} not found"
 
     reproject_dir = prodes_cache_dir / "reproject"
+    reproject_dir.mkdir(parents=True, exist_ok=True)
     assert reproject_dir.exists(), f"{reproject_dir} not found"
 
     count_dir = prodes_cache_dir / "count"
+    count_dir.mkdir(parents=True, exist_ok=True)
     assert count_dir.exists(), f"{count_dir} not found"
 
     # vegetation_count_dir = prodes_cache_dir / "vegetation"
@@ -431,6 +449,7 @@ def main(
         db=db,
         prodes_tiff_file=prodes_tiff_file,
         land_use_tiff_file=land_use_tiff_file,
+        land_use_type=land_use_type,
         chunk_size=chunk_size,
         chunk_dir=chunk_dir,
         reproject_dir=reproject_dir,
@@ -447,6 +466,7 @@ def main(
         db=db,
         prodes_tiff_file=prodes_tiff_file,
         land_use_tiff_file=land_use_tiff_file,
+        land_use_type=land_use_type,
         chunk_size=chunk_size,
         chunk_dir=chunk_dir,
         reproject_dir=reproject_dir,
@@ -477,6 +497,7 @@ def main(
         db=db,
         prodes_tiff_file=prodes_tiff_file,
         land_use_tiff_file=land_use_tiff_file,
+        land_use_type=land_use_type,
         chunk_size=chunk_size,
         chunk_dir=chunk_dir,
         reproject_dir=reproject_dir,
@@ -496,17 +517,21 @@ def main(
         prodes_cache_dir=prodes_cache_dir,
         biome=biome,
         years=years_list,
+        land_use_type=land_use_type,
         save_indicators=save_indicators,
     )
 
     if save_indicators:
-        calculate_percentage(db=db, land_use_type=AMS)
+        calculate_percentage(db=db, land_use_type=land_use_type)
 
     db.commit()
 
 
 def persist(
-    db: DatabaseFacade, indicator_dataframe: pd.DataFrame, classname: str
+    db: DatabaseFacade,
+    indicator_dataframe: pd.DataFrame,
+    classname: str,
+    land_use_type: str,
 ) -> None:
     """Persist a PRODES indicator dataframe into the spatial-unit tables.
 
@@ -549,6 +574,7 @@ def persist(
         save_indicator(
             db=db,
             indicator_dataframe=dfr,
+            land_use_type=land_use_type,
             classname=classname,
             spatial_unit=spatial_unit,
         )
@@ -558,6 +584,7 @@ def persist_count_based_indicator(
     *,
     db: DatabaseFacade,
     indicator_dataframe: pd.DataFrame,
+    land_use_type: str,
     classname: str,
     count_column: str = "counts",
 ) -> None:
@@ -569,9 +596,12 @@ def persist_count_based_indicator(
     """
     dfr = indicator_dataframe.copy()
 
-    dfr = dfr[dfr["year"] >= PRODES_DB_FIRST_YEAR]
-
     dfr["counts"] = dfr[count_column]
     dfr["area"] = PRODES_DEFORESTATION_PIXEL_AREA * dfr["counts"]
     dfr["counts2"] = 0.0
-    persist(db=db, indicator_dataframe=dfr, classname=classname)
+    persist(
+        db=db,
+        indicator_dataframe=dfr,
+        classname=classname,
+        land_use_type=land_use_type,
+    )

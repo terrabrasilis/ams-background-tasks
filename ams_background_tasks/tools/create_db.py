@@ -935,29 +935,25 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     desc_ft = get_description_from_classname("FT")
     desc_ai = get_description_from_classname("AI")
     desc_ad = get_description_from_classname("AD")
-    # desc_dr = get_description_from_classname("DR")
-    # desc_nv = get_description_from_classname("NV")
+    desc_dr = get_description_from_classname("DR")
 
     sql = f"""
         INSERT INTO
             {schema}.{name} (id, name, title, subtitle, orderby, description)
         VALUES
-            (1, 'DS', 'DETER Desmatamento', '', 0, '{sql_string(desc_ds)}'),
-            (2, 'DG', 'DETER Degradação', '', 1, '{sql_string(desc_dg)}'),
-            (3, 'CS', 'DETER Corte seletivo', '', 2, '{sql_string(desc_cs)}'),
-            (4, 'MN', 'DETER Mineração', '', 3, '{sql_string(desc_mn)}'),
-            (5, 'AF', 'Histórico de Focos', 'Programa Queimadas', 4, '{sql_string(desc_af)}'),
-            (6, 'RK', 'Risco de desmatamento', 'IBAMA', 8, ''),
-            (7, 'RI', 'Risco de desmatamento', '', 7, '{sql_string(desc_ri)}'),
-            (8, 'FS', 'Risco de espalhamento do fogo', '', 6, '{sql_string(desc_fs)}'),
-            (9, 'FT', 'Focos de hoje', 'Programa Queimadas', 5, '{sql_string(desc_ft)}'),
-            (10, 'AI', 'PRODES Incremento anual', '', 9, '{sql_string(desc_ai)}'),
-            (11, 'AD', 'PRODES Desmatamento Acumulado', '', 10, '{sql_string(desc_ad)}')
+            (1, 'DS', 'Desmatamento', 'DETER', 0, '{sql_string(desc_ds)}'),
+            (2, 'DG', 'Degradação', 'DETER', 1, '{sql_string(desc_dg)}'),
+            (3, 'CS', 'Corte seletivo', 'DETER', 2, '{sql_string(desc_cs)}'),
+            (4, 'MN', 'Mineração', 'DETER', 3, '{sql_string(desc_mn)}'),
+            (5, 'AF', 'Histórico de Focos', 'Queimadas', 7, '{sql_string(desc_af)}'),
+            (6, 'RK', 'Risco de desmatamento', 'IBAMA', 11, ''),
+            (7, 'RI', 'Risco de desmatamento', '', 10, '{sql_string(desc_ri)}'),
+            (8, 'FS', 'Risco de espalhamento do fogo', 'FIP', 9, '{sql_string(desc_fs)}'),
+            (9, 'FT', 'Focos de hoje', 'Queimadas', 8, '{sql_string(desc_ft)}'),
+            (10, 'AI', 'Incremento anual', 'PRODES', 4, '{sql_string(desc_ai)}'),
+            (11, 'AD', 'Desmatamento Acumulado', 'PRODES', 5, '{sql_string(desc_ad)}'),
+            (12, 'DR', 'Acumulado / Vegetação', 'PRODES', 6, '{sql_string(desc_dr)}')
     """
-
-    # (11, 'AD', 'PRODES Desmatamento Acumulado', '', '{sql_string(desc_ad)}'),
-    # (12, 'DR', 'PRODES Razão Desmatamento Vegetação Natural Disponível', '', '{sql_string(desc_dr)}'),
-    # (13, 'NV', 'PRODES Vegetação Natural Disponível', '', '{sql_string(desc_nv)}')
 
     db.execute(sql=sql)
 
@@ -1009,7 +1005,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (26, 'FOCOS_HOJE', 9, 'Mata Atlântica'),
             (27, 'FOCOS_HOJE', 9, 'Pampa'),
             (28, 'INCREMENTO_ANUAL', 10, 'Amazônia'),
-            (29, 'DESMATAMENTO_ACUMULADO', 11, 'Amazônia')
+            (29, 'DESMATAMENTO_ACUMULADO', 11, 'Amazônia'),
+            (30, 'DESMATAMENTO_VEGETACAO', 12, 'Amazônia')
     """
 
     db.execute(sql=sql)
