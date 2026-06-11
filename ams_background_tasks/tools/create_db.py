@@ -246,7 +246,12 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(mlu.units) AS units,
                                 COALESCE(
                                     SUM(mlu.counts)::double precision
-                                    / NULLIF(SUM(mlu.counts2)::double precision, 0),
+                                    /
+                                    NULLIF(
+                                        SUM(mlu.counts)::double precision +
+                                        SUM(mlu.counts2)::double precision,
+                                        0
+                                    ),
                                     0
                                 ) AS ratio
                             FROM public."municipalities_land_use" mlu
@@ -411,7 +416,12 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                 SUM(slu.units) AS units,
                                 COALESCE(
                                     SUM(slu.counts)::double precision
-                                    / NULLIF(SUM(slu.counts2)::double precision, 0),
+                                    /
+                                    NULLIF(
+                                        SUM(slu.counts)::double precision +
+                                        SUM(slu.counts2)::double precision,
+                                        0
+                                    ),
                                     0
                                 ) AS ratio
                             FROM public."states_land_use" slu
@@ -578,9 +588,14 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                SUM(cls.units) AS units,
                                                COALESCE(
                                                     SUM(cls.counts)::double precision
-                                                    / NULLIF(SUM(cls.counts2)::double precision, 0),
+                                                    /
+                                                    NULLIF(
+                                                        SUM(cls.counts)::double precision +
+                                                        SUM(cls.counts2)::double precision,
+                                                        0
+                                                    ),
                                                     0
-                                               ) AS ratio
+                                                ) AS ratio
                                         FROM public."cs_{cell}_land_use" cls
                                         WHERE (cls.date <= effective_publish_date OR clsname NOT IN ('DS', 'DG', 'CS', 'MN'))
                                             AND cls.land_use_id = ANY (land_use_ids)
@@ -935,7 +950,7 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     desc_ft = get_description_from_classname("FT")
     desc_ai = get_description_from_classname("AI")
     desc_ad = get_description_from_classname("AD")
-    desc_dr = get_description_from_classname("DR")
+    desc_iv = get_description_from_classname("IV")
 
     sql = f"""
         INSERT INTO
@@ -952,7 +967,7 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (9, 'FT', 'Focos de hoje', 'Queimadas', 8, '{sql_string(desc_ft)}'),
             (10, 'AI', 'Incremento anual', 'PRODES', 4, '{sql_string(desc_ai)}'),
             (11, 'AD', 'Desmatamento Acumulado', 'PRODES', 5, '{sql_string(desc_ad)}'),
-            (12, 'DR', 'Acumulado / Vegetação', 'PRODES', 6, '{sql_string(desc_dr)}')
+            (12, 'IV', 'Vegetação Remanescente Desmatada', 'PRODES', 6, '{sql_string(desc_iv)}')
     """
 
     db.execute(sql=sql)

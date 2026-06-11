@@ -72,13 +72,11 @@ Esse indicador apresenta os dados de desmatamento acumulado mapeados pelo PRODES
 corresponde à soma das áreas de vegetação nativa suprimidas ao longo dos anos de monitoramento.
 """
 
-_DR = """
-Esse indicador apresenta a razão entre a área de desmatamento acumulado e a área de vegetação natural disponível.
-O índice permite comparar a extensão já desmatada com a cobertura vegetal remanescente na área analisada. Valores iguais a 0
-indicam ausência de desmatamento acumulado. Valores menores que 1 indicam que a área de vegetação natural disponível é maior que a área desmatada.
-Um valor igual a 1 indica que as áreas desmatada e de vegetação natural disponível possuem a mesma extensão.
-Valores superiores a 1 indicam que a área desmatada é maior que a área de vegetação natural remanescente.
-Quanto maior o valor do indicador, maior o grau de comprometimento da cobertura vegetal.
+_IV = """
+Este indicador apresenta o percentual da vegetação remanescente que foi desmatada no período analisado.
+O cálculo considera a razão entre o incremento anual de desmatamento e a vegetação existente no início do período. O valor
+varia de 0 a 100%, sendo que 0% indica ausência de desmatamento no período e 100% indica que toda a vegetação remanescente
+foi desmatada.
 """
 
 
@@ -95,7 +93,7 @@ def get_description_from_classname(classname: str):
         "FT": normalize_text(_FOCOS_DE_HOJE),
         "AI": normalize_text(_AI),
         "AD": normalize_text(_AD),
-        "DR": normalize_text(_DR),
+        "IV": normalize_text(_IV),
         "NV": "",
     }
 

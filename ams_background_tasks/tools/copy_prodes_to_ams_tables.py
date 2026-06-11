@@ -11,7 +11,7 @@ from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     LAND_USE_TYPES,
-    PRODES_INDICATORS,
+    PRODES_CLASSNAMES,
     optimize_land_use_table,
     prepare_to_update_land_use_table,
     read_spatial_units,
@@ -42,7 +42,7 @@ def main(db_url: str, land_use_type: str):
 
     db = DatabaseFacade.create(db_url=db_url)
 
-    classnames = ",".join([f"'{_}'" for _ in PRODES_INDICATORS])
+    classnames = ",".join([f"'{_}'" for _ in PRODES_CLASSNAMES])
 
     for spatial_unit in read_spatial_units(db=db):
         prodes_land_use_table = get_land_use_table_name(

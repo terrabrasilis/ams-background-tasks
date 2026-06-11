@@ -245,7 +245,7 @@ def build_total_vegetation_indicator_dataframe(
 def build_ratio_deforestation_vegetation_dataframe(
     *,
     db: DatabaseFacade,
-    accumulated_deforestation_dfr: pd.DataFrame,
+    annual_increase_deforestation_dfr: pd.DataFrame,
     vegetation_dfr: pd.DataFrame,
     prodes_cache_dir: Path,
     biome: str,
@@ -254,7 +254,7 @@ def build_ratio_deforestation_vegetation_dataframe(
     save_indicators: bool = False,
 ) -> pd.DataFrame:
     """Build, save and optionally persist the deforestation/vegetation ratio."""
-    ratio_deforestation_vegetation_dfr = accumulated_deforestation_dfr.merge(
+    ratio_deforestation_vegetation_dfr = annual_increase_deforestation_dfr.merge(
         vegetation_dfr,
         on=["suid", "land_use_id", "geocode", "spatial_unit", "year", "biome"],
         how="outer",
@@ -274,7 +274,7 @@ def build_ratio_deforestation_vegetation_dataframe(
 
     ratio_deforestation_vegetation_filename = (
         prodes_cache_dir
-        / f"ratio_accumulated_deforestation_to_vegetation_indicator_b{biome}_from_y{years[0]}_to_y{years[-1]}.pkl"
+        / f"ratio_annual_increase_deforestation_to_vegetation_indicator_b{biome}_from_y{years[0]}_to_y{years[-1]}.pkl"
     )
     dfr.to_pickle(ratio_deforestation_vegetation_filename)
 
@@ -445,24 +445,26 @@ def main(
         return
 
     # annual increase in deforestation
-    build_annual_increase_in_deforestation_indicator_dataframe(
-        db=db,
-        prodes_tiff_file=prodes_tiff_file,
-        land_use_tiff_file=land_use_tiff_file,
-        land_use_type=land_use_type,
-        chunk_size=chunk_size,
-        chunk_dir=chunk_dir,
-        reproject_dir=reproject_dir,
-        count_dir=count_dir,
-        biome=biome,
-        years=years_list,
-        chunk_list=list(chunk),
-        save_indicators=save_indicators,
-        prodes_cache_dir=prodes_cache_dir,
+    annual_increase_deforestation_dfr = (
+        build_annual_increase_in_deforestation_indicator_dataframe(
+            db=db,
+            prodes_tiff_file=prodes_tiff_file,
+            land_use_tiff_file=land_use_tiff_file,
+            land_use_type=land_use_type,
+            chunk_size=chunk_size,
+            chunk_dir=chunk_dir,
+            reproject_dir=reproject_dir,
+            count_dir=count_dir,
+            biome=biome,
+            years=years_list,
+            chunk_list=list(chunk),
+            save_indicators=save_indicators,
+            prodes_cache_dir=prodes_cache_dir,
+        )
     )
 
     # accumulated deforestation
-    accumulated_deforestation_dfr = build_accumulated_deforestation_indicator_dataframe(
+    build_accumulated_deforestation_indicator_dataframe(
         db=db,
         prodes_tiff_file=prodes_tiff_file,
         land_use_tiff_file=land_use_tiff_file,
@@ -512,7 +514,7 @@ def main(
     # ratio deforestation to vegetation
     build_ratio_deforestation_vegetation_dataframe(
         db=db,
-        accumulated_deforestation_dfr=accumulated_deforestation_dfr,
+        annual_increase_deforestation_dfr=annual_increase_deforestation_dfr,
         vegetation_dfr=vegetation_dfr,
         prodes_cache_dir=prodes_cache_dir,
         biome=biome,
