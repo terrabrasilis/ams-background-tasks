@@ -79,6 +79,11 @@ varia de 0 a 100%, sendo que 0% indica ausência de desmatamento no período e 1
 foi desmatada.
 """
 
+_AV = """
+Este indicador apresenta o percentual da vegetação original que já foi desmatada no período analisado. O valor varia de 0 a 100%,
+sendo que 0% indica ausência de desmatamento acumulado e 100% indica que toda a vegetação original foi desmatada.
+"""
+
 
 def get_description_from_classname(classname: str):
     descriptions = {
@@ -94,6 +99,7 @@ def get_description_from_classname(classname: str):
         "AI": normalize_text(_AI),
         "AD": normalize_text(_AD),
         "IV": normalize_text(_IV),
+        "AV": normalize_text(_AV),
         "NV": "",
     }
 

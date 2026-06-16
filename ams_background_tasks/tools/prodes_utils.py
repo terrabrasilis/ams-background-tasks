@@ -1058,6 +1058,90 @@ def build_total_vegetation_indicator_dataframe(
     return vegetation_dfr
 
 
+def build_original_vegetation_from_deforestation_dataframe(
+    *,
+    db: DatabaseFacade,
+    land_use_tiff_file: Path,
+    prodes_tiff_file: Path,
+    chunk_size: int,
+    chunk_dir: Path,
+    reproject_dir: Path,
+    count_dir: Path,
+    biome: str,
+    years: list[int],
+    chunk_list: list[Path] | None = None,
+) -> pd.DataFrame:
+    """Build the original vegetation dataframe for the requested interval.
+
+    The original vegetation is computed as the sum of all pixels classified as
+    deforestation across the requested ``years`` plus the pixels that remain
+    classified as native vegetation in the PRODES mask. The resulting dataframe
+    aggregates those pixels by spatial unit, land-use class, geocode and biome,
+    so it does not keep a ``year`` column.
+
+    The returned dataframe contains:
+    - ``suid``
+    - ``land_use_id``
+    - ``geocode``
+    - ``spatial_unit``
+    - ``biome``
+    - ``vegetation_pixels``
+    - ``source`` set to ``"deforestation_and_mask"``
+
+    The dataframe is cached as a pickle under ``cache_dir``.
+    """
+    vegetation_from_mask_dfr = build_vegetation_land_use_counts_dataframe(
+        db=db,
+        land_use_tiff_file=land_use_tiff_file,
+        prodes_tiff_file=Path(prodes_tiff_file),
+        chunk_size=chunk_size,
+        chunk_dir=Path(chunk_dir),
+        reproject_dir=Path(reproject_dir),
+        count_dir=Path(count_dir),
+        biome=biome,
+        year=PRODES_LAST_YEAR,
+        chunk_list=chunk_list,
+    )
+
+    yearly_deforestation_counts = [
+        build_deforestation_land_use_counts_dataframe(
+            db=db,
+            land_use_tiff_file=land_use_tiff_file,
+            prodes_tiff_file=prodes_tiff_file,
+            chunk_size=chunk_size,
+            chunk_dir=chunk_dir,
+            reproject_dir=reproject_dir,
+            count_dir=count_dir,
+            biome=biome,
+            year=year,
+            chunk_list=chunk_list,
+        )
+        for year in years
+    ]
+
+    yearly_deforestation_counts = [
+        dfr for dfr in yearly_deforestation_counts if dfr is not None and not dfr.empty
+    ]
+
+    if not yearly_deforestation_counts and vegetation_from_mask_dfr.empty:
+        return pd.DataFrame()
+
+    yearly_deforestation_counts.append(vegetation_from_mask_dfr)
+
+    dfr = pd.concat(yearly_deforestation_counts)
+
+    dfr2 = dfr.groupby(
+        ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
+        as_index=False,
+    ).agg(num_pixels=("num_pixels", "sum"))
+
+    dfr2 = dfr2.rename(columns={"num_pixels": "vegetation_pixels"})
+
+    dfr2["source"] = "deforestation_and_mask"
+
+    return dfr2
+
+
 def calculate_percentage(db: DatabaseFacade, land_use_type: str):
     """Update the percentage of each land-use record relative to its spatial unit.
 

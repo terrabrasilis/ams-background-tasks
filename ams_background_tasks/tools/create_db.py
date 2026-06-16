@@ -232,7 +232,8 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(mlu_j.counts, 0) AS counts,
                             COALESCE(mlu_j.score, 0) AS score,
                             COALESCE(mlu_j.units, 0) AS units,
-                            COALESCE(mlu_j.ratio, 0) AS ratio
+                            COALESCE(mlu_j.ratio1, 0) AS ratio1,
+                            COALESCE(mlu_j.ratio1, 0) AS ratio2
                         FROM public."municipalities" mun
                         INNER JOIN (
                             SELECT 
@@ -253,7 +254,16 @@ def create_municipalities_function(db: DatabaseFacade, force_recreate: bool):
                                         0
                                     ),
                                     0
-                                ) AS ratio
+                                ) AS ratio1,
+                                COALESCE(
+                                    SUM(mlu.counts)::double precision
+                                    /
+                                    NULLIF(
+                                        SUM(mlu.counts2)::double precision,
+                                        0
+                                    ),
+                                    0
+                                ) AS ratio2
                             FROM public."municipalities_land_use" mlu
                             WHERE
                                 (mlu.date <= effective_publish_date OR clsname NOT IN ('DS', 'DG', 'CS', 'MN'))
@@ -403,7 +413,8 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                             COALESCE(slu_j.counts, 0) AS counts,
                             COALESCE(slu_j.score, 0) AS score,
                             COALESCE(slu_j.units, 0) AS units,
-                            COALESCE(slu_j.ratio, 0) AS ratio
+                            COALESCE(slu_j.ratio1, 0) AS ratio1,
+                            COALESCE(slu_j.ratio2, 0) AS ratio2
                         FROM public."states" sta
                         INNER JOIN (
                             SELECT slu.suid, 
@@ -423,7 +434,16 @@ def create_states_function(db: DatabaseFacade, force_recreate: bool):
                                         0
                                     ),
                                     0
-                                ) AS ratio
+                                ) AS ratio1,
+                                COALESCE(
+                                    SUM(slu.counts)::double precision
+                                    /
+                                    NULLIF(
+                                        SUM(slu.counts2)::double precision,
+                                        0
+                                    ),
+                                    0
+                                ) AS ratio2
                             FROM public."states_land_use" slu
                             WHERE (slu.date <= effective_publish_date OR clsname NOT IN ('DS', 'DG', 'CS', 'MN'))
                                 AND slu.land_use_id = ANY (land_use_ids)
@@ -575,7 +595,8 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                         COALESCE(cls_j.counts, 0) AS counts,
                                         COALESCE(cls_j.score, 0) AS score,
                                         COALESCE(cls_j.units, 0) AS units,
-                                        COALESCE(cls_j.ratio, 0) AS ratio
+                                        COALESCE(cls_j.ratio1, 0) AS ratio1,
+                                        COALESCE(cls_j.ratio2, 0) AS ratio2
                                 FROM public."cs_{cell}" cel
                                 INNER JOIN (
                                         SELECT cls.suid, 
@@ -595,7 +616,16 @@ def create_cell_function(db: DatabaseFacade, cell: str, force_recreate: bool):
                                                         0
                                                     ),
                                                     0
-                                                ) AS ratio
+                                                ) AS ratio1,
+                                                COALESCE(
+                                                    SUM(cls.counts)::double precision
+                                                    /
+                                                    NULLIF(
+                                                        SUM(cls.counts2)::double precision,
+                                                        0
+                                                    ),
+                                                    0
+                                                ) AS ratio2
                                         FROM public."cs_{cell}_land_use" cls
                                         WHERE (cls.date <= effective_publish_date OR clsname NOT IN ('DS', 'DG', 'CS', 'MN'))
                                             AND cls.land_use_id = ANY (land_use_ids)
@@ -951,6 +981,7 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
     desc_ai = get_description_from_classname("AI")
     desc_ad = get_description_from_classname("AD")
     desc_iv = get_description_from_classname("IV")
+    desc_av = get_description_from_classname("AV")
 
     sql = f"""
         INSERT INTO
@@ -960,14 +991,15 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (2, 'DG', 'Degradação', 'DETER', 1, '{sql_string(desc_dg)}'),
             (3, 'CS', 'Corte seletivo', 'DETER', 2, '{sql_string(desc_cs)}'),
             (4, 'MN', 'Mineração', 'DETER', 3, '{sql_string(desc_mn)}'),
-            (5, 'AF', 'Histórico de Focos', 'Queimadas', 7, '{sql_string(desc_af)}'),
-            (6, 'RK', 'Risco de desmatamento', 'IBAMA', 11, ''),
-            (7, 'RI', 'Risco de desmatamento', '', 10, '{sql_string(desc_ri)}'),
-            (8, 'FS', 'Risco de espalhamento do fogo', 'FIP', 9, '{sql_string(desc_fs)}'),
-            (9, 'FT', 'Focos de hoje', 'Queimadas', 8, '{sql_string(desc_ft)}'),
+            (5, 'AF', 'Histórico de Focos', 'Queimadas', 8, '{sql_string(desc_af)}'),
+            (6, 'RK', 'Risco de desmatamento', 'IBAMA', 12, ''),
+            (7, 'RI', 'Risco de desmatamento', '', 11, '{sql_string(desc_ri)}'),
+            (8, 'FS', 'Risco de espalhamento do fogo', 'FIP', 10, '{sql_string(desc_fs)}'),
+            (9, 'FT', 'Focos de hoje', 'Queimadas', 9, '{sql_string(desc_ft)}'),
             (10, 'AI', 'Incremento anual', 'PRODES', 4, '{sql_string(desc_ai)}'),
             (11, 'AD', 'Desmatamento Acumulado', 'PRODES', 5, '{sql_string(desc_ad)}'),
-            (12, 'IV', 'Vegetação Remanescente Desmatada', 'PRODES', 6, '{sql_string(desc_iv)}')
+            (12, 'IV', 'Vegetação Remanescente Desmatada', 'PRODES', 6, '{sql_string(desc_iv)}'),
+            (13, 'AV', 'Vegetação Original Desmatada', 'PRODES', 7, '{sql_string(desc_av)}')
     """
 
     db.execute(sql=sql)
@@ -1021,7 +1053,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (27, 'FOCOS_HOJE', 9, 'Pampa'),
             (28, 'INCREMENTO_ANUAL', 10, 'Amazônia'),
             (29, 'DESMATAMENTO_ACUMULADO', 11, 'Amazônia'),
-            (30, 'DESMATAMENTO_VEGETACAO', 12, 'Amazônia')
+            (30, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Amazônia'),
+            (31, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Amazônia')
     """
 
     db.execute(sql=sql)
