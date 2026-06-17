@@ -172,3 +172,4 @@ cython_debug/
 land_use/**/*.tif
 old_land_use/
 risk/
+prodes/
