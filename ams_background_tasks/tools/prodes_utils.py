@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 from rasterio.warp import Resampling, reproject
-from rasterio.windows import Window, from_bounds
+from rasterio.windows import Window
 from shapely.geometry import Point, box
 
 from ams_background_tasks.database_utils import DatabaseFacade
@@ -121,7 +121,7 @@ def raster_partition(
 
         # is_all_nodata = src_ds.nodata is not None and np.all(data == src_ds.nodata)
         # if is_all_nodata:
-        # continue
+        # nodata_path.touch()
 
         transform = rio.windows.transform(window, src_ds.transform)  # type: ignore
 
@@ -137,7 +137,8 @@ def raster_partition(
         with rio.open(output_path, "w", **profile) as dst_ds:
             dst_ds.write(data, 1)
 
-        output_paths.append(output_path)
+        # if not is_all_nodata:
+        # output_paths.append(output_path)
 
     return output_paths
 
@@ -159,17 +160,9 @@ def raster_reproject(
     if not has_intersection(ds_a=ref_ds, ds_b=src_ds):
         raise ValueError("there is no intersection between the given rasters")
 
-    left, bottom, right, top = calculate_intersection(ds_a=ref_ds, ds_b=src_ds)
-
-    # building a window and a transform for the common bounding box
-    dst_window = from_bounds(left, bottom, right, top, transform=ref_ds.transform)
-    dst_window = dst_window.round_offsets().round_lengths()
-
-    dst_transform = rio.windows.transform(dst_window, ref_ds.transform)
-
-    dst_width = int(dst_window.width)
-    dst_height = int(dst_window.height)
-
+    dst_width = ref_ds.width
+    dst_height = ref_ds.height
+    dst_transform = ref_ds.transform
     dst_crs = ref_ds.crs
 
     dst_nodata = dst_nodata if dst_nodata is not None else src_ds.nodata
@@ -299,7 +292,7 @@ def load_spatial_units_gdf(
     }[spatial_unit]
 
     sql = f"""
-        SELECT suid, geometry FROM public.{spatial_unit} su
+        SELECT su.{ckey} AS su_name, geometry FROM public.{spatial_unit} su
         JOIN public.{spatial_unit}_biome sub ON sub.{ckey}=su.{ckey}
         WHERE sub.biome='{biome}'
     """
@@ -326,7 +319,7 @@ def aggregate_deforestation_by_spatial_unit(
         predicate="within",
     )
     spatial_unit_landuse_counts = spatial_unit_landuse_counts.groupby(
-        ["suid", "land_use_id", "geocode", "source"],
+        ["su_name", "land_use_id", "geocode", "source"],
         as_index=False,
     ).agg(num_pixels=("geometry", "count"))
 
@@ -527,7 +520,7 @@ def build_spatial_unit_land_use_counts_dataframe_from_mask(
 
     spatial_unit_landuse_counts = pd.concat(spatial_unit_landuse_counts_list)
     spatial_unit_landuse_counts = spatial_unit_landuse_counts.groupby(
-        ["suid", "land_use_id", "geocode", "spatial_unit", "year", "biome"],
+        ["su_name", "land_use_id", "geocode", "spatial_unit", "year", "biome"],
         as_index=False,
     ).agg(num_pixels=("num_pixels", "sum"))
 
@@ -657,7 +650,7 @@ def build_accumulated_deforestation_indicator_dataframe(
     for year in years:
         dfr2 = dfr[dfr["year"] <= year]  # type: ignore
         dfr2: pd.DataFrame = dfr2.groupby(
-            ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
+            ["su_name", "land_use_id", "geocode", "spatial_unit", "biome"],
             as_index=False,
         ).agg(num_pixels=("num_pixels", "sum"))
         dfr2["year"] = year
@@ -806,7 +799,7 @@ def build_vegetation_from_deforestation_dataframe(
     for year in years:
         dfr2 = dfr[dfr["year"] > year]  # type: ignore
         dfr2: pd.DataFrame = dfr2.groupby(
-            ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
+            ["su_name", "land_use_id", "geocode", "spatial_unit", "biome"],
             as_index=False,
         ).agg(num_pixels=("num_pixels", "sum"))
         dfr2["year"] = year
@@ -823,6 +816,26 @@ def build_vegetation_from_deforestation_dataframe(
     dfr.to_pickle(vegetation_from_deforestation_filename)
 
     return dfr
+
+
+def reset_land_use_tables(db: DatabaseFacade, land_use_type: str, biome: str) -> None:
+    """Truncate every PRODES land-use table for the configured spatial units.
+
+    This keeps the table structure intact and removes all previously persisted
+    rows before a new PRODES update run repopulates the schema.
+    """
+    spatial_units = list(read_spatial_units(db=db).keys())
+
+    for spatial_unit in spatial_units:
+        land_use_table = get_land_use_table_name(
+            spatial_unit=spatial_unit,
+            land_use_type=land_use_type,
+            schema=PRODES_DB_SCHEMA,
+        )
+        sql = f"""
+           DELETE FROM {land_use_table} WHERE biome='{biome}';
+        """
+        db.execute(sql)
 
 
 def save_indicator(
@@ -843,13 +856,13 @@ def save_indicator(
     )
 
     def _insert_into_land_use_table(values: list):
-        sql = f"INSERT INTO {table_name} (classname, date, suid, land_use_id, geocode, biome, counts, counts2, area) VALUES {','.join(values)};"
+        sql = f"INSERT INTO {table_name} (classname, date, su_name, land_use_id, geocode, biome, counts, counts2, area) VALUES {','.join(values)};"
         db.execute(sql=sql, log=False)
 
     values = []
     for row in indicator_dataframe.itertuples():
         values.append(
-            f"('{classname}', '{row.year}-01-01'::date, {row.suid}, {row.land_use_id}, '{row.geocode}', '{row.biome}', {row.counts}, {row.counts2}, {row.area})"
+            f"('{classname}', '{row.year}-01-01'::date, '{row.su_name}', {row.land_use_id}, '{row.geocode}', '{row.biome}', {row.counts}, {row.counts2}, {row.area})"
         )
 
         if len(values) > 1e5:
@@ -911,7 +924,8 @@ def create_prodes_spatial_unit_tables(
             name=land_use_table,
             columns=[
                 "id serial NOT NULL PRIMARY KEY",
-                "suid int NOT NULL",
+                "suid integer",
+                "su_name varchar",
                 "land_use_id int NOT NULL",
                 "classname varchar(2) NOT NULL",
                 "date date NOT NULL",
@@ -933,7 +947,7 @@ def create_prodes_spatial_unit_tables(
                 "date:btree",
                 "biome:btree",
                 "geocode:btree",
-                "suid:btree",
+                "su_name:btree",
             ],
             force_recreate=force_recreate,
         )
@@ -953,7 +967,7 @@ def aggregate_vegetation_by_spatial_unit(
         predicate="within",
     )
     spatial_unit_vegetation_counts = spatial_unit_vegetation_counts.groupby(
-        ["suid", "source"],
+        ["su_name", "source"],
         as_index=False,
     ).agg(num_pixels=("geometry", "count"))
 
@@ -1042,7 +1056,7 @@ def build_total_vegetation_indicator_dataframe(
 
         vdfr = pd.concat(year_dfr_list)
         vdfr = vdfr.groupby(
-            ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
+            ["su_name", "land_use_id", "geocode", "spatial_unit", "biome"],
             as_index=False,
         ).agg(vegetation_pixels=("vegetation_pixels", "sum"))
         vdfr["year"] = year
@@ -1080,7 +1094,7 @@ def build_original_vegetation_from_deforestation_dataframe(
     so it does not keep a ``year`` column.
 
     The returned dataframe contains:
-    - ``suid``
+    - ``su_name``
     - ``land_use_id``
     - ``geocode``
     - ``spatial_unit``
@@ -1131,7 +1145,7 @@ def build_original_vegetation_from_deforestation_dataframe(
     dfr = pd.concat(yearly_deforestation_counts)
 
     dfr2 = dfr.groupby(
-        ["suid", "land_use_id", "geocode", "spatial_unit", "biome"],
+        ["su_name", "land_use_id", "geocode", "spatial_unit", "biome"],
         as_index=False,
     ).agg(num_pixels=("num_pixels", "sum"))
 
@@ -1152,11 +1166,20 @@ def calculate_percentage(db: DatabaseFacade, land_use_type: str):
     for spatial_unit in read_spatial_units(db=db):
         land_use_type_suffix = "" if land_use_type == AMS else f"_{land_use_type}"
 
+        ckey = {
+            "cs_5km": "id",
+            "cs_25km": "id",
+            "cs_150km": "id",
+            "municipalities": "geocode",
+            "states": "name",
+        }[spatial_unit]
+
         sql = f"""
             UPDATE prodes."{spatial_unit}_land_use{land_use_type_suffix}"
             SET percentage=prodes."{spatial_unit}_land_use{land_use_type_suffix}".area/su.area*100
             FROM public."{spatial_unit}" su
             WHERE
-                prodes."{spatial_unit}_land_use{land_use_type_suffix}".suid=su.suid
+                prodes."{spatial_unit}_land_use{land_use_type_suffix}".su_name=su.{ckey}
         """
+
         db.execute(sql)

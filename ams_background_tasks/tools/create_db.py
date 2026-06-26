@@ -1013,8 +1013,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (9, 'FT', 'Focos de hoje', 'Queimadas', 9, '{sql_string(desc_ft)}'),
             (10, 'AI', 'Incremento anual', 'PRODES', 4, '{sql_string(desc_ai)}'),
             (11, 'AD', 'Desmatamento Acumulado', 'PRODES', 5, '{sql_string(desc_ad)}'),
-            (12, 'IV', 'Vegetação Remanescente Desmatada', 'PRODES', 6, '{sql_string(desc_iv)}'),
-            (13, 'AV', 'Vegetação Original Desmatada', 'PRODES', 7, '{sql_string(desc_av)}')
+            (12, 'IV', 'Vegetação Nativa Remanescente Desmatada', 'PRODES', 6, '{sql_string(desc_iv)}'),
+            (13, 'AV', 'Vegetação Nativa Original Desmatada', 'PRODES', 7, '{sql_string(desc_av)}')
     """
 
     db.execute(sql=sql)
@@ -1069,7 +1069,27 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (28, 'INCREMENTO_ANUAL', 10, 'Amazônia'),
             (29, 'DESMATAMENTO_ACUMULADO', 11, 'Amazônia'),
             (30, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Amazônia'),
-            (31, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Amazônia')
+            (31, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Amazônia'),
+            (32, 'INCREMENTO_ANUAL', 10, 'Cerrado'),
+            (33, 'DESMATAMENTO_ACUMULADO', 11, 'Cerrado'),
+            (34, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Cerrado'),
+            (35, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Cerrado'),
+            (36, 'INCREMENTO_ANUAL', 10, 'Caatinga'),
+            (37, 'DESMATAMENTO_ACUMULADO', 11, 'Caatinga'),
+            (38, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Caatinga'),
+            (39, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Caatinga'),
+            (40, 'INCREMENTO_ANUAL', 10, 'Pantanal'),
+            (41, 'DESMATAMENTO_ACUMULADO', 11, 'Pantanal'),
+            (42, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Pantanal'),
+            (43, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Pantanal'),
+            (44, 'INCREMENTO_ANUAL', 10, 'Mata Atlântica'),
+            (45, 'DESMATAMENTO_ACUMULADO', 11, 'Mata Atlântica'),
+            (46, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Mata Atlântica'),
+            (47, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Mata Atlântica'),
+            (48, 'INCREMENTO_ANUAL', 10, 'Pampa'),
+            (49, 'DESMATAMENTO_ACUMULADO', 11, 'Pampa'),
+            (50, 'DESMATAMENTO_VEGETACAO_REMANESCENTE', 12, 'Pampa'),
+            (51, 'DESMATAMENTO_VEGETACAO_ORIGINAL', 13, 'Pampa')
     """
 
     db.execute(sql=sql)

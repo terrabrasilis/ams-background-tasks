@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from ams_background_tasks.database_utils import DatabaseFacade
-from ams_background_tasks.log import get_logger
+from ams_background_tasks.log import get_logger, set_package_log_level
 from ams_background_tasks.tools.common import (
     BIOMES,
     LAND_USE_TYPES,
@@ -48,10 +49,19 @@ from ams_background_tasks.tools.prodes_utils import (
     build_vegetation_land_use_counts_dataframe,
     calculate_percentage,
     create_prodes_deforestation_indicator_tables,
+    reset_land_use_tables,
     save_indicator,
 )
 
 logger = get_logger(__name__, sys.stdout)
+LOG_LEVELS = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
 
 
 def build_annual_increase_in_deforestation_indicator_dataframe(
@@ -298,7 +308,7 @@ def build_annual_increase_deforestation_to_vegetation_dataframe(
     """Build, save and optionally persist the annual increase deforestation / vegetation ratio."""
     ratio_deforestation_vegetation_dfr = annual_increase_deforestation_dfr.merge(
         vegetation_dfr,
-        on=["suid", "land_use_id", "geocode", "spatial_unit", "year", "biome"],
+        on=["su_name", "land_use_id", "geocode", "spatial_unit", "year", "biome"],
         how="outer",
     )
 
@@ -357,7 +367,7 @@ def build_accumulated_deforestation_to_original_vegetation_dataframe(
 
     deforestation_vegetation_dfr = dfr1.merge(
         dfr2,
-        on=["suid", "land_use_id", "geocode", "spatial_unit", "biome", "year"],
+        on=["su_name", "land_use_id", "geocode", "spatial_unit", "biome", "year"],
         how="outer",
     )
 
@@ -401,9 +411,9 @@ def build_accumulated_deforestation_to_original_vegetation_dataframe(
 )
 @click.option(
     "--biome",
-    required=True,
+    required=False,
     type=click.Choice(BIOMES),
-    help="Biome.",
+    help="Biome to process. Use together with --all-biomes=False.",
 )
 @click.option(
     "--years",
@@ -463,7 +473,62 @@ def build_accumulated_deforestation_to_original_vegetation_dataframe(
     default=False,
     help="Persist the generated PRODES indicators to the database.",
 )
+@click.option(
+    "--log-level",
+    required=False,
+    type=click.Choice(tuple(LOG_LEVELS), case_sensitive=False),
+    default="DEBUG",
+    show_default=True,
+    help="Set the verbosity of the tool logs.",
+)
+@click.option(
+    "--all-biomes",
+    required=False,
+    is_flag=True,
+    default=False,
+    help="Process all biomes instead of a single biome.",
+)
 def main(
+    *,
+    db_url: str,
+    biome: str | None,
+    years: tuple[int, int],
+    land_use_dir: str,
+    land_use_type: str,
+    prodes_root_dir: str,
+    chunk_size: int,
+    force_recreate: bool,
+    chunk: tuple,
+    only_cache: bool,
+    save_indicators: bool,
+    log_level: str,
+    all_biomes: bool,
+):
+    if biome is None and not all_biomes:
+        raise ValueError("--all-biomes or --biome must be defined")
+
+    biomes = BIOMES if all_biomes else [biome]
+
+    for _biome in biomes:
+        print(f"processing {_biome} ...")
+        _run(
+            db_url=db_url,
+            biome=_biome,
+            years=years,
+            land_use_dir=land_use_dir,
+            land_use_type=land_use_type,
+            prodes_root_dir=prodes_root_dir,
+            chunk_size=chunk_size,
+            force_recreate=force_recreate,
+            chunk=chunk,
+            only_cache=only_cache,
+            save_indicators=save_indicators,
+            log_level=log_level,
+        )
+        force_recreate = False
+
+
+def _run(
     *,
     db_url: str,
     biome: str,
@@ -476,14 +541,23 @@ def main(
     chunk: tuple,
     only_cache: bool,
     save_indicators: bool,
+    log_level: str,
 ):
     """Update the PRODES tables."""
     assert years[1] >= years[0], "Last year must be greather than or equal first year."
 
-    prodes_tiff_file = Path(prodes_root_dir) / f"prodes_{biome}.tif"
+    set_package_log_level(LOG_LEVELS[log_level.upper()])
+    logger.setLevel(LOG_LEVELS[log_level.upper()])
+
+    prodes_tiff_file = Path(prodes_root_dir) / f"prodes_{biome.replace(' ', '_')}.tif"
     assert prodes_tiff_file.exists(), f"{prodes_tiff_file} not found"
 
-    prodes_cache_dir = Path(prodes_root_dir) / "cache" / f"{land_use_type}"
+    prodes_cache_dir = (
+        Path(prodes_root_dir)
+        / "cache"
+        / f"{biome.replace(' ', '_')}"
+        / f"{land_use_type}"
+    )
     prodes_cache_dir.mkdir(parents=True, exist_ok=True)
     assert prodes_cache_dir.exists(), f"{prodes_cache_dir} not found"
 
@@ -544,6 +618,9 @@ def main(
     if only_cache:
         db.commit()
         return
+
+    if save_indicators:
+        reset_land_use_tables(db=db, land_use_type=land_use_type, biome=biome)
 
     # annual increase in deforestation
     annual_increase_deforestation_dfr = (
@@ -670,7 +747,7 @@ def persist(
     corresponding ``prodes.<spatial_unit>_land_use`` table.
     """
     required_columns = {
-        "suid",
+        "su_name",
         "land_use_id",
         "geocode",
         "biome",

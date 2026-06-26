@@ -48,6 +48,23 @@ def main(db_url: str, land_use_type: str):
         prodes_land_use_table = get_land_use_table_name(
             spatial_unit=spatial_unit, land_use_type=land_use_type, schema="prodes"
         )
+
+        ckey = {
+            "cs_5km": "id",
+            "cs_25km": "id",
+            "cs_150km": "id",
+            "municipalities": "geocode",
+            "states": "name",
+        }[spatial_unit]
+
+        sql = f"""
+           UPDATE {prodes_land_use_table} AS lu
+           SET suid = su.suid
+           FROM public.{spatial_unit} AS su
+           WHERE lu.su_name = su.{ckey};
+        """
+        db.execute(sql=sql, log=True)
+
         ams_land_use_table = get_land_use_table_name(
             spatial_unit=spatial_unit, land_use_type=land_use_type
         )
@@ -62,7 +79,7 @@ def main(db_url: str, land_use_type: str):
         db.copy_table(
             src=prodes_land_use_table,
             dst=ams_land_use_table,
-            cols_to_ignore=["id", "risk", "score", "units"],
+            cols_to_ignore=["id", "risk", "score", "units", "name"],
             with_commit=False,
         )
 
