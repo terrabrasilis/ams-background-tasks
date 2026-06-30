@@ -1156,7 +1156,7 @@ def build_original_vegetation_from_deforestation_dataframe(
     return dfr2
 
 
-def calculate_percentage(db: DatabaseFacade, land_use_type: str):
+def calculate_percentage(db: DatabaseFacade, land_use_type: str, biome: str):
     """Update the percentage of each land-use record relative to its spatial unit.
 
     For every spatial unit returned by :func:`read_spatial_units`, this function
@@ -1179,6 +1179,7 @@ def calculate_percentage(db: DatabaseFacade, land_use_type: str):
             SET percentage=prodes."{spatial_unit}_land_use{land_use_type_suffix}".area/su.area*100
             FROM public."{spatial_unit}" su
             WHERE
+                prodes."{spatial_unit}_land_use{land_use_type_suffix}".biome='{biome}' AND
                 prodes."{spatial_unit}_land_use{land_use_type_suffix}".su_name=su.{ckey}
         """
 

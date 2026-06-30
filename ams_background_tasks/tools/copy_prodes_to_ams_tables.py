@@ -12,6 +12,7 @@ from ams_background_tasks.log import get_logger
 from ams_background_tasks.tools.common import (
     LAND_USE_TYPES,
     PRODES_CLASSNAMES,
+    analyze_table,
     optimize_land_use_table,
     prepare_to_update_land_use_table,
     read_spatial_units,
@@ -84,5 +85,7 @@ def main(db_url: str, land_use_type: str):
         )
 
         optimize_land_use_table(db=db, table=ams_land_use_table)
+
+        # analyze_table(db=db, schema="public", name=ams_land_use_table)
 
     db.commit()

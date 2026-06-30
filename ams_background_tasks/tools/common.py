@@ -323,9 +323,9 @@ def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
         return []
 
     titles = [
-        _[0]
-        for _ in db.fetchall(
-            query=f"SELECT DISTINCT title FROM public.class_group WHERE name in ({classnames});"
+        f"{title} {subtitle}"
+        for title, subtitle in db.fetchall(
+            query=f"SELECT DISTINCT title, subtitle FROM public.class_group WHERE name in ({classnames});"
         )
     ]
 

@@ -728,7 +728,7 @@ def _run(
     )
 
     if save_indicators:
-        calculate_percentage(db=db, land_use_type=land_use_type)
+        calculate_percentage(db=db, land_use_type=land_use_type, biome=biome)
 
     db.commit()
 
