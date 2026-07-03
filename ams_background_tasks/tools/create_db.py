@@ -1013,8 +1013,8 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (9, 'FT', 'Focos de hoje', 'Queimadas', 9, '{sql_string(desc_ft)}'),
             (10, 'AI', 'Incremento anual', 'PRODES', 4, '{sql_string(desc_ai)}'),
             (11, 'AD', 'Desmatamento Acumulado', 'PRODES', 5, '{sql_string(desc_ad)}'),
-            (12, 'IV', 'Vegetação Nativa Remanescente Desmatada', 'PRODES', 6, '{sql_string(desc_iv)}'),
-            (13, 'AV', 'Vegetação Nativa Original Desmatada', 'PRODES', 7, '{sql_string(desc_av)}')
+            (12, 'IV', 'Incremento anual/Vegetação nativa remanescente', 'PRODES', 6, '{sql_string(desc_iv)}'),
+            (13, 'AV', 'Desmatamento acumulado/Vegetação nativa original', 'PRODES', 7, '{sql_string(desc_av)}')
     """
 
     db.execute(sql=sql)

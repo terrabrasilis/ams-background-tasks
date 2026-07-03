@@ -73,14 +73,12 @@ corresponde à soma das áreas de vegetação nativa suprimidas ao longo dos ano
 """
 
 _IV = """
-Este indicador apresenta o percentual da vegetação remanescente que foi desmatada no período analisado.
-O cálculo considera a razão entre o incremento anual de desmatamento e a vegetação existente no início do período. O valor
-varia de 0 a 100%, sendo que 0% indica ausência de desmatamento no período e 100% indica que toda a vegetação remanescente
-foi desmatada.
+Este indicador apresenta a razão entre o incremento anual de desmatamento e a vegetação remanescente no início do período. 
+O valor varia de 0 a 100%, sendo que 0% indica ausência de desmatamento no período e 100% indica que toda a vegetação remanescente foi desmatada.
 """
 
 _AV = """
-Este indicador apresenta o percentual da vegetação original que já foi desmatada no período analisado. O valor varia de 0 a 100%,
+Este indicador apresenta a razão entre o desmatamento acumulado e a vegetação nativa original. O valor varia de 0 a 100%,
 sendo que 0% indica ausência de desmatamento acumulado e 100% indica que toda a vegetação original foi desmatada.
 """
 
