@@ -1,4 +1,5 @@
 """Print the last database update status."""
+
 from __future__ import annotations
 
 import json

@@ -30,7 +30,7 @@ def send_status_email():
 
 
 def retrieve_process_status(dag: DAG):
-    command = f"ams-print-process-status --start=\"{{{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}}}\""
+    command = "ams-print-process-status --start=\"{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}\""
 
     return bash_task(
         dag=dag,

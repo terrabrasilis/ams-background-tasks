@@ -61,6 +61,27 @@ Esse indicador apresenta registros de ocorrência de fogo ativo detectados por s
 orbitais, correspondentes ao dia corrente, no âmbito do Programa Queimadas (INPE).
 """
 
+_AI = """
+Esse indicador apresenta os dados do incremento anual de desmatamento mapeado pelo PRODES.
+O incremento anual corresponde à área de vegetação nativa suprimida identificada em cada ano de monitoramento,
+permitindo acompanhar a dinâmica temporal do desmatamento e comparar sua evolução entre diferentes períodos.
+"""
+
+_AD = """
+Esse indicador apresenta os dados de desmatamento acumulado mapeados pelo PRODES. O desmatamento acumulado
+corresponde à soma das áreas de vegetação nativa suprimidas ao longo dos anos de monitoramento.
+"""
+
+_IV = """
+Este indicador apresenta a razão entre o incremento anual de desmatamento e a vegetação remanescente no início do período. 
+O valor varia de 0 a 100%, sendo que 0% indica ausência de desmatamento no período e 100% indica que toda a vegetação remanescente foi desmatada.
+"""
+
+_AV = """
+Este indicador apresenta a razão entre o desmatamento acumulado e a vegetação nativa original. O valor varia de 0 a 100%,
+sendo que 0% indica ausência de desmatamento acumulado e 100% indica que toda a vegetação original foi desmatada.
+"""
+
 
 def get_description_from_classname(classname: str):
     descriptions = {
@@ -73,6 +94,11 @@ def get_description_from_classname(classname: str):
         "RI": normalize_text(_RISCO_DE_DESMATAMENTO),
         "FS": normalize_text(_RISCO_DE_ESPALHAMENTO_DO_FOGO),
         "FT": normalize_text(_FOCOS_DE_HOJE),
+        "AI": normalize_text(_AI),
+        "AD": normalize_text(_AD),
+        "IV": normalize_text(_IV),
+        "AV": normalize_text(_AV),
+        "NV": "",
     }
 
     assert classname in descriptions

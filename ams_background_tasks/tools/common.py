@@ -41,6 +41,11 @@ RISK_IBAMA_CLASSNAME = "RK"
 RISK_INPE_CLASSNAME = "RI"
 FIRE_SPREADING_RISK_CLASSNAME = "FS"
 ACTIVE_FIRES_TODAY_CLASSNAME = "FT"
+PRODES_ANNUAL_INCREASE_DEFORESTATION = "AI"
+PRODES_ACCUMULATED_DEFORESTATION = "AD"
+PRODES_ANNUAL_INCREASE_DEFORESTATION_RATIO = "IV"
+PRODES_ACCUMULATED_DEFORESTATION_RATIO = "AV"
+PRODES_NATIVE_VEGETATION = "NV"
 
 # indicators
 DETER_INDICATOR = "deter"
@@ -51,6 +56,13 @@ FIRE_SPREADING_RISK_INDICATOR = "risco-espalhamento-fogo"
 ACTIVE_FIRES_TODAY_INDICATOR = "focos-hoje"
 
 RISK_INDICATORS = [RISK_IBAMA_INDICATOR, RISK_INPE_INDICATOR]
+PRODES_CLASSNAMES = [
+    PRODES_ANNUAL_INCREASE_DEFORESTATION,
+    PRODES_ACCUMULATED_DEFORESTATION,
+    PRODES_ANNUAL_INCREASE_DEFORESTATION_RATIO,
+    PRODES_NATIVE_VEGETATION,
+    PRODES_ACCUMULATED_DEFORESTATION_RATIO,
+]
 
 INDICATORS = [
     DETER_INDICATOR,
@@ -162,12 +174,13 @@ def recreate_spatial_table(
             "land_use_id int NOT NULL",
             "classname varchar(2) NOT NULL",
             "date date NOT NULL",
-            "area double precision",
-            "percentage double precision",
-            "counts int4",
+            "area double precision NOT NULL DEFAULT 0.0",
+            "percentage double precision NOT NULL DEFAULT 0.0",
+            "counts int4 NOT NULL DEFAULT 0",
+            "counts2 int4 NOT NULL DEFAULT 0",
             "risk double precision NOT NULL DEFAULT 0.0",
             "score double precision NOT NULL DEFAULT 0.0",
-            "units int4",
+            "units int4 NOT NULL DEFAULT 0",
             "geocode character varying(80)",
             "biome character varying(254)",
         ],
@@ -310,9 +323,9 @@ def get_indicators_from_tmp(db: DatabaseFacade, land_use_type: str):
         return []
 
     titles = [
-        _[0]
-        for _ in db.fetchall(
-            query=f"SELECT DISTINCT title FROM public.class_group WHERE name in ({classnames});"
+        f"{title} {subtitle}"
+        for title, subtitle in db.fetchall(
+            query=f"SELECT DISTINCT title, subtitle FROM public.class_group WHERE name in ({classnames});"
         )
     ]
 
