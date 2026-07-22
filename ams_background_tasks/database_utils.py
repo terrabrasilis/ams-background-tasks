@@ -66,6 +66,14 @@ class DatabaseFacade(BaseModel):
             assert self._conn.status == 1
         return self._conn
 
+    def disconnect(self):
+        """Close the current database connection, if one is open."""
+        if self._conn is None:
+            return
+
+        self._conn.close()
+        self._conn = None
+
     def execute(self, sql: str, with_commit: bool = False, log: bool = True):
         """Execute a sql string."""
         if log:

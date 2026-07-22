@@ -84,7 +84,9 @@ def main(db_url: str, indicator: str, frequency: int, hour_force_update: int):
         microsecond=0,
     )
 
-    should_force_update = now >= force_update_at and res < force_update_at
+    # should_force_update = (now >= force_update_at) and (res < force_update_at)
+    should_force_update = res < force_update_at <= now
+
     should_update_by_frequency = (now - res).total_seconds() > frequency
 
     status = should_force_update or should_update_by_frequency
