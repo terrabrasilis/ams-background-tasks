@@ -334,37 +334,69 @@ The DAGs call `update-environment`, which:
 - Classification tasks use `ams-classify-by-land-use` with different indicators and `land-use-type` values.
 - The PRODES flow uses local directories for cache, chunking, reprojection, and counting.
 
-## Initial Airflow setup
+## Run on Production Environment
 
-Example minimum setup for running the DAGs in an Airflow environment:
+The DAGs are intended to run from DagBag, which means the DAG files must live in the Airflow DAGs root folder.
 
 ### Connections
 
-Configure the following connection IDs:
+Configure the following Airflow connection IDs:
 
-1. `AMS_AF_DB_URL`
-2. `AMS_AUX_DB_URL`
-3. `AMS_AMZ_DETER_B_DB_URL`
-4. `AMS_CER_DETER_B_DB_URL`
-5. `AMS_DB_URL`
-6. `AMS_FTP_URL`
-7. `smtp_default`
-8. `AMS_PAN_DETER_B_DB_URL`
-9. `AMS_FC_DB_URL`
+- `AMS_AF_DB_URL`
+- `AMS_AUX_DB_URL`
+- `AMS_AMZ_DETER_B_DB_URL`
+- `AMS_CER_DETER_B_DB_URL`
+- `AMS_DB_URL`
+- `AMS_FTP_URL`
+- `smtp_default`
+- `AMS_PAN_DETER_B_DB_URL`
+- `AMS_FC_DB_URL`
+
+Example connection fields:
+
+- Connection Id: `AMS_AF_DB_URL`
+- Connection Type: `Postgres`
+- Host: database host or IP
+- Database: `raw_fires_data`
+- Login: database user
+- Password: database password
+- Port: `5432`
 
 ### Variables
 
-Configure the following variables:
+Configure the following Airflow variables:
 
-1. `AIRFLOW_UID`
-2. `AMS_FORCE_RECREATE_DB`
-3. `AMS_ALL_DATA_DB`
-4. `AMS_BIOMES`
-5. `AMS_STAC_API_URL`
-6. `AMS_STAC_COLLECTION`
-7. `AMS_FREQUENCY_TO_UPDATE_DETER`
-8. `AMS_FREQUENCY_TO_UPDATE_FIRES`
-9. `AMS_FREQUENCY_TO_UPDATE_RISK`
-10. `AMS_FREQUENCY_TO_UPDATE_FIRE_SR`
-11. `AMS_LIMIT`
-12. `AMS_EMAIL_TO`
+- `AIRFLOW_UID`
+- `AMS_FORCE_RECREATE_DB`
+- `AMS_ALL_DATA_DB`
+- `AMS_BIOMES`
+- `AMS_STAC_API_URL`
+- `AMS_STAC_COLLECTION`
+- `AMS_FREQUENCY_TO_UPDATE_DETER`
+- `AMS_FREQUENCY_TO_UPDATE_FIRES`
+- `AMS_FREQUENCY_TO_UPDATE_RISK`
+- `AMS_FREQUENCY_TO_UPDATE_FIRE_SR`
+- `AMS_LIMIT`
+- `AMS_EMAIL_TO`
+
+Suggested values:
+
+- `AIRFLOW_UID`: `1000` is a common default
+- `AMS_FORCE_RECREATE_DB`: `0` or `1`
+- `AMS_ALL_DATA_DB`: `0` or `1`
+- `AMS_BIOMES`: semicolon-separated list, for example `Amazônia;Cerrado;`
+- `AMS_STAC_API_URL`: for example `https://terrabrasilis.dpi.inpe.br/stac-api/v1/`
+- `AMS_STAC_COLLECTION`: STAC collection name, for example `collection1`
+- `AMS_FREQUENCY_TO_UPDATE_DETER`: defaults to `86400` for daily updates
+- `AMS_FREQUENCY_TO_UPDATE_FIRES`: defaults to `86400` for daily updates
+- `AMS_FREQUENCY_TO_UPDATE_RISK`: defaults to `86400` for daily updates
+- `AMS_FREQUENCY_TO_UPDATE_FIRE_SR`: defaults to `86400` for daily updates
+- `AMS_LIMIT`: `0` means unlimited
+- `AMS_EMAIL_TO`: email address or list of recipients
+
+### Files and volumes
+
+Place the land-use rasters in the `land_use` directory:
+
+- `LAND_USE_DIR/ams/land_use.tif`
+- `LAND_USE_DIR/ppcdam/land_use.tif`
