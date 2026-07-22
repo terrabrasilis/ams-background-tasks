@@ -319,21 +319,6 @@ The following tables must exist in the auxiliary database:
 - `cs_cer_150km`
 - `cs_cer_150km_biome`
 
-## How environment setup works
-
-The DAGs call `update-environment`, which:
-
-1. creates a virtualenv in `/tmp/venvs/<project-name>` when needed
-2. activates that environment
-3. installs the library itself with `pip install <project>`
-
-## Operational notes
-
-- `ams-create-db` runs `check-variables` before any other step.
-- Update tasks use branching to skip steps when the schedule does not require processing.
-- Classification tasks use `ams-classify-by-land-use` with different indicators and `land-use-type` values.
-- The PRODES flow uses local directories for cache, chunking, reprojection, and counting.
-
 ## Run on Production Environment
 
 The DAGs are intended to run from DagBag, which means the DAG files must live in the Airflow DAGs root folder.
