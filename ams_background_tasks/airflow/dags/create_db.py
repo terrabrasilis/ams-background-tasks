@@ -57,6 +57,7 @@ from ams_background_tasks.airflow.tasks.fire_spreading_risk import (
     update_fire_sr,
 )
 from ams_background_tasks.airflow.tasks.mailer import (
+    decide_send_status_email,
     prepare_status_email,
     retrieve_process_status,
     send_status_email,
@@ -374,6 +375,21 @@ def build_ams_create_db_dag():
 
         run_send_status_email = send_status_email()
 
-        run_retrieve_process_status >> run_prepare_status_email >> run_send_status_email  # type: ignore
+        run_decide_send_status_email = BranchPythonOperator(
+            task_id="decide-send-status-email",
+            python_callable=decide_send_status_email,
+            provide_context=True,
+            op_kwargs={},
+        )
+
+        run_skip_send_status_email = EmptyOperator(task_id="skip-send-status-email")
+
+        (
+            run_retrieve_process_status
+            >> run_decide_send_status_email
+            >> (run_prepare_status_email, run_skip_send_status_email)
+        )  # type: ignore
+
+        run_prepare_status_email >> run_send_status_email  # type: ignore
 
         return dag

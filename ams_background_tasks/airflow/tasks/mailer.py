@@ -13,6 +13,7 @@ def prepare_status_email(**context):
 
     res = json.loads(bash_result)
 
+    context["ti"].xcom_push(key="email_status", value=["status"])
     context["ti"].xcom_push(key="email_subject", value=res["subject"])
     context["ti"].xcom_push(key="email_html_content", value=res["html_content"])
 
@@ -39,3 +40,13 @@ def retrieve_process_status(dag: DAG):
         env_keys=[CONN_DB_URL],
         trigger_rule="all_done",
     )
+
+
+def decide_send_status_email(**context):
+    bash_result = context["ti"].xcom_pull(task_ids="retrieve-process-status")
+
+    res = json.loads(bash_result)
+
+    send_email = res["status"] == False
+
+    return "prepare-status-email" if send_email else "skip-send-status-email"

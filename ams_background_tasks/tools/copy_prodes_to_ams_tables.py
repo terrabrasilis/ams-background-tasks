@@ -9,10 +9,9 @@ import click
 
 from ams_background_tasks.database_utils import DatabaseFacade
 from ams_background_tasks.log import get_logger
-from ams_background_tasks.tools.common import (
+from ams_background_tasks.tools.common import (  # analyze_table,
     LAND_USE_TYPES,
     PRODES_CLASSNAMES,
-    analyze_table,
     optimize_land_use_table,
     prepare_to_update_land_use_table,
     read_spatial_units,

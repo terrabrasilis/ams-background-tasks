@@ -72,7 +72,7 @@ def main(
     print(json.dumps(generate_process_status_message(process_data=res)))
 
 
-def generate_process_status_message(process_data):
+def generate_process_status_message(process_data: dict):
     all_success = all(all(processes.values()) for processes in process_data.values())
 
     subject = "✅ SUCESSO" if all_success else "❌ FALHA"
@@ -88,4 +88,9 @@ def generate_process_status_message(process_data):
             html_message += f"<li>{icon} {process_name}</li>"
         html_message += "</ul>"
 
-    return {"subject": subject, "html_content": html_message}
+    return {
+        "status": all_success,
+        "indicators": len(process_data.keys()),
+        "subject": subject,
+        "html_content": html_message,
+    }
