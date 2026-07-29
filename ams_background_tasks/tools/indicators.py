@@ -22,7 +22,7 @@ consequente exposição do solo, persistindo uma vegetação com indivíduos arb
 estrutura semelhante a estágios inicial e intermediário inicial de sucessão florestal. 
 A Cicatriz de Incêndio Florestal corresponde a áreas onde se identificam sinais de alterações 
 na cobertura vegetal em decorrência da ação do fogo, podendo ou não persistir vegetação 
-arbórea. Disponíel para os biomas Amazônia e Pantanal.
+arbórea. Diposnível para os biomas Amazônia e Pantanal.
 """
 
 _CS = """
@@ -31,13 +31,13 @@ Corte Seletivo Desordenado corresponde a áreas associadas à exploração madei
 em que os indivíduos arbóreos de espécies de interesse comercial são removidos sem
 planejamento. O Corte Seletivo Geométrico corresponde a áreas associadas à exploração 
 madeireira com plano de manejo, caracterizadas pela disposição regular e geométrica das 
-estradas e pátios de estocagem no interior da floresta. Disponíel para o bioma Amazônia.
+estradas e pátios de estocagem no interior da floresta. Diposnível para o bioma Amazônia.
 """
 
 _MN = """
 Esse indicador inclui a classe Mineração do DETER, a qual corresponde a áreas de vegetação nativa que foram
 convertidas em áreas de atividade de extração mineral. Predominam, nessa classe, as atividades
-de garimpo artesanal. Disponíel para os biomas Amazônia e Pantanal.
+de garimpo artesanal. Diposnível para os biomas Amazônia e Pantanal.
 """
 
 _FOCOS = """
