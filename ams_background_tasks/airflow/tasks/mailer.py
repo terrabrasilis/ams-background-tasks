@@ -1,11 +1,16 @@
 import json
+import shlex
 
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.email import EmailOperator
 
 from ams_background_tasks.airflow.common.tasks import bash_task
-from ams_background_tasks.airflow.common.vars import CONN_DB_URL, VAR_EMAIL_TO
+from ams_background_tasks.airflow.common.vars import (
+    CONN_DB_URL,
+    VAR_EMAIL_TO,
+    VAR_ENVIRONMENT_NAME,
+)
 
 
 def prepare_status_email(**context):
@@ -31,7 +36,12 @@ def send_status_email():
 
 
 def retrieve_process_status(dag: DAG):
-    command = "ams-print-process-status --start=\"{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}\""
+    environment = shlex.quote(Variable.get(VAR_ENVIRONMENT_NAME))
+    command = (
+        "ams-print-process-status "
+        "--start=\"{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}\" "
+        f"--environment={environment}"
+    )
 
     return bash_task(
         dag=dag,

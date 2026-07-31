@@ -30,9 +30,17 @@ logger = get_logger(__name__, sys.stdout)
     type=click.DateTime(formats=["%Y-%m-%d %H:%M:%S"]),
     help="Datetime of processing start.",
 )
+@click.option(
+    "--environment",
+    required=True,
+    type=str,
+    default="",
+    help="Environment name",
+)
 def main(
     db_url: str,
     start: datetime,
+    environment: str,
 ):
     """Print the last database update status."""
     db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
@@ -69,14 +77,19 @@ def main(
 
             res[indicator][process] = _res is not None and _res == "completed"
 
-    print(json.dumps(generate_process_status_message(process_data=res)))
+    print(
+        json.dumps(
+            generate_process_status_message(process_data=res, environment=environment)
+        )
+    )
 
 
-def generate_process_status_message(process_data: dict):
+def generate_process_status_message(process_data: dict, environment: str):
     all_success = all(all(processes.values()) for processes in process_data.values())
+    environment = environment.strip()
 
     subject = "✅ SUCESSO" if all_success else "❌ FALHA"
-    subject += " - Processamento AMS"
+    subject += " - Processamento AMS" + (f" ({environment})" if environment else "")
 
     html_message = f"<h2>{subject}</h2>"
     html_message += "<h3>Status dos Processamentos:</h3>"
