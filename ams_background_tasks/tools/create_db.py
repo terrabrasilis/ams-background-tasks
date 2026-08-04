@@ -1009,7 +1009,7 @@ def create_class_tables(db: DatabaseFacade, force_recreate: bool):
             (5, 'AF', 'Histórico de Focos', 'Queimadas', 8, '{sql_string(desc_af)}'),
             (6, 'RK', 'Risco de desmatamento', 'IBAMA', 12, ''),
             (7, 'RI', 'Risco de desmatamento', '', 11, '{sql_string(desc_ri)}'),
-            (8, 'FS', 'Risco de espalhamento do fogo', 'FIP', 10, '{sql_string(desc_fs)}'),
+            (8, 'FS', 'Risco de espalhamento do fogo', 'UFMG', 10, '{sql_string(desc_fs)}'),
             (9, 'FT', 'Focos de hoje', 'Queimadas', 9, '{sql_string(desc_ft)}'),
             (10, 'AI', 'Incremento anual', 'PRODES', 4, '{sql_string(desc_ai)}'),
             (11, 'AD', 'Desmatamento Acumulado', 'PRODES', 5, '{sql_string(desc_ad)}'),

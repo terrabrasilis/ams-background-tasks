@@ -13,7 +13,7 @@ Vegetação. O Desmatamento corte raso corresponde a áreas em que se observa a
 supressão completa da vegetação nativa, independentemente de qualquer evidência
 de uso posterior. O Desmatamento com vegetação equivale a áreas em que há
 evidência de supressão da vegetação nativa e, ao mesmo tempo, de outra cobertura
-vegetal."""
+vegetal. Disponível para os biomas Amazônia, Cerrado e Pantanal."""
 
 _DG = """
 Esse indicador inclui as classes do DETER Degradação e Cicatriz de Incêndio Florestal.
@@ -22,7 +22,7 @@ consequente exposição do solo, persistindo uma vegetação com indivíduos arb
 estrutura semelhante a estágios inicial e intermediário inicial de sucessão florestal. 
 A Cicatriz de Incêndio Florestal corresponde a áreas onde se identificam sinais de alterações 
 na cobertura vegetal em decorrência da ação do fogo, podendo ou não persistir vegetação 
-arbórea.
+arbórea. Disponível para os biomas Amazônia e Pantanal.
 """
 
 _CS = """
@@ -31,55 +31,58 @@ Corte Seletivo Desordenado corresponde a áreas associadas à exploração madei
 em que os indivíduos arbóreos de espécies de interesse comercial são removidos sem
 planejamento. O Corte Seletivo Geométrico corresponde a áreas associadas à exploração 
 madeireira com plano de manejo, caracterizadas pela disposição regular e geométrica das 
-estradas e pátios de estocagem no interior da floresta.
+estradas e pátios de estocagem no interior da floresta. Disponível para o bioma Amazônia.
 """
 
 _MN = """
 Esse indicador inclui a classe Mineração do DETER, a qual corresponde a áreas de vegetação nativa que foram
 convertidas em áreas de atividade de extração mineral. Predominam, nessa classe, as atividades
-de garimpo artesanal.
+de garimpo artesanal. Disponível para os biomas Amazônia e Pantanal.
 """
 
 _FOCOS = """
 Esse indicador apresenta registros de ocorrência de fogo ativo detectados por sensores orbitais no âmbito do Programa Queimadas (INPE).
+Disponível para todos os biomas.
 """
 
 _RISCO_DE_DESMATAMENTO = """
 Esse indicador apresenta dados de um Modelo de Inteligência Artificial (IA) capaz de prever,
 com até 15 dias de antecedência, áreas com maior risco de desmatamento na Amazônia Legal.
-O indicador varia de 0 a 1, representando do menor ao maior risco.
+O indicador varia de 0 a 1, representando do menor ao maior risco. Disponível para o bioma Amazônia.
 """
 
 _RISCO_DE_ESPALHAMENTO_DO_FOGO = """
 Esse indicador do Projeto FIP Cerrado apresenta dados de um modelo de simulação de espalhamento do fogo, baseado em
 pontos de ignição mapeados por satélite pelo Programa Queimadas (INPE), no combustível (biomassa seca) e
-na umidade da vegetação, derivados de imagens de satélite MODIS/Terra.
+na umidade da vegetação, derivados de imagens de satélite MODIS/Terra. Disponível para o bioma Cerrado.
 """
 
 _FOCOS_DE_HOJE = """
 Esse indicador apresenta registros de ocorrência de fogo ativo detectados por sensores
-orbitais, correspondentes ao dia corrente, no âmbito do Programa Queimadas (INPE).
+orbitais, correspondentes ao dia corrente, no âmbito do Programa Queimadas (INPE). Disponível para todos os biomas.
 """
 
 _AI = """
 Esse indicador apresenta os dados do incremento anual de desmatamento mapeado pelo PRODES.
 O incremento anual corresponde à área de vegetação nativa suprimida identificada em cada ano de monitoramento,
-permitindo acompanhar a dinâmica temporal do desmatamento e comparar sua evolução entre diferentes períodos.
+permitindo acompanhar a dinâmica temporal do desmatamento e comparar sua evolução entre diferentes períodos. Disponível para todos os biomas.
 """
 
 _AD = """
 Esse indicador apresenta os dados de desmatamento acumulado mapeados pelo PRODES. O desmatamento acumulado
-corresponde à soma das áreas de vegetação nativa suprimidas ao longo dos anos de monitoramento.
+corresponde à soma das áreas de vegetação nativa suprimidas ao longo dos anos de monitoramento. Disponível para todos os biomas.
 """
 
 _IV = """
 Este indicador apresenta a razão entre o incremento anual de desmatamento e a vegetação remanescente no início do período. 
 O valor varia de 0 a 100%, sendo que 0% indica ausência de desmatamento no período e 100% indica que toda a vegetação remanescente foi desmatada.
+Disponível para todos os biomas.
 """
 
 _AV = """
 Este indicador apresenta a razão entre o desmatamento acumulado e a vegetação nativa original. O valor varia de 0 a 100%,
 sendo que 0% indica ausência de desmatamento acumulado e 100% indica que toda a vegetação original foi desmatada.
+Disponível para todos os biomas.
 """
 
 

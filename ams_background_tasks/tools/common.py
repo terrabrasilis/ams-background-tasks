@@ -13,7 +13,6 @@ from ams_background_tasks.log import get_logger
 
 logger = get_logger(__name__, sys.stdout)
 
-
 # cells
 CELL_5KM = "5km"
 CELL_25KM = "25km"

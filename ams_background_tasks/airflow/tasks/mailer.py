@@ -1,11 +1,16 @@
 import json
+import shlex
 
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.email import EmailOperator
 
 from ams_background_tasks.airflow.common.tasks import bash_task
-from ams_background_tasks.airflow.common.vars import CONN_DB_URL, VAR_EMAIL_TO
+from ams_background_tasks.airflow.common.vars import (
+    CONN_DB_URL,
+    VAR_EMAIL_TO,
+    VAR_ENVIRONMENT_NAME,
+)
 
 
 def prepare_status_email(**context):
@@ -13,6 +18,7 @@ def prepare_status_email(**context):
 
     res = json.loads(bash_result)
 
+    context["ti"].xcom_push(key="email_status", value=["status"])
     context["ti"].xcom_push(key="email_subject", value=res["subject"])
     context["ti"].xcom_push(key="email_html_content", value=res["html_content"])
 
@@ -30,7 +36,12 @@ def send_status_email():
 
 
 def retrieve_process_status(dag: DAG):
-    command = "ams-print-process-status --start=\"{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}\""
+    environment = shlex.quote(Variable.get(VAR_ENVIRONMENT_NAME))
+    command = (
+        "ams-print-process-status "
+        "--start=\"{{ ti.xcom_pull(task_ids='check-variables', key='start_process') }}\" "
+        f"--environment={environment}"
+    )
 
     return bash_task(
         dag=dag,
@@ -39,3 +50,13 @@ def retrieve_process_status(dag: DAG):
         env_keys=[CONN_DB_URL],
         trigger_rule="all_done",
     )
+
+
+def decide_send_status_email(**context):
+    bash_result = context["ti"].xcom_pull(task_ids="retrieve-process-status")
+
+    res = json.loads(bash_result)
+
+    send_email = res["status"] == False
+
+    return "prepare-status-email" if send_email else "skip-send-status-email"
