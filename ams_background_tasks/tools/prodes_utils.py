@@ -203,13 +203,21 @@ def build_deforestation_mask(data: np.ndarray, year: int) -> np.ndarray:
     assert PRODES_FIRST_YEAR <= year <= PRODES_LAST_YEAR
 
     deforestation_pixel_value = year - PRODES_DEFORESTATION_PIXEL_BASE_YEAR
-    remaining_deforestation_pixel_value = (
-        year - PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR
-    )
 
-    return np.isin(
-        data, [deforestation_pixel_value, remaining_deforestation_pixel_value]
-    ).astype(np.uint8)
+    remaining_deforestation_pixel_values = []
+    # remaining_deforestation_pixel_values.append(
+    #     year - PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR
+    # )
+
+    if year == PRODES_FIRST_YEAR:  # all residuals area taken account in PRODES2000
+        for ryear in range(PRODES_FIRST_YEAR, PRODES_LAST_YEAR+1):
+            remaining_deforestation_pixel_values.append(
+                ryear - PRODES_REMAINING_DEFORESTATION_PIXEL_REFERENCE_YEAR
+            )
+    
+    values = [deforestation_pixel_value] + remaining_deforestation_pixel_values
+
+    return np.isin(data, values).astype(np.uint8)
 
 
 def build_native_vegetation_mask(data: np.ndarray) -> np.ndarray:
@@ -298,7 +306,7 @@ def load_spatial_units_gdf(
     """
 
     spatial_units_gdf = gpd.GeoDataFrame.from_postgis(
-        sql=sql, con=db.conn, geom_col="geometry"
+        sql=sql, con=db.conn, geom_col="geometry", crs="EPSG:4674"
     )
 
     return spatial_units_gdf
@@ -401,7 +409,7 @@ def build_spatial_unit_land_use_counts_dataframe_from_mask(
     """
 
     municipalities_gdf = gpd.GeoDataFrame.from_postgis(
-        sql=sql, con=db.conn, geom_col="geometry"
+        sql=sql, con=db.conn, geom_col="geometry", crs="EPSG:4674"
     )
 
     spatial_units = list(read_spatial_units(db=db).keys())
@@ -467,6 +475,8 @@ def build_spatial_unit_land_use_counts_dataframe_from_mask(
                 if not np.any(mask == 1):
                     logger.info("there is no %s points", mask_label)
                     continue
+
+                logger.info("%s points: %s", mask_label, len(mask))
 
                 with rio.open(land_use_chunk) as land_use_chunk_ds:
                     land_use_chunk_data = land_use_chunk_ds.read(1)

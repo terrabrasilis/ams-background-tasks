@@ -16,6 +16,7 @@ logger = get_logger(__name__, sys.stdout)
 
 
 @click.command()
+@click.argument("municipalities_group_file", type=click.Path(exists=True, file_okay=True,))
 @click.option(
     "--db-url",
     required=False,
@@ -23,15 +24,9 @@ logger = get_logger(__name__, sys.stdout)
     default="",
     help="AMS database url (postgresql://<username>:<password>@<host>:<port>/<database>).",
 )
-@click.option(
-    "--municipalities-group-file",
-    required=True,
-    type=click.Path(exists=True, resolve_path=True, file_okay=True),
-    help="Land use image path.",
-)
 def main(db_url: str, municipalities_group_file: str):
     """Import the municipalities group into the database."""
-    db_url = os.getenv("AMS_DB_URL") if not db_url else db_url
+    db_url = os.getenv("AMS_DB_URL", "") if not db_url else db_url
     logger.debug(db_url)
     assert db_url
 
@@ -43,38 +38,37 @@ def main(db_url: str, municipalities_group_file: str):
     with open(str(municipalities_group_file), "r", encoding="utf-8") as src:
         groups = json.load(src)
 
-    db = DatabaseFacade.from_url(db_url=db_url)
+    db = DatabaseFacade.create(db_url=db_url)
 
     valid_geocodes = [
         _[0] for _ in db.fetchall("SELECT geocode from public.municipalities")
     ]
 
-    for _ in groups:
-        name = groups[_]["name"]
-        geocodes = groups[_]["geocodes"]
+    for name in list(groups.keys()):
+        geocodes = groups[name]
 
         for geocode in geocodes:
             assert geocode in valid_geocodes, f"invalid geocode '{geocode}'"
 
-        table = "public.municipalities_group"
+        gtype = "user-defined"
 
-        sql = f"""
-            INSERT INTO {table} (name) VALUES ('{name}');
-        """
+        with db.conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO public.municipalities_group (name, type)
+                VALUES (%s, %s)
+                RETURNING id;
+                """,
+                (name, gtype),
+            )
+            group_id = cursor.fetchone()[0]
 
-        db.execute(sql)
+            cursor.executemany(
+                """
+                INSERT INTO public.municipalities_group_members (group_id, geocode)
+                VALUES (%s, %s);
+                """,
+                [(group_id, geocode) for geocode in geocodes],
+            )
 
-        query = f"SELECT id FROM {table} WHERE name = '{name}'"
-
-        group_id = db.fetchone(query=query)
-
-        table = "public.municipalities_group_members"
-
-        values = ",".join([f"({group_id},'{_}')" for _ in geocodes])
-
-        sql = f"""
-            INSERT INTO {table} (group_id, geocode)
-            VALUES {values};
-        """
-
-        db.execute(sql)
+    db.commit()

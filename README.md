@@ -156,6 +156,41 @@ Schedule: `None`
 | `finalize-prodes-ams` | Copies PRODES land-use data into AMS tables | `ams-finalize-prodes --land-use-type=ams` |
 | `finalize-prodes-ppcdam` | Copies PRODES land-use data into PPCDAM tables | `ams-finalize-prodes --land-use-type=ppcdam` |
 
+## Importing user-defined municipality groups
+
+The `ams-import-municipalities-group` tool imports user-defined municipality groups into the `public.municipalities_group` and `public.municipalities_group_members` tables.
+
+Create a JSON file containing the group name as the key and a list of municipality geocodes as the value. For example, `municipalities_groups.json`:
+
+```json
+{
+    "nome": [
+        "1505064",
+        "5101852",
+        "1100809",
+        "1505031",
+        "5106299"
+    ]
+}
+```
+
+Each geocode must already exist in `public.municipalities`. Run the tool by passing the JSON file as the positional argument:
+
+```bash
+ams-import-municipalities-group municipalities_groups.json --db-url "$AMS_DB_URL"
+```
+
+When the `--db-url` option is omitted, the tool uses the `AMS_DB_URL` environment variable:
+
+```bash
+AMS_DB_URL="postgresql://<username>:<password>@<host>:<port>/<database>" \
+    ams-import-municipalities-group municipalities_groups.json
+```
+
+If the database is recreated, the municipality-group tables are recreated as well. The import must therefore be run again after every database recreation.
+
+For a definitive group that should be restored as part of the application setup, the administrator can add it to `MUNICIPALITIES_GROUP` in `ams_background_tasks/municipalities_groups.py`. This is the recommended approach for groups that are part of the system configuration rather than temporary or user-defined groups.
+
 ## Fundiary classification bases
 
 The classification tasks use two different fundiary classification bases:
